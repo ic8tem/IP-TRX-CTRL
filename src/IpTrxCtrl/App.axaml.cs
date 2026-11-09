@@ -18,6 +18,17 @@ namespace IpTrxCtrl
 
         public override void OnFrameworkInitializationCompleted()
         {
+            // un errore in un pulsante o nel disegno non deve chiudere il programma: lo registra e prosegue
+            Avalonia.Threading.Dispatcher.UIThread.UnhandledException += (_, e) =>
+            {
+                Program.LogError(e.Exception.ToString());
+                e.Handled = true;
+            };
+            System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, e) =>
+            {
+                Program.LogError(e.Exception.ToString());
+                e.SetObserved();
+            };
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
                 var s = AppSettings.Load();

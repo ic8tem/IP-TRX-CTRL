@@ -92,6 +92,19 @@ namespace IpTrxCtrl.UI
 
         public override void Render(DrawingContext context)
         {
+            // prima dell'impaginazione (o con la cascata nascosta) le dimensioni possono essere nulle
+            if (Bounds.Width < AxisW + 20 || Bounds.Height < 40) return;
+            try { RenderCore(context); }
+            catch (Exception ex)
+            {
+                if (!_errorLogged) { _errorLogged = true; Program.LogError("Cascata: " + ex); }
+            }
+        }
+
+        private bool _errorLogged;
+
+        private void RenderCore(DrawingContext context)
+        {
             double w = Math.Max(10, Bounds.Width - AxisW), h = Bounds.Height;
             _bmp ??= new WriteableBitmap(new PixelSize(Cols, Rows), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
             using (var fb = _bmp.Lock())
@@ -120,7 +133,7 @@ namespace IpTrxCtrl.UI
             foreach (int f in new[] { 3000, 2500, 2000, 1500, 1000, 500, 0 })
             {
                 var ft = new FormattedText(f.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, tf, 11, axisBrush);
-                double y = Math.Clamp(Y(f, h) - ft.Height / 2, 0, h - ft.Height);
+                double y = Math.Max(0, Math.Min(Y(f, h) - ft.Height / 2, h - ft.Height));
                 context.DrawText(ft, new Point(w + 14, y));
             }
             var arrow = new StreamGeometry();
