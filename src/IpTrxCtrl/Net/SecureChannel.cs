@@ -55,6 +55,24 @@ namespace IpTrxCtrl.Net
                     t.CancelAfter(TimeSpan.FromSeconds(6));
                     await tcp.ConnectAsync(addr.Ip, port, t.Token);
                 }
+                return await HandshakeAsInitiatorAsync(tcp, kind, master, ct);
+            }
+            catch
+            {
+                tcp.Dispose();
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Handshake di sessione dal lato «client» su una connessione TCP già aperta. Serve anche al
+        /// collegamento inverso: il server si collega alle porte aperte dal client, ma il client resta
+        /// chi avvia l'handshake.
+        /// </summary>
+        public static async Task<SecureChannel> HandshakeAsInitiatorAsync(TcpClient tcp, ChannelKind kind, byte[] master, CancellationToken ct)
+        {
+            try
+            {
                 var s = tcp.GetStream();
                 using var hs = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 hs.CancelAfter(TimeSpan.FromSeconds(10));

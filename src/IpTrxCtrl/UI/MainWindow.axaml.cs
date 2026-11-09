@@ -24,10 +24,12 @@ namespace IpTrxCtrl.UI
     {
         private static readonly string[] Modes = { "USB", "LSB", "CW", "CWR", "FM", "AM", "PKTUSB", "PKTLSB", "PKTFM", "RTTY" };
         private static readonly int[] CwWidths = { 50, 75, 100, 150, 200 };
+        private static readonly int[] CwFilters = { 1200, 2400, 2700, 3000, 3600 };
 
         private readonly AppSettings _s;
         private readonly Node _node;
         private readonly GlobalHotkeys _hotkeys = new();
+        private IpTrxCtrl.Platform.SerialInput? _serialIn;
         private readonly DispatcherTimer _uiTimer;
         private RigTelemetry _tel = new();
         private bool _loading = true;
@@ -106,6 +108,7 @@ namespace IpTrxCtrl.UI
         {
             _node.Start();
             if (_s.Role == NodeRole.Client) _hotkeys.Start();
+            StartSerialInput();
             ApplyRoleTexts();
             RefreshStats();
             RefreshRadio();
@@ -118,6 +121,7 @@ namespace IpTrxCtrl.UI
             _uiTimer.Stop();
             foreach (var w in _decodeWindows.ToList()) w.Close();
             _hotkeys.Dispose();
+            _serialIn?.Dispose();
             _node.Dispose();
             _s.Save();
         }
@@ -145,6 +149,7 @@ namespace IpTrxCtrl.UI
             CmbCwWidth.ItemsSource = CwWidths.Select(w => $"{w} Hz").ToList();
             CmbCwRxSpeed.ItemsSource = new[] { "Auto" }.Concat(Enumerable.Range(1, 12).Select(i => $"{i * 5} WPM")).ToList();
             CmbCwTxSpeed.ItemsSource = Enumerable.Range(5, 56).Select(w => $"{w} WPM").ToList();
+            CmbCwFilter.ItemsSource = CwFilters.Select(w => $"{w} Hz").ToList();
         }
 
         private void BuildFKeys()
@@ -197,6 +202,10 @@ namespace IpTrxCtrl.UI
             CmbCwRxSpeed.SelectedIndex = _s.CwRxWpm <= 0 ? 0 : Math.Clamp(_s.CwRxWpm / 5, 1, 12);
             CmbCwTxSpeed.SelectedIndex = Math.Clamp(_s.CwSpeedWpm - 5, 0, 55);
             SldThreshold.Value = _s.CwThreshold;
+            ChkWideFilter.IsChecked = _s.CwWideFilter;
+            CmbCwFilter.SelectedIndex = Math.Max(0, Array.IndexOf(CwFilters, _s.CwFilterHz));
+            SldWfIntensity.Value = _s.WfIntensity;
+            Wf.Intensity = _s.WfIntensity;
             TxtMyCall.Text = _s.Callsign;
             TxtCwCall.Text = _s.CwCall;
             TxtCwNr.Text = _s.CwNr.ToString("D3");
@@ -369,6 +378,15 @@ namespace IpTrxCtrl.UI
                 _s.Save();
             };
             Wf.FrequencyClicked += OnWaterfallClick;
+            SldWfIntensity.ValueChanged += (_, e) => { if (!_loading) { _s.WfIntensity = (int)e.NewValue; Wf.Intensity = e.NewValue; _s.Save(); } };
+            ChkWideFilter.IsCheckedChanged += (_, _) => { if (_loading) return; _s.CwWideFilter = ChkWideFilter.IsChecked == true; _s.Save(); ApplyCwFilter(); };
+            CmbCwFilter.SelectionChanged += (_, _) =>
+            {
+                if (_loading || CmbCwFilter.SelectedIndex < 0) return;
+                _s.CwFilterHz = CwFilters[CmbCwFilter.SelectedIndex];
+                _s.Save();
+                ApplyCwFilter();
+            };
 
             // collegamento
             BtnCopyFallback.Click += async (_, _) => await Dialogs.CopyText(this, TxtFallbackCode.Text ?? "");
@@ -444,16 +462,26 @@ namespace IpTrxCtrl.UI
                 _loading = false;
                 _node.ApplyAudioSettings();
                 if (w.RigChanged && _s.Role == NodeRole.Server) _node.Rig.Start();
+                if (w.DigitalChanged) _node.StartDigital();
+                if (w.SerialInputChanged) StartSerialInput();
                 if (w.PairingReset) ShowPairing();
             }
         }
 
         // ================================================================= modo CW / fonia
 
+        /// <summary>In CW apre il filtro della radio alla larghezza scelta, così la cascata 0-3000 Hz mostra i segnali.</summary>
+        private void ApplyCwFilter()
+        {
+            if (!IsClient || !RigTelemetry.IsCw(_tel.Mode) || !_s.CwWideFilter) return;
+            _node.SetPassband(_tel.Mode, _s.CwFilterHz);
+        }
+
         private void UpdateModeLayout()
         {
             bool cw = IsClient && RigTelemetry.IsCw(_tel.Mode);
             _cwActive = cw;
+            if (cw && !_cwLayout) ApplyCwFilter();     // appena si entra in CW
             if (cw == _cwLayout && PanelCw.IsVisible == cw) { RefreshFKeyNames(); return; }
             _cwLayout = cw;
             PanelCw.IsVisible = cw;
@@ -596,6 +624,28 @@ namespace IpTrxCtrl.UI
         }
 
         // ================================================================= PTT
+
+        /// <summary>Client: pedale PTT e tasto CW meccanico (o porta virtuale di un altro programma) sulla seriale.</summary>
+        private void StartSerialInput()
+        {
+            _serialIn?.Dispose();
+            _serialIn = null;
+            if (_s.Role != NodeRole.Client || string.IsNullOrEmpty(_s.InputCom)) return;
+            try
+            {
+                var si = new IpTrxCtrl.Platform.SerialInput(_s.InputCom, _s.InputPttPin, _s.InputCwPin);
+                si.PttChanged += on => Dispatcher.UIThread.Post(() => SetManualPtt(on));
+                si.CwKeyChanged += (down, ms) => _node.SendCwKey(down, ms);
+                _serialIn = si;
+                SessionLog.Write($"INGRESSO seriale {_s.InputCom}: PTT su {_s.InputPttPin}, tasto CW su {_s.InputCwPin}");
+            }
+            catch (Exception ex)
+            {
+                SessionLog.Write($"INGRESSO seriale {_s.InputCom} non apribile: {ex.Message}");
+                TxtNotice.Text = $"Porta seriale {_s.InputCom} (pedale / tasto) non apribile: {ex.Message}";
+                TxtNotice.IsVisible = true;
+            }
+        }
 
         private void SetManualPtt(bool on)
         {
@@ -766,6 +816,7 @@ namespace IpTrxCtrl.UI
             TxtClientIp.Text = string.IsNullOrEmpty(st.ClientEndpoint) ? (IsClient ? "— · LAN " + Node.LanIp() : "—") : st.ClientEndpoint;
             TxtNetLocal.Text = st.LocalNet.Length > 0 ? st.LocalNet : "verifico IPv4 / IPv6…";
             TxtNetPeer.Text = st.Connected && st.PeerNet.Length > 0 ? st.PeerNet : "—";
+            if (st.Connected && st.AudioPath.Length > 0) TxtNetPeer.Text += " · audio " + st.AudioPath;
             if (st.Connected && IsClient) PanelFallbackClient.IsVisible = false;
             if (IsClient && _s.PeerCallsign.Length > 0 && !TxtRoleLine.Text!.Contains(_s.PeerCallsign)) ApplyRoleTexts();
         }
@@ -821,6 +872,7 @@ namespace IpTrxCtrl.UI
                 }
 
                 // pitch CW letto dalla radio
+                TxtPassband.Text = t.PassbandHz > 0 ? $"Filtro radio: {t.PassbandHz} Hz" : "Filtro radio: —";
                 TxtRadioPitch.Text = t.CwPitch > 0 ? $"Radio: {t.CwPitch} Hz (CAT CWPITCH)" : "Radio: — (pitch non letto)";
                 if (t.CwPitch >= 200 && t.CwPitch <= 1000 && !_pitchFromRadioDone)
                 {
@@ -1011,7 +1063,7 @@ namespace IpTrxCtrl.UI
         {
             if (_portsFailedShown) return;
             _portsFailedShown = true;
-            Program.LogError("SPEGNIMENTO: porte non aperte con UPnP · " + reason);
+            Program.LogError("SPEGNIMENTO: nessuna porta apribile dopo 20 giri · " + reason);
             var exit = new Button { Content = "Exit", MinWidth = 110, HorizontalAlignment = HorizontalAlignment.Right };
             exit.Classes.Add("accent");
             var w = new Window
@@ -1027,10 +1079,10 @@ namespace IpTrxCtrl.UI
                     Spacing = 12,
                     Children =
                     {
-                        new TextBlock { Text = "Io mi spengo perché non riesco a funzionare.", FontSize = 18, FontWeight = FontWeight.Bold, TextWrapping = TextWrapping.Wrap },
-                        new TextBlock { Text = "Non riesco ad aprire le due porte sul router con UPnP: senza porte aperte il client non può collegarsi a questo server.", FontSize = 14, TextWrapping = TextWrapping.Wrap },
+                        new TextBlock { Text = "Nessuna porta è apribile: io mi spengo perché non riesco a funzionare.", FontSize = 18, FontWeight = FontWeight.Bold, TextWrapping = TextWrapping.Wrap },
+                        new TextBlock { Text = "Per 20 giri il server e il client si sono scambiati sul broker MQTT le porte aperte con UPnP e hanno provato a collegarsi in tutti e due i versi, senza riuscirci.", FontSize = 14, TextWrapping = TextWrapping.Wrap },
                         new TextBlock { Text = "Motivo: " + reason, FontSize = 13, TextWrapping = TextWrapping.Wrap, Foreground = this.FindResource("B.Muted") as IBrush },
-                        new TextBlock { Text = "Attiva UPnP sul router e riavvia il programma. Il dettaglio è nel registro sessioni.log (Impostazioni › Apri cartella dati).", FontSize = 13, TextWrapping = TextWrapping.Wrap },
+                        new TextBlock { Text = "Attiva UPnP almeno su uno dei due router (meglio su tutti e due), controlla che il server sia acceso, poi riavvia il programma. Ogni giro è scritto nel registro sessioni.log (Impostazioni › Apri cartella dati). Guida: Aiuto › Porte e collegamento.", FontSize = 13, TextWrapping = TextWrapping.Wrap },
                         exit
                     }
                 }

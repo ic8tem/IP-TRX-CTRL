@@ -299,6 +299,13 @@
             <TextBlock Classes="h2" Text="CW · CASCATA E DECODIFICATORE" />
             <TextBlock Grid.Column="1" Classes="sub" Text="Spettro 0–3000 Hz · pitch 200–1000 Hz" />
           </Grid>
+          <Grid ColumnDefinitions="Auto,*,Auto,Auto,180" Margin="0,0,0,4">
+            <CheckBox x:Name="ChkWideFilter" Content="Apri il filtro della radio in CW (per vedere tutta la cascata)" VerticalAlignment="Center" />
+            <TextBlock x:Name="TxtPassband" Grid.Column="1" Classes="sub" FontSize="12" VerticalAlignment="Center" Margin="12,0" Text="Filtro radio: —" />
+            <ComboBox x:Name="CmbCwFilter" Grid.Column="2" Width="110" Margin="0,0,14,0" />
+            <TextBlock Grid.Column="3" Classes="sub" FontSize="12" Text="Intensità cascata" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <Slider x:Name="SldWfIntensity" Grid.Column="4" Minimum="0" Maximum="100" VerticalAlignment="Center" />
+          </Grid>
           <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,160">
             <StackPanel>
               <TextBlock Classes="lbl" Text="Pitch CW (Hz) · 200–1000" />

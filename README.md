@@ -1,6 +1,6 @@
 # IP-TRX-CTRL
 
-Comando a distanza di una radio HF via internet: audio bidirezionale a 8 kHz cifrato AES-256, controllo CAT con Hamlib, PTT (CAT, RTS, DTR, VOX, TCI), keyer con messaggi WAV in SSB e macro di testo in CW, cascata e decodificatore CW, VFO B con split, potenza TX, mute delle schede audio del server.
+Comando a distanza di una radio HF via internet: audio bidirezionale a 8 kHz cifrato AES-256, controllo CAT con Hamlib, PTT (CAT, RTS, DTR, VOX, TCI), keyer con messaggi WAV in SSB e macro di testo in CW, cascata e decodificatore CW, VFO B con split, potenza TX, mute delle schede audio del server. Sul client: programmi digitali (WSJT-X, JTDX, fldigi…) con rigctld locale e cavi audio virtuali, pedale PTT e tasto CW meccanico su porta seriale. Porte aperte con UPnP e verificate dall'esterno, collegamento inverso e audio su UDP quando possibile.
 
 Un unico programma per i due PC: **server** (la radio è collegata qui) e **client** (l'operatore). I ruoli si scelgono al primo avvio e si possono invertire.
 
@@ -10,7 +10,7 @@ Versioni: Windows 64 e 32 bit, Linux 64 bit, Raspberry Pi 64 e 32 bit, macOS App
 
 Gli installatori sono nella pagina **Releases**:
 
-- Windows 64 / 32 bit: `…-win-x64-setup.exe` / `…-win-x86-setup.exe` (Hamlib incluso).
+- Windows 64 / 32 bit: `…-win-x64-setup.exe` / `…-win-x86-setup.exe` (Hamlib incluso). Il setup a 64 bit propone anche di scaricare e installare il cavo audio virtuale VB-CABLE per i programmi digitali (saltato se è già presente).
 - Linux 64 bit e Raspberry Pi: `ip-trx-ctrl_…_amd64.deb`, `…_arm64.deb` (Raspberry Pi OS 64 bit), `…_armhf.deb` (32 bit); si installano con `sudo apt install ./<file>.deb`, che installa anche Hamlib.
 - macOS: `…-osx-arm64.dmg` (Apple Silicon) o `…-osx-x64.dmg` (Intel); installa Hamlib con `brew install hamlib`; al primo avvio clic destro sull'app › Apri.
 

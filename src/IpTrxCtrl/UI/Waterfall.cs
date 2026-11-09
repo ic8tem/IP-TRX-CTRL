@@ -29,6 +29,8 @@ namespace IpTrxCtrl.UI
         private double _floor = -100;
 
         public double PitchHz { get; set; } = 600;
+        /// <summary>Intensità 0..100: valori bassi scuriscono il rumore e fanno risaltare i segnali.</summary>
+        public double Intensity { get; set; } = 50;
         public List<(double hz, IBrush brush)> Markers { get; } = new();
         public event Action<double>? FrequencyClicked;
 
@@ -80,7 +82,8 @@ namespace IpTrxCtrl.UI
                     int off = y * Cols;
                     Array.Copy(_pixels, off + 1, _pixels, off, Cols - 1);
                     int bin = Rows - 1 - y;   // in alto le frequenze alte
-                    double v = (row[bin] - _floor - 3) / 35.0;
+                    double offset = 15 - Intensity * 0.3;          // da +15 dB (scura) a -15 dB (chiara) sopra il rumore
+                    double v = (row[bin] - _floor - offset) / 30.0;
                     int idx = (int)Math.Clamp(v * 255, 0, 255);
                     _pixels[off + Cols - 1] = _palette[idx];
                 }

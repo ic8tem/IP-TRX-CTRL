@@ -38,6 +38,7 @@ namespace IpTrxCtrl.Rig
         private KeyingPlan _plan = new("", SerialLine.None, false, "", SerialLine.None, false, "");
         private SerialLines? _pttLines, _cwLines;
         private CwKeyer? _keyer;
+        private ManualCwReplayer? _manual;
         private volatile bool _cwPtt;
         private bool _pttActual;
         private readonly SemaphoreSlim _pttLock = new(1, 1);
@@ -74,6 +75,7 @@ namespace IpTrxCtrl.Rig
             _tci?.Dispose();
             _tci = null;
             _keyer?.Dispose(); _keyer = null;
+            _manual?.Dispose(); _manual = null;
             _pttLines?.Dispose(); _pttLines = null;
             _cwLines?.Dispose(); _cwLines = null;
             _pttWanted = false; _cwPtt = false; _pttActual = false;
@@ -83,6 +85,17 @@ namespace IpTrxCtrl.Rig
         public void Dispose() => Stop();
 
         public KeyingPlan Plan => _plan;
+
+        /// <summary>Indirizzo del rigctld in uso (per i programmi digitali del client), null se non è avviato.</summary>
+        public (string host, int port)? RigctldEndpoint
+        {
+            get
+            {
+                if (_s.UseExternalRigctld) return (_s.ExternalRigctldHost, _s.ExternalRigctldPort);
+                try { if (_procPort > 0 && _proc != null && !_proc.HasExited) return ("127.0.0.1", _procPort); } catch { }
+                return null;
+            }
+        }
 
         public string PttInfo
         {
@@ -124,6 +137,7 @@ namespace IpTrxCtrl.Rig
                     var line = _plan.CwLine;
                     _keyer = new CwKeyer(down => lines.Set(line, down), on => SetCwPtt(on), () => _s.PttDelayMs);
                     _keyer.Log += m => SessionLog.Write(m);
+                    _manual = new ManualCwReplayer(down => lines.Set(line, down), on => SetCwPtt(on), _s.CwKeyDelayMs);
                     SessionLog.Write($"CW su {KeyingPlan.Name(line)} della porta {_plan.CwPort}");
                 }
             }
@@ -275,6 +289,7 @@ namespace IpTrxCtrl.Rig
             if (f != null && f.Count > 0 && long.TryParse(f[0], out long hz)) t.FreqHz = hz;
             var m = await CommandAsync("m", 2, ct);
             if (m != null && m.Count > 0) t.Mode = m[0];
+            if (m != null && m.Count > 1 && int.TryParse(m[1], out int pb)) t.PassbandHz = pb;
 
             t.Transmitting = (await GetAsync("t", ct)) == "1";
             t.StrengthDb = ParseF(await GetAsync("l STRENGTH", ct));
@@ -351,6 +366,14 @@ namespace IpTrxCtrl.Rig
         {
             if (hz > 0) await SetAsync("F " + hz.ToString(CultureInfo.InvariantCulture));
             if (!string.IsNullOrWhiteSpace(mode)) await SetAsync($"M {mode.Trim()} 0");
+        }
+
+        /// <summary>Modo con larghezza del filtro (es. CW 3000 Hz per vedere tutta la cascata).</summary>
+        public async Task SetPassbandAsync(string mode, int hz)
+        {
+            if (string.IsNullOrWhiteSpace(mode)) return;
+            await SetAsync($"M {mode.Trim()} {Math.Clamp(hz, 0, 10000)}");
+            SessionLog.Write($"RADIO filtro {mode} a {hz} Hz");
         }
 
         public Task SetVfoBAsync(long hz) => SetAsync("I " + hz.ToString(CultureInfo.InvariantCulture));
@@ -466,6 +489,17 @@ namespace IpTrxCtrl.Rig
             if (_keyer != null) { _keyer.Send(text, wpm); return; }
             if (wpm >= 5) await SetKeySpeedAsync(wpm);
             await SendMorseAsync(text);
+        }
+
+        /// <summary>Tasto CW manuale del client (evento giù/su con il suo istante).</summary>
+        public void CwKeyEvent(bool down, long clientMs)
+        {
+            if (_manual == null)
+            {
+                if (down) SetStatus("Tasto CW manuale: sul server imposta l'invio CW su una linea DTR o RTS");
+                return;
+            }
+            _manual.Event(down, clientMs);
         }
 
         public async Task StopCwAsync()

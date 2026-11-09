@@ -67,3 +67,24 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---------------------------------------------------------
+COMPONENTI ESTERNI NON INCLUSI (installati a parte, solo se l'utente li sceglie)
+
+VB-CABLE Virtual Audio Device - VB-Audio Software (V. Burel) - donationware
+https://vb-audio.com/Cable/
+Non e' incluso ne' ridistribuito: l'installatore Windows 64 bit lo scarica dal sito
+del produttore solo se l'utente seleziona l'attivita' facoltativa, e lo salta se e'
+gia' presente. Valgono le condizioni d'uso di VB-Audio.
+
+BlackHole (macOS) - licenza MIT - Copyright (c) Existential Audio Inc.
+https://github.com/ExistentialAudio/BlackHole
+Non incluso: si installa a parte (brew install blackhole-2ch).
+
+com0com (Windows, porte seriali virtuali) - GNU GPL 2 - Vyacheslav Frolov
+https://com0com.sourceforge.net
+Non incluso: facoltativo per collegare la porta virtuale di un altro programma.
+
+Servizi di rete usati: broker MQTT pubblici (indirizzi cifrati), server STUN
+pubblici (indirizzo UDP pubblico), ifconfig.co e api.ipify.org (verifica delle
+porte e dell'indirizzo IP pubblico).

@@ -11,6 +11,9 @@ namespace IpTrxCtrl.Core
     /// <summary>Metodo con cui il server manda in trasmissione la radio.</summary>
     public enum PttMethod { Cat, Rts, Dtr, Vox, Tci }
 
+    /// <summary>Linea di ingresso della porta seriale del client (tasto, pedale, porta virtuale).</summary>
+    public enum InputPin { None, Cts, Dsr, Dcd }
+
     /// <summary>Come il server trasmette il testo CW: keyer della radio via CAT oppure tasto su linea seriale.</summary>
     public enum CwMethod { Cat, Dtr, Rts }
 
@@ -94,6 +97,21 @@ namespace IpTrxCtrl.Core
         public int CwDecodeWidth { get; set; } = 100;
         public int CwThreshold { get; set; } = 40;
         public int CwRxWpm { get; set; }               // 0 = automatico
+        public int WfIntensity { get; set; } = 50;     // cursore intensità della cascata 0..100
+        public bool CwWideFilter { get; set; } = true; // in CW apri il filtro della radio per vedere la cascata
+        public int CwFilterHz { get; set; } = 3000;
+
+        // ---------------- Porta seriale del client: PTT e tasto CW da hardware (o porta virtuale)
+        public string InputCom { get; set; } = "";
+        public InputPin InputPttPin { get; set; } = InputPin.Cts;
+        public InputPin InputCwPin { get; set; } = InputPin.Dsr;
+        public int CwKeyDelayMs { get; set; } = 250;   // ritardo fisso con cui il server ripete il tasto manuale
+
+        // ---------------- Programmi digitali (client)
+        public bool DigitalEnabled { get; set; }
+        public string DigitalToProgram { get; set; } = "";     // uscita: audio ricevuto verso il programma digitale
+        public string DigitalFromProgram { get; set; } = "";   // ingresso: audio del programma digitale verso la radio
+        public int RigctlPort { get; set; } = 4532;
 
         // ---------------- Rete (gestita in automatico)
         public string LastServerIp { get; set; } = "";

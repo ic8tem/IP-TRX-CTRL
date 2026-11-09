@@ -235,3 +235,75 @@ namespace IpTrxCtrl.Rig
         }
     }
 }
+
+namespace IpTrxCtrl.Rig
+{
+    /// <summary>
+    /// Server: ripete il tasto CW manuale del client conservandone i tempi. Ogni evento arriva con
+    /// l'istante del client; il primo di una serie fissa la corrispondenza degli orologi e tutti
+    /// vengono eseguiti con un ritardo fisso (assorbe il jitter di rete). Il PTT si alza al primo
+    /// evento e si rilascia dopo 800 ms senza attività. Tasto giù per più di 10 s: rilasciato.
+    /// </summary>
+    public sealed class ManualCwReplayer : IDisposable
+    {
+        private readonly Action<bool> _key, _ptt;
+        private readonly System.Collections.Concurrent.BlockingCollection<(bool down, long ts)> _events = new();
+        private readonly System.Threading.Thread _thread;
+        private readonly int _delayMs;
+        private volatile bool _run = true;
+
+        public ManualCwReplayer(Action<bool> key, Action<bool> ptt, int delayMs)
+        {
+            _key = key; _ptt = ptt; _delayMs = System.Math.Clamp(delayMs, 50, 2000);
+            _thread = new System.Threading.Thread(Run) { IsBackground = true, Name = "tasto CW manuale", Priority = System.Threading.ThreadPriority.Highest };
+            _thread.Start();
+        }
+
+        public void Event(bool down, long clientMs) { if (_run) _events.Add((down, clientMs)); }
+
+        private void Run()
+        {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            long offset = 0;           // istante del server = istante del client + offset
+            bool active = false, keyDown = false;
+            long lastActivity = 0, downSince = 0;
+            while (_run)
+            {
+                long now = clock.ElapsedMilliseconds;
+                if (_events.TryTake(out var ev, 5))
+                {
+                    now = clock.ElapsedMilliseconds;
+                    if (!active)
+                    {
+                        offset = now - ev.ts + _delayMs;
+                        _ptt(true);
+                        active = true;
+                    }
+                    long at = ev.ts + offset;
+                    while (clock.ElapsedMilliseconds < at && _run)
+                    {
+                        long left = at - clock.ElapsedMilliseconds;
+                        if (left > 3) System.Threading.Thread.Sleep(1); else System.Threading.Thread.SpinWait(50);
+                    }
+                    if (at < clock.ElapsedMilliseconds - 300) offset = clock.ElapsedMilliseconds - ev.ts + _delayMs; // rete in ritardo: riallinea
+                    _key(ev.down);
+                    keyDown = ev.down;
+                    if (ev.down) downSince = clock.ElapsedMilliseconds;
+                    lastActivity = clock.ElapsedMilliseconds;
+                    continue;
+                }
+                now = clock.ElapsedMilliseconds;
+                if (keyDown && now - downSince > 10000) { _key(false); keyDown = false; lastActivity = now; }
+                if (active && !keyDown && now - lastActivity > 800) { _ptt(false); active = false; }
+            }
+            _key(false);
+            if (active) _ptt(false);
+        }
+
+        public void Dispose()
+        {
+            _run = false;
+            _events.CompleteAdding();
+        }
+    }
+}

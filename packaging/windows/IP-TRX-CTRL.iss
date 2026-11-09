@@ -39,6 +39,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+#if Arch == "x64"
+Name: "vbcable"; Description: "Installa il cavo audio virtuale VB-CABLE (VB-Audio, donationware), scaricato dal sito del produttore. Saltato se è già presente."; GroupDescription: "Programmi digitali sul client (WSJT-X, JTDX, fldigi…):"; Check: not VbCablePresent
+#endif
 
 [Files]
 Source: "{#SourceDir}\IP-TRX-CTRL.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -51,3 +54,49 @@ Name: "{autodesktop}\IP-TRX-CTRL"; Filename: "{app}\IP-TRX-CTRL.exe"; Tasks: des
 
 [Run]
 Filename: "{app}\IP-TRX-CTRL.exe"; Description: "{cm:LaunchProgram,IP-TRX-CTRL}"; Flags: nowait postinstall skipifsilent
+
+#if Arch == "x64"
+[Code]
+// VB-CABLE non viene ridistribuito: lo scarica l'installatore dal sito di VB-Audio solo se l'utente lo chiede.
+const
+  VbCableUrl = 'https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip';
+
+function VbCablePresent: Boolean;
+begin
+  Result := DirExists(ExpandConstant('{commonpf64}\VB\CABLE')) or DirExists(ExpandConstant('{commonpf32}\VB\CABLE'))
+            or FileExists(ExpandConstant('{sys}\drivers\vbaudio_cable64_win10.sys'))
+            or FileExists(ExpandConstant('{sys}\drivers\vbaudio_cable64_win7.sys'));
+end;
+
+procedure InstallVbCable;
+var
+  Zip, Dir: String;
+  Code: Integer;
+begin
+  Zip := ExpandConstant('{tmp}\vbcable.zip');
+  Dir := ExpandConstant('{tmp}\vbcable');
+  try
+    DownloadTemporaryFile(VbCableUrl, 'vbcable.zip', '', nil);
+  except
+    MsgBox('Non riesco a scaricare VB-CABLE (' + GetExceptionMessage + '). Puoi installarlo più tardi da https://vb-audio.com/Cable/', mbInformation, MB_OK);
+    exit;
+  end;
+  Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Force -LiteralPath ''' + Zip + ''' -DestinationPath ''' + Dir + '''"',
+       '', SW_HIDE, ewWaitUntilTerminated, Code);
+  if not FileExists(Dir + '\VBCABLE_Setup_x64.exe') then
+  begin
+    MsgBox('Pacchetto VB-CABLE non riconosciuto. Puoi installarlo più tardi da https://vb-audio.com/Cable/', mbInformation, MB_OK);
+    exit;
+  end;
+  if not ShellExec('runas', Dir + '\VBCABLE_Setup_x64.exe', '-i -h', Dir, SW_SHOW, ewWaitUntilTerminated, Code) then
+    MsgBox('Installazione di VB-CABLE non avviata. Puoi installarlo più tardi da https://vb-audio.com/Cable/', mbInformation, MB_OK)
+  else
+    MsgBox('VB-CABLE installato. Riavvia il PC prima di usarlo con i programmi digitali.', mbInformation, MB_OK);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if (CurStep = ssPostInstall) and WizardIsTaskSelected('vbcable') then
+    InstallVbCable;
+end;
+#endif

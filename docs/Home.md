@@ -7,7 +7,7 @@ IP-TRX-CTRL serve a usare una radio HF a distanza, via internet, come se fosse s
 
 I ruoli si scelgono al primo avvio e si possono invertire in qualsiasi momento.
 
-> **Stato del progetto:** prima versione (0.1), compilata automaticamente ma non ancora provata con le radio. Le immagini sono bozzetti dell'interfaccia.
+> **Stato del progetto:** versione 0.2, compilata automaticamente ma non ancora provata con le radio. Le immagini sono bozzetti dell'interfaccia.
 
 ## In breve
 
@@ -16,6 +16,9 @@ I ruoli si scelgono al primo avvio e si possono invertire in qualsiasi momento.
 - Controllo CAT della radio: frequenza, modo, VFO A/B con split, potenza TX, letture di S-meter, potenza e SWR.
 - **Keyer** integrato sul client (deriva dal programma WavPTT): in SSB otto messaggi WAV su F1…F8, in CW otto macro di testo trasmesse dalla radio.
 - In modo CW: cascata 0–3000 Hz, decodificatore sul pitch e finestre di decodifica aggiuntive per gli altri segnali.
+- Programmi digitali sul client (WSJT-X, JTDX, fldigi…) tramite un rigctld locale e cavi audio virtuali: vedi [Programmi digitali, pedale PTT e tasto CW](Programmi-digitali-e-pedale.md).
+- Pedale PTT e tasto CW meccanico su una porta seriale del client.
+- Ciclo delle porte tra server e client (UPnP verificato dall'esterno, collegamento inverso, 20 giri) e audio su UDP quando possibile: vedi [Porte e collegamento](Porte-e-collegamento.md).
 - Sei temi di colore: Chiaro, Notte, Nero, Blu, Viola, Verde.
 - Un unico codice sorgente per **Windows 64 bit, Windows 32 bit, macOS, Linux e Raspberry Pi**.
 

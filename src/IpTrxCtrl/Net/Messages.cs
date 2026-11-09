@@ -24,6 +24,13 @@ namespace IpTrxCtrl.Net
         public const byte SendMorse = 0x29;        // str testo
         public const byte StopMorse = 0x2A;
         public const byte SetKeySpeed = 0x2B;      // i32 WPM
+        public const byte SetPassband = 0x2C;      // str modo | i32 Hz (filtro della radio)
+        public const byte CwKey = 0x2D;            // u8 giù/su | i64 istante in ms (tasto manuale del client)
+        public const byte RigTunnelOpen = 0x60;    // i32 id: il client apre un collegamento rigctld
+        public const byte RigTunnelData = 0x61;    // i32 id | dati
+        public const byte RigTunnelClose = 0x62;   // i32 id
+        public const byte UdpOffer = 0x70;         // candidati UDP: str elenco "ip:porta;ip:porta" | i32 passo NAT simmetrico
+        public const byte UdpAudioOn = 0x71;       // u8: audio su UDP attivo
         public const byte AudioUnreachable = 0x30; // client -> server
         public const byte NewAudioPort = 0x31;     // server -> client
         public const byte SwapRequest = 0x40;
@@ -97,6 +104,7 @@ namespace IpTrxCtrl.Net
         public string PttInfo = "";
         public int PttDelayMs = 100;
         public string Status = "";
+        public int PassbandHz;                  // 0 = sconosciuto
 
         public bool PowerInWatts => !float.IsNaN(PowerSetW) && !float.IsNaN(PowerMaxW) && PowerMaxW > 0;
 
@@ -105,7 +113,7 @@ namespace IpTrxCtrl.Net
             .F32(StrengthDb).F32(PowerW).F32(PowerRel).F32(Swr).F32(TxGain)
             .I32(Mute).Bool(Transmitting).Bool(CatOk)
             .F32(PowerSetRel).F32(PowerSetW).F32(PowerMaxW)
-            .I32(CwPitch).I32(KeySpeed).Str(RigName).Str(PttInfo).I32(PttDelayMs).Str(Status).Build();
+            .I32(CwPitch).I32(KeySpeed).Str(RigName).Str(PttInfo).I32(PttDelayMs).Str(Status).I32(PassbandHz).Build();
 
         public static RigTelemetry Decode(MsgReader r) => new()
         {
@@ -113,7 +121,8 @@ namespace IpTrxCtrl.Net
             StrengthDb = r.F32(), PowerW = r.F32(), PowerRel = r.F32(), Swr = r.F32(), TxGain = r.F32(),
             Mute = r.I32(), Transmitting = r.Bool(), CatOk = r.Bool(),
             PowerSetRel = r.F32(), PowerSetW = r.F32(), PowerMaxW = r.F32(),
-            CwPitch = r.I32(), KeySpeed = r.I32(), RigName = r.Str(), PttInfo = r.Str(), PttDelayMs = r.I32(), Status = r.Str()
+            CwPitch = r.I32(), KeySpeed = r.I32(), RigName = r.Str(), PttInfo = r.Str(), PttDelayMs = r.I32(), Status = r.Str(),
+            PassbandHz = r.AtEnd ? 0 : r.I32()
         };
 
         public RigTelemetry Clone() => (RigTelemetry)MemberwiseClone();

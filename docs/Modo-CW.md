@@ -25,3 +25,9 @@ Quando la radio è in un modo CW, al posto del riquadro audio compare **CW · ca
 
 - Clic su un segnale **dentro** la fascia del pitch: il pitch si sposta su quel segnale.
 - Clic su un segnale **fuori** dal pitch: si apre una **finestra di decodifica in più**, una per ogni segnale. La finestra mostra frequenza, velocità e testo, con i pulsanti **Porta al pitch (QSY)** (sposta il VFO perché il segnale cada sul pitch), **Copia nominativo**, **Pulisci** e **Chiudi**.
+
+## Filtro della radio e intensità della cascata
+
+Con il filtro CW stretto della radio (di solito 500 Hz o meno) la cascata orizzontale resta quasi vuota: la radio taglia tutto quello che sta fuori dal filtro. Per questo, quando si entra in CW, IP-TRX-CTRL chiede alla radio un **filtro largo** (3000 Hz di serie; si può scegliere 1200, 2400, 2700, 3000 o 3600 Hz) con il comando Hamlib della larghezza di banda. Il filtro attuale letto dalla radio compare accanto alla scelta. Togliendo la spunta «Filtro largo» si torna al filtro normale della radio.
+
+Il cursore **Intensità** sposta la scala dei colori della cascata: verso sinistra il rumore diventa più scuro e i segnali risaltano, verso destra si vedono anche i segnali più deboli.

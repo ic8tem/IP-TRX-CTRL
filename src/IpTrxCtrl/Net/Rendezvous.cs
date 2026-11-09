@@ -109,6 +109,58 @@ namespace IpTrxCtrl.Net
             return ok > 0;
         }
 
+        /// <summary>Client: lascia sui broker le porte che ha aperto (giro del ciclo delle porte).</summary>
+        public async Task<bool> PublishOfferAsync(PortOffer offer, CancellationToken ct)
+        {
+            byte[] payload = Crypto.Seal(_key, offer.ToBytes());
+            int ok = 0;
+            foreach (string broker in _brokers)
+            {
+                using var client = new MqttFactory().CreateMqttClient();
+                try
+                {
+                    using var t = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    t.CancelAfter(TimeSpan.FromSeconds(10));
+                    await client.ConnectAsync(Mqtt.Options(broker, Mqtt.NewClientId()), t.Token);
+                    await client.PublishAsync(Mqtt.Message(_topic + "/c", payload, true), t.Token);
+                    ok++;
+                }
+                catch { }
+                finally { await Mqtt.SafeDisconnect(client); }
+            }
+            return ok > 0;
+        }
+
+        /// <summary>Server: legge la proposta di porte più recente del client.</summary>
+        public async Task<PortOffer?> LookupOfferAsync(CancellationToken ct)
+        {
+            PortOffer? best = null;
+            foreach (string broker in _brokers)
+            {
+                using var client = new MqttFactory().CreateMqttClient();
+                try
+                {
+                    var received = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    client.ApplicationMessageReceivedAsync += e =>
+                    {
+                        received.TrySetResult(e.ApplicationMessage.PayloadSegment.ToArray());
+                        return Task.CompletedTask;
+                    };
+                    using var t = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    t.CancelAfter(TimeSpan.FromSeconds(8));
+                    await client.ConnectAsync(Mqtt.Options(broker, Mqtt.NewClientId()), t.Token);
+                    await client.SubscribeAsync(Mqtt.Subscribe(_topic + "/c"), t.Token);
+                    var done = await Task.WhenAny(received.Task, Task.Delay(TimeSpan.FromSeconds(3), t.Token));
+                    if (done != received.Task) continue;
+                    var o = PortOffer.FromBytes(Crypto.Open(_key, received.Task.Result));
+                    if (o != null && (best == null || o.Ticks > best.Ticks)) best = o;
+                }
+                catch { }
+                finally { await Mqtt.SafeDisconnect(client); }
+            }
+            return best;
+        }
+
         /// <summary>Legge l'indirizzo più recente tra quelli lasciati sui broker.</summary>
         public async Task<ServerAddress?> LookupAsync(CancellationToken ct)
         {
@@ -143,6 +195,25 @@ namespace IpTrxCtrl.Net
             }
             LastOkBrokers = ok;
             return best;
+        }
+    }
+
+    /// <summary>
+    /// Proposta di porte del client (collegamento inverso): giro, IP pubblico, porte aperte con UPnP
+    /// (0 = nessuna) e porta di controllo del server che il client non è riuscito a raggiungere.
+    /// </summary>
+    public sealed record PortOffer(int Round, string Ip, int ControlPort, int AudioPort, int TriedServerPort, long Ticks)
+    {
+        public byte[] ToBytes() => new MsgWriter(0).I32(Round).Str(Ip).I32(ControlPort).I32(AudioPort).I32(TriedServerPort).I64(Ticks).Build();
+
+        public static PortOffer? FromBytes(byte[] b)
+        {
+            try
+            {
+                var r = new MsgReader(b);
+                return new PortOffer(r.I32(), r.Str(), r.I32(), r.I32(), r.I32(), r.I64());
+            }
+            catch { return null; }
         }
     }
 

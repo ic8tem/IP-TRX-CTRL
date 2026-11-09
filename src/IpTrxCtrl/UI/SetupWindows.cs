@@ -176,6 +176,8 @@ namespace IpTrxCtrl.UI
         public bool Saved { get; private set; }
         public bool RigChanged { get; private set; }
         public bool PairingReset { get; private set; }
+        public bool DigitalChanged { get; private set; }
+        public bool SerialInputChanged { get; private set; }
 
         public SettingsWindow(AppSettings s, Node node)
         {
@@ -202,6 +204,41 @@ namespace IpTrxCtrl.UI
             var prefill = new Slider { Minimum = 40, Maximum = 600, Value = s.PrefillMs };
             var prefillTxt = Ui.Sub($"Jitter buffer (pre-riempimento): {s.PrefillMs} ms", 13);
             prefill.ValueChanged += (_, e) => prefillTxt.Text = $"Jitter buffer (pre-riempimento): {(int)e.NewValue} ms";
+            // ---- client: porta seriale d'ingresso (pedale PTT, tasto CW meccanico, porta virtuale)
+            var inPorts = new List<string> { "(nessuna)" };
+            inPorts.AddRange(Hamlib.SerialPorts());
+            if (s.InputCom.Length > 0 && !inPorts.Contains(s.InputCom)) inPorts.Add(s.InputCom);
+            var inCom = new ComboBox { ItemsSource = inPorts, SelectedIndex = Math.Max(0, inPorts.IndexOf(s.InputCom)), MinWidth = 220 };
+            string[] pins = { "nessuno", "CTS (contatto con RTS)", "DSR (contatto con DTR)", "DCD (contatto con DTR)" };
+            var inPtt = new ComboBox { ItemsSource = pins, SelectedIndex = (int)s.InputPttPin, MinWidth = 220 };
+            var inCw = new ComboBox { ItemsSource = pins, SelectedIndex = (int)s.InputCwPin, MinWidth = 220 };
+            var keyDelay = new TextBox { Text = s.CwKeyDelayMs.ToString(CultureInfo.InvariantCulture), Width = 90 };
+
+            // ---- client: programmi digitali (cavi audio virtuali + rigctld locale)
+            bool digSupported = IpTrxCtrl.Audio.VirtualCables.Supported;
+            var outs = node.Audio.Outputs();
+            var ins = node.Audio.Inputs();
+            var digEnable = new CheckBox { Content = "Usa programmi digitali (WSJT-X, JTDX, JS8Call, fldigi…) con questo client", IsChecked = s.DigitalEnabled };
+            var digTo = new ComboBox { ItemsSource = outs, SelectedItem = outs.Contains(s.DigitalToProgram) ? s.DigitalToProgram : null, MinWidth = 300 };
+            var digFrom = new ComboBox { ItemsSource = ins, SelectedItem = ins.Contains(s.DigitalFromProgram) ? s.DigitalFromProgram : null, MinWidth = 300 };
+            var rigctlPort = new TextBox { Text = s.RigctlPort.ToString(CultureInfo.InvariantCulture), Width = 90 };
+            var digNote = Ui.Sub(IpTrxCtrl.Audio.VirtualCables.Describe(ins, outs), 13);
+            digNote.TextWrapping = TextWrapping.Wrap;
+            var digAuto = Ui.Btn("Scegli i cavi in automatico");
+            digAuto.Click += (_, _) =>
+            {
+                var (to, from) = IpTrxCtrl.Audio.VirtualCables.Suggest(ins, outs);
+                if (outs.Contains(to)) digTo.SelectedItem = to;
+                if (ins.Contains(from)) digFrom.SelectedItem = from;
+            };
+            var digState = Ui.Sub("Stato: " + node.DigitalStatus, 13);
+            digState.TextWrapping = TextWrapping.Wrap;
+            var digDevices = Ui.Col(10,
+                Ui.Col(0, Ui.Lbl("Audio verso il programma (il programma lo usa come INGRESSO)"), digTo),
+                Ui.Col(0, Ui.Lbl("Audio dal programma (il programma lo usa come USCITA)"), digFrom),
+                digAuto);
+            digDevices.IsVisible = !IpTrxCtrl.Audio.VirtualCables.IsLinux;
+
             var brokers = new TextBox { Text = string.Join(Environment.NewLine, s.MqttBrokers), AcceptsReturn = true, Height = 90 };
 
             var newPair = Ui.Btn("Nuovo abbinamento");
@@ -242,6 +279,19 @@ namespace IpTrxCtrl.UI
                 s.ExternalRigctldHost = (extHost.Text ?? "").Trim();
                 if (int.TryParse(extPort.Text, out int p)) s.ExternalRigctldPort = p;
                 s.PrefillMs = (int)prefill.Value;
+
+                string newCom = inCom.SelectedIndex <= 0 ? "" : inCom.SelectedItem as string ?? "";
+                var newPtt = (InputPin)Math.Max(0, inPtt.SelectedIndex);
+                var newCw = (InputPin)Math.Max(0, inCw.SelectedIndex);
+                SerialInputChanged = newCom != s.InputCom || newPtt != s.InputPttPin || newCw != s.InputCwPin;
+                s.InputCom = newCom; s.InputPttPin = newPtt; s.InputCwPin = newCw;
+                if (int.TryParse(keyDelay.Text, out int kd)) s.CwKeyDelayMs = Math.Clamp(kd, 50, 2000);
+
+                bool newDig = digSupported && digEnable.IsChecked == true;
+                string newTo = digTo.SelectedItem as string ?? "", newFrom = digFrom.SelectedItem as string ?? "";
+                int newRp = int.TryParse(rigctlPort.Text, out int rp) && rp > 1023 && rp < 65536 ? rp : s.RigctlPort;
+                DigitalChanged = newDig != s.DigitalEnabled || newTo != s.DigitalToProgram || newFrom != s.DigitalFromProgram || newRp != s.RigctlPort;
+                s.DigitalEnabled = newDig; s.DigitalToProgram = newTo; s.DigitalFromProgram = newFrom; s.RigctlPort = newRp;
                 var list = (brokers.Text ?? "").Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
                 if (list.Count > 0) s.MqttBrokers = list;
                 RigChanged = oldModel != s.RigModel || oldBaud != s.RigBaud || oldCom != s.RigCom || oldExt != s.UseExternalRigctld
@@ -276,6 +326,16 @@ namespace IpTrxCtrl.UI
                         Ui.Col(0, Ui.Lbl("Percorso di rigctld (vuoto = automatico)"), hamlibRow),
                         Ui.Col(0, Ui.Lbl("Livello Hamlib per il guadagno TX (es. MICGAIN)"), gain),
                         ext, Ui.Col(0, Ui.Lbl("rigctld esterno: indirizzo e porta"), extRow))),
+                    Ui.Panel(Ui.Col(10, Ui.H2("PEDALE PTT E TASTO CW (CLIENT)"),
+                        Ui.Sub("Porta seriale del client letta come ingresso: un pedale tra RTS e CTS, un tasto verticale tra DTR e DSR. Va bene anche la porta virtuale di un altro programma (su Windows una coppia com0com).", 13),
+                        Ui.Col(0, Ui.Lbl("Porta seriale"), inCom),
+                        Ui.Row(16, Ui.Col(0, Ui.Lbl("Ingresso del PTT"), inPtt), Ui.Col(0, Ui.Lbl("Ingresso del tasto CW"), inCw)),
+                        Ui.Col(0, Ui.Lbl("Ritardo fisso del tasto sul server (ms): assorbe i ritardi di internet"), keyDelay))),
+                    digSupported
+                        ? Ui.Panel(Ui.Col(10, Ui.H2("PROGRAMMI DIGITALI (CLIENT)"), digEnable, digNote, digDevices,
+                            Ui.Col(0, Ui.Lbl("Porta del rigctld locale: nel programma scegli la radio Hamlib «NET rigctl» su 127.0.0.1 e questa porta"), rigctlPort),
+                            digState))
+                        : Ui.Panel(Ui.Col(10, Ui.H2("PROGRAMMI DIGITALI (CLIENT)"), Ui.Sub("Non disponibili nella versione per Windows 32 bit.", 13))),
                     Ui.Panel(Ui.Col(10, Ui.H2("RETE E AUDIO"), prefillTxt, prefill,
                         Ui.Col(0, Ui.Lbl("Broker MQTT (uno per riga, host:porta)"), brokers))),
                     Ui.Panel(Ui.Col(10, Ui.H2("ABBINAMENTO E REGISTRI"),
@@ -413,6 +473,36 @@ Il client vede se le schede del server sono silenziate dal sistema operativo e p
 
 AUDIO
 Sempre 8 kHz, 16 bit mono, cifrato AES-256-GCM.
+
+MODO CW: FILTRO E CASCATA
+Entrando in CW il programma chiede alla radio il filtro largo (3000 Hz di serie, scelta 1200-3600 Hz) così la
+cascata mostra tutta la banda 0-3000 Hz; togli «Filtro largo» per tornare al filtro stretto. Il cursore
+«Intensità» abbassa il colore del rumore e fa risaltare i segnali.
+
+PEDALE PTT E TASTO CW (client)
+Impostazioni › «Pedale PTT e tasto CW». Collega un pedale tra RTS e CTS e un tasto verticale tra DTR e DSR di una
+porta seriale (anche adattatore USB): il programma alza RTS e DTR e legge CTS/DSR/DCD ogni millisecondo.
+Il tasto viene ripetuto sul server con un ritardo fisso (250 ms di serie) che assorbe i ritardi di internet.
+Va bene anche la porta virtuale di un altro programma: su Windows una coppia com0com (RTS→CTS, DTR→DSR).
+
+PROGRAMMI DIGITALI (client, non su Windows 32 bit)
+Impostazioni › «Programmi digitali». Nel programma (WSJT-X, JTDX, JS8Call, fldigi…) scegli la radio Hamlib
+«NET rigctl», indirizzo 127.0.0.1:4532, PTT «CAT». Audio:
+- Windows 64 bit: VB-CABLE (lo propone l'installatore). Con un cavo il programma usa «CABLE Output» come ingresso
+  e «CABLE Input» come uscita; IP-TRX-CTRL fa il contrario e lavora in semi-duplex. Con due cavi uno per direzione.
+- macOS: BlackHole 2ch (brew install blackhole-2ch).
+- Linux / Raspberry: il programma crea da solo i cavi IPTRX_RX e IPTRX_TX con pactl. Nel programma digitale:
+  ingresso «Monitor of IP-TRX-CTRL_RX», uscita «IP-TRX-CTRL_TX».
+Quando il programma chiede il PTT, IP-TRX-CTRL trasmette con l'audio del programma invece del microfono.
+
+PORTE E COLLEGAMENTO
+Il server apre due porte con UPnP (controllo TCP, audio TCP+UDP) e chiede a un server esterno se sono davvero
+raggiungibili da internet; le prime due porte utili vanno sul broker MQTT. Il client le prova; se non riesce apre
+le sue porte, le verifica e le manda al server sul broker MQTT: il server si collega al client (collegamento
+inverso) oppure cambia le sue porte. Il ciclo si ripete per 20 giri; dopo il ventesimo compare «Nessuna porta è
+apribile» e il client si chiude con «Exit». Attiva UPnP su almeno uno dei due router.
+A collegamento fatto l'audio prova anche UDP (STUN e perforazione del NAT); se UDP non passa resta su TCP.
+Il percorso in uso compare nella riga della rete dell'altro PC («audio UDP» o «audio TCP»).
 
 ERRORI E REGISTRI
 Impostazioni › «Apri cartella dati»: errori.log (errori imprevisti) e sessioni.log (collegamenti e abbinamento).

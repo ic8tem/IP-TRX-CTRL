@@ -110,14 +110,36 @@ namespace IpTrxCtrl.Net
             return 0;
         }
 
+        /// <summary>Apre anche UDP sullo stesso numero di porta (per l'audio su UDP). false se il router rifiuta.</summary>
+        public async Task<bool> OpenUdpAsync(int port, string description)
+        {
+            if (_device == null) return false;
+            try
+            {
+                var map = new Mapping(Protocol.Udp, port, port, 0, description);
+                await _device.CreatePortMapAsync(map);
+                lock (_mappings) _mappings.Add(map);
+                L($"{description}: porta UDP {port} aperta sul router");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                L($"{description}: porta UDP {port} rifiutata dal router ({ex.Message})");
+                return false;
+            }
+        }
+
         public async Task ClosePortAsync(int port)
         {
-            Mapping? m;
-            lock (_mappings) m = _mappings.FirstOrDefault(x => x.PublicPort == port);
-            if (m == null || _device == null) return;
-            try { await _device.DeletePortMapAsync(m); L($"porta {port} chiusa sul router"); }
-            catch (Exception ex) { L($"porta {port}: chiusura non riuscita ({ex.Message})"); }
-            lock (_mappings) _mappings.Remove(m);
+            List<Mapping> ms;
+            lock (_mappings) ms = _mappings.Where(x => x.PublicPort == port).ToList();
+            if (ms.Count == 0 || _device == null) return;
+            foreach (var m in ms)
+            {
+                try { await _device.DeletePortMapAsync(m); L($"porta {m.Protocol} {port} chiusa sul router"); }
+                catch (Exception ex) { L($"porta {port}: chiusura non riuscita ({ex.Message})"); }
+                lock (_mappings) _mappings.Remove(m);
+            }
         }
 
         public async Task CloseAllAsync()
