@@ -115,6 +115,7 @@ namespace IpTrxCtrl.Audio
         public void Start(string input, string output, Action<short[]> onCapture, Action<short[]> fill)
         {
             Stop();
+            LastError = "";
             _run = true;
             int inIdx = Inputs().IndexOf(input);
             int outIdx = Outputs().IndexOf(output);

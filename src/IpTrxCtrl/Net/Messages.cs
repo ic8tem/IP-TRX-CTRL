@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
@@ -26,6 +27,7 @@ namespace IpTrxCtrl.Net
         public const byte SetKeySpeed = 0x2B;      // i32 WPM
         public const byte SetPassband = 0x2C;      // str modo | i32 Hz (filtro della radio)
         public const byte CwKey = 0x2D;            // u8 giù/su | i64 istante in ms (tasto manuale del client)
+        public const byte SetServerDevices = 0x2E; // str ingresso | str uscita: il client sceglie le schede audio del server
         public const byte RigTunnelOpen = 0x60;    // i32 id: il client apre un collegamento rigctld
         public const byte RigTunnelData = 0x61;    // i32 id | dati
         public const byte RigTunnelClose = 0x62;   // i32 id
@@ -157,14 +159,33 @@ namespace IpTrxCtrl.Net
         public float InVol = float.NaN, OutVol = float.NaN;
         public bool AutoUnmute;
         public string Note = "";
+        /// <summary>Schede audio presenti sul server (per sceglierle dal client).</summary>
+        public List<string> Inputs = new(), Outputs = new();
 
-        public byte[] Encode() => new MsgWriter(Msg.DeviceState)
-            .Str(InName).I32(InMute).F32(InVol).Str(OutName).I32(OutMute).F32(OutVol).Bool(AutoUnmute).Str(Note).Build();
-
-        public static DeviceStateInfo Decode(MsgReader r) => new()
+        public byte[] Encode()
         {
-            InName = r.Str(), InMute = r.I32(), InVol = r.F32(), OutName = r.Str(), OutMute = r.I32(), OutVol = r.F32(),
-            AutoUnmute = r.Bool(), Note = r.Str()
-        };
+            var w = new MsgWriter(Msg.DeviceState)
+                .Str(InName).I32(InMute).F32(InVol).Str(OutName).I32(OutMute).F32(OutVol).Bool(AutoUnmute).Str(Note);
+            w.I32(Inputs.Count); foreach (var x in Inputs) w.Str(x);
+            w.I32(Outputs.Count); foreach (var x in Outputs) w.Str(x);
+            return w.Build();
+        }
+
+        public static DeviceStateInfo Decode(MsgReader r)
+        {
+            var d = new DeviceStateInfo
+            {
+                InName = r.Str(), InMute = r.I32(), InVol = r.F32(), OutName = r.Str(), OutMute = r.I32(), OutVol = r.F32(),
+                AutoUnmute = r.Bool(), Note = r.Str()
+            };
+            if (!r.AtEnd)
+            {
+                int n = Math.Clamp(r.I32(), 0, 256);
+                for (int i = 0; i < n; i++) d.Inputs.Add(r.Str());
+                n = Math.Clamp(r.I32(), 0, 256);
+                for (int i = 0; i < n; i++) d.Outputs.Add(r.Str());
+            }
+            return d;
+        }
     }
 }

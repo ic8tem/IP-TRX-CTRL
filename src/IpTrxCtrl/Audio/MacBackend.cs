@@ -242,6 +242,7 @@ namespace IpTrxCtrl.Audio
         public void Start(string input, string output, Action<short[]> onCapture, Action<short[]> fill)
         {
             Stop();
+            LastError = "";
             _onCapture = onCapture;
             _fill = fill;
             _inCb = OnInput;

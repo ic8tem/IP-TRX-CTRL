@@ -8,6 +8,17 @@ Tutto l'audio è trattato a **8 kHz, 16 bit mono**:
 - filtri, compressore, mixaggio microfono/messaggi, rete e decodificatore CW lavorano a 8 kHz;
 - la banda utile arriva a circa 4 kHz, sufficiente per la SSB e per la cascata CW 0–3000 Hz.
 
+## Scegliere le schede audio del server dal client
+
+Nel riquadro **Schede audio del server** le righe *Ingresso* e *Uscita* sono due elenchi con le schede presenti sul PC server:
+
+- **Ingresso**: la scheda da cui il server prende l'audio della radio (ricezione);
+- **Uscita**: la scheda con cui il server manda l'audio alla radio (trasmissione).
+
+Scegliendo una scheda dal client, il server riavvia il proprio audio sulla scheda nuova e salva la scelta. Se la scheda non si apre (scollegata, occupata, permesso negato) il server torna subito alle schede di prima e il client vede un avviso; nel registro `sessioni.log` del server resta una riga `AUDIO`. L'elenco delle schede del server si aggiorna da solo ogni 30 secondi, per esempio dopo aver collegato un'interfaccia USB.
+
+Lo stesso elenco funziona anche sul server: cambiare la scheda lì equivale a cambiarla nel riquadro dell'audio locale.
+
 ## Mute delle schede audio del server
 
 Il client vede se le due schede audio del server collegate alla radio (ricezione e trasmissione) sono silenziate dal sistema operativo, insieme al loro volume di sistema, e può:

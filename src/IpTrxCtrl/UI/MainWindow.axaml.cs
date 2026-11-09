@@ -236,6 +236,14 @@ namespace IpTrxCtrl.UI
 
         private void HookEvents()
         {
+            CmbDevIn.SelectionChanged += (_, _) => ServerDeviceChosen();
+            CmbDevOut.SelectionChanged += (_, _) => ServerDeviceChosen();
+            _node.ServerDevicesChanged += () => Dispatcher.UIThread.Post(() =>
+            {
+                _loading = true;
+                FillAudioDevices();
+                _loading = false;
+            });
             CmbTheme.SelectionChanged += (_, _) =>
             {
                 if (_loading || CmbTheme.SelectedIndex < 0) return;
@@ -901,8 +909,8 @@ namespace IpTrxCtrl.UI
             _loading = true;
             try
             {
-                TxtDevIn.Text = d.InName;
-                TxtDevOut.Text = d.OutName;
+                FillDeviceCombo(CmbDevIn, d.Inputs, d.InName);
+                FillDeviceCombo(CmbDevOut, d.Outputs, d.OutName);
                 TxtDevInState.Text = MuteText(d.InMute, d.InVol);
                 TxtDevOutState.Text = MuteText(d.OutMute, d.OutVol);
                 ChipDevIn.Background = this.FindResource(d.InMute == 1 ? "B.TxDim" : "B.Inset") as IBrush;
@@ -918,6 +926,29 @@ namespace IpTrxCtrl.UI
                 TxtDevNote.IsVisible = d.Note.Length > 0;
             }
             finally { _loading = false; }
+        }
+
+        private static void FillDeviceCombo(ComboBox cmb, List<string> list, string current)
+        {
+            var items = list.Count > 0 ? new List<string>(list) : new List<string>();
+            if (current.Length > 0 && !items.Contains(current)) items.Insert(0, current);
+            var old = cmb.ItemsSource as List<string>;
+            if (old == null || !old.SequenceEqual(items)) cmb.ItemsSource = items;
+            cmb.SelectedItem = items.Contains(current) ? current : null;
+        }
+
+        /// <summary>Scelta delle schede audio del server dal riquadro «Schede audio del server» (anche dal client).</summary>
+        private void ServerDeviceChosen()
+        {
+            if (_loading) return;
+            string din = CmbDevIn.SelectedItem as string ?? "";
+            string dout = CmbDevOut.SelectedItem as string ?? "";
+            var d = _node.DeviceState;
+            if (din.Length == 0 || dout.Length == 0 || (din == d.InName && dout == d.OutName)) return;
+            _devUserAt = DateTime.MinValue;
+            _node.SetServerDevices(din, dout);
+            TxtDevInState.Text = "cambio scheda…";
+            TxtDevOutState.Text = "cambio scheda…";
         }
 
         private static string MuteText(int mute, float vol) =>

@@ -227,11 +227,11 @@
             <TextBlock Classes="h2" Text="SCHEDE AUDIO DEL SERVER" />
             <Grid ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
               <TextBlock Text="Ingresso" Classes="sub" VerticalAlignment="Center" Margin="0,0,8,0" />
-              <TextBlock x:Name="TxtDevIn" Grid.Column="1" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="—" />
+              <ComboBox x:Name="CmbDevIn" Grid.Column="1" FontSize="12" MinHeight="32" HorizontalAlignment="Stretch" VerticalAlignment="Center" PlaceholderText="—" ToolTip.Tip="Scheda d'ingresso del server (audio della radio)" />
               <Border Grid.Column="2" x:Name="ChipDevIn" Classes="chip" Margin="6,0"><TextBlock x:Name="TxtDevInState" FontSize="12" Text="—" /></Border>
               <Button Grid.Column="3" x:Name="BtnDevIn" Content="Togli mute" MinHeight="32" Padding="10,4" FontSize="12" />
               <TextBlock Grid.Row="1" Text="Uscita" Classes="sub" VerticalAlignment="Center" Margin="0,8,8,0" />
-              <TextBlock x:Name="TxtDevOut" Grid.Row="1" Grid.Column="1" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,8,0,0" Text="—" />
+              <ComboBox x:Name="CmbDevOut" Grid.Row="1" Grid.Column="1" FontSize="12" MinHeight="32" HorizontalAlignment="Stretch" VerticalAlignment="Center" Margin="0,8,0,0" PlaceholderText="—" ToolTip.Tip="Scheda d'uscita del server (audio verso la radio)" />
               <Border Grid.Row="1" Grid.Column="2" x:Name="ChipDevOut" Classes="chip" Margin="6,8,6,0"><TextBlock x:Name="TxtDevOutState" FontSize="12" Text="—" /></Border>
               <Button Grid.Row="1" Grid.Column="3" x:Name="BtnDevOut" Content="Togli mute" MinHeight="32" Padding="10,4" FontSize="12" Margin="0,8,0,0" />
             </Grid>

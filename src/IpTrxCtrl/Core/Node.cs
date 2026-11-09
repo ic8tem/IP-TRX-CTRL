@@ -971,6 +971,9 @@ namespace IpTrxCtrl.Core
                         case Msg.SetDeviceVolume:
                             if (IsServer) { bool input = r.U8() == 0; float v = r.F32(); DeviceMute.SetVolume(input ? _s.InputDevice : _s.OutputDevice, input, v); _ = SendDeviceStateAsync(); }
                             break;
+                        case Msg.SetServerDevices:
+                            if (IsServer) { string din = r.Str(); string dout = r.Str(); _ = ChangeServerDevicesAsync(din, dout, true); }
+                            break;
                         case Msg.SetAutoUnmute:
                             if (IsServer) { _s.AutoUnmute = r.Bool(); _s.Save(); _ = SendDeviceStateAsync(); }
                             break;
@@ -1211,6 +1214,72 @@ namespace IpTrxCtrl.Core
 
         public void RefreshDeviceState() => _ = SendDeviceStateAsync();
 
+        /// <summary>Server: le schede audio sono cambiate (dal client); la finestra aggiorna le sue liste.</summary>
+        public event Action? ServerDevicesChanged;
+
+        private (List<string> ins, List<string> outs) _devLists = (new(), new());
+        private DateTime _devListsAt = DateTime.MinValue;
+
+        /// <summary>Elenco delle schede del server, riletto al massimo ogni 30 s.</summary>
+        private (List<string> ins, List<string> outs) DeviceLists()
+        {
+            if (DateTime.UtcNow - _devListsAt > TimeSpan.FromSeconds(30))
+            {
+                _devLists = (SafeList(Audio.Inputs), SafeList(Audio.Outputs));
+                _devListsAt = DateTime.UtcNow;
+            }
+            return _devLists;
+        }
+
+        private static List<string> SafeList(Func<List<string>> f)
+        {
+            try { return f(); } catch { return new List<string>(); }
+        }
+
+        /// <summary>Client: sceglie le schede audio del server. Server: le cambia direttamente.</summary>
+        public void SetServerDevices(string input, string output)
+        {
+            if (IsServer) _ = ChangeServerDevicesAsync(input, output, false);
+            else Send(new MsgWriter(Msg.SetServerDevices).Str(input).Str(output).Build());
+        }
+
+        /// <summary>
+        /// Server: riavvia l'audio sulle schede scelte. Se la nuova scheda non si apre torna a quelle di
+        /// prima, così il collegamento non resta senza audio.
+        /// </summary>
+        private async Task ChangeServerDevicesAsync(string input, string output, bool fromClient)
+        {
+            _devListsAt = DateTime.MinValue;
+            var (ins, outs) = DeviceLists();
+            if (!ins.Contains(input)) input = _s.InputDevice;
+            if (!outs.Contains(output)) output = _s.OutputDevice;
+            if (input == _s.InputDevice && output == _s.OutputDevice) { await SendDeviceStateAsync(); return; }
+
+            string oldIn = _s.InputDevice, oldOut = _s.OutputDevice;
+            string who = fromClient ? "dal client" : "dal server";
+            _s.InputDevice = input; _s.OutputDevice = output;
+            RestartAudio();
+            await Task.Delay(800);
+            string err = Audio.LastError;
+            if (err.Length > 0)
+            {
+                SessionLog.Write($"AUDIO schede del server scelte {who} non apribili ({err}): torno a «{oldIn}» / «{oldOut}»");
+                _s.InputDevice = oldIn; _s.OutputDevice = oldOut;
+                RestartAudio();
+                string msg = $"Schede audio del server non apribili ({err}): restano quelle di prima.";
+                Notice?.Invoke(msg);
+                if (fromClient) Send(new MsgWriter(Msg.RadioStatus).Str(msg).Build());
+            }
+            else
+            {
+                SessionLog.Write($"AUDIO schede del server cambiate {who}: ingresso «{input}», uscita «{output}»");
+                _s.Save();
+                if (fromClient) Notice?.Invoke($"Il client ha cambiato le schede audio: ingresso «{input}», uscita «{output}».");
+            }
+            ServerDevicesChanged?.Invoke();
+            await SendDeviceStateAsync();
+        }
+
         private async Task SendDeviceStateAsync()
         {
             if (!IsServer) return;
@@ -1228,7 +1297,8 @@ namespace IpTrxCtrl.Core
                     InName = string.IsNullOrEmpty(_s.InputDevice) ? "predefinito" : _s.InputDevice,
                     OutName = string.IsNullOrEmpty(_s.OutputDevice) ? "predefinito" : _s.OutputDevice,
                     InMute = im, InVol = iv, OutMute = om, OutVol = ov, AutoUnmute = _s.AutoUnmute,
-                    Note = DeviceMute.PrivacyNote()
+                    Note = DeviceMute.PrivacyNote(),
+                    Inputs = DeviceLists().ins, Outputs = DeviceLists().outs
                 };
             });
             DeviceState = st;

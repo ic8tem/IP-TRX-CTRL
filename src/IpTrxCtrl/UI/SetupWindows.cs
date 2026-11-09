@@ -470,6 +470,9 @@ Cursore da 1 a 100 W se la radio converte in watt, altrimenti da 1 a 100 %.
 
 SCHEDE AUDIO DEL SERVER
 Il client vede se le schede del server sono silenziate dal sistema operativo e può togliere il mute.
+Dal riquadro «Schede audio del server» il client sceglie anche quali schede usa il server (ingresso = audio della
+radio, uscita = audio verso la radio): il server riavvia l'audio sulle schede nuove e, se non si aprono, torna a
+quelle di prima e lo segnala. La scelta resta salvata sul server.
 
 AUDIO
 Sempre 8 kHz, 16 bit mono, cifrato AES-256-GCM.

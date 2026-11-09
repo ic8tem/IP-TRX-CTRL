@@ -71,6 +71,7 @@ namespace IpTrxCtrl.Audio
         public void Start(string input, string output, Action<short[]> onCapture, Action<short[]> fill)
         {
             Stop();
+            LastError = "";
             _run = true;
             string inDev = string.IsNullOrWhiteSpace(input) ? "default" : input;
             string outDev = string.IsNullOrWhiteSpace(output) ? "default" : output;
