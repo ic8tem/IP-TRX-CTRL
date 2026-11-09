@@ -36,7 +36,7 @@ jobs:
       - name: Versione
         shell: bash
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF#refs/tags/v}"; else V="0.1.0"; fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF#refs/tags/v}"; else V="$(tr -d '[:space:]' < VERSION)"; fi
           echo "VERSION=$V" >> "$GITHUB_ENV"
 
       - name: Hamlib per Windows (${{ matrix.hamlib }})
@@ -93,18 +93,28 @@ jobs:
           name: IP-TRX-CTRL-${{ matrix.rid }}
           path: out/*
 
+  # Pubblica (o aggiorna) la release della versione scritta nel file VERSION a ogni push su main.
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Versione
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF#refs/tags/v}"; else V="$(tr -d '[:space:]' < VERSION)"; fi
+          echo "VERSION=$V" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          name: IP-TRX-CTRL ${{ github.ref_name }}
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: IP-TRX-CTRL ${{ env.VERSION }}
+          overwrite_files: true
           files: artifacts/*
           body: |
             **Windows 64 bit**: `IP-TRX-CTRL-…-win-x64-setup.exe` · **Windows 32 bit**: `…-win-x86-setup.exe` (Hamlib incluso)

@@ -36,8 +36,8 @@ Ogni eseguibile è autonomo (non serve installare .NET) e in un solo file.
 
 Ogni push sul ramo `main` avvia la compilazione su GitHub Actions (file `.github/workflows/build.yml`)
 per tutte e sette le versioni. I pacchetti si scaricano dalla scheda **Actions** del repository
-(sezione *Artifacts*). Con un tag `v*` (per esempio `v0.1.0`) i pacchetti vengono pubblicati anche
-nella pagina **Releases**.
+(sezione *Artifacts*) e vengono pubblicati nella pagina **Releases** con il numero di versione scritto
+nel file `VERSION`: per una nuova versione basta cambiare quel numero.
 
 | Sistema | Installatore | Versione portatile |
 |---|---|---|
