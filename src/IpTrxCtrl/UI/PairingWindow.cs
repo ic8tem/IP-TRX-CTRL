@@ -142,7 +142,7 @@ namespace IpTrxCtrl.UI
                 if (code == null)
                 {
                     _code.Text = "—";
-                    _result.Text = "Non riesco a determinare l'indirizzo pubblico. Controlla la connessione a internet e premi Riprova.";
+                    _result.Text = "Non riesco a preparare l'abbinamento: il motivo è nell'ultima riga del registro qui sotto. Poi premi Riprova.";
                     return;
                 }
                 _code.Text = code;

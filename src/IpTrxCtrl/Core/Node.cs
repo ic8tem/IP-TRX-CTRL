@@ -239,8 +239,10 @@ namespace IpTrxCtrl.Core
 
         private async Task StartServerAsync(bool keepChannels = false)
         {
+            _portsBusy = true;   // subito, prima del primo await: l'abbinamento aspetta le porte
             try { await StartServerCoreAsync(keepChannels); }
             catch (Exception ex) { SetStatus("Errore di rete: " + ex.Message, false); }
+            finally { _portsBusy = false; }
         }
 
         private async Task StartServerCoreAsync(bool keepChannels)
@@ -248,7 +250,7 @@ namespace IpTrxCtrl.Core
             await StopServerAsync(!keepChannels);
             _serverCts = new CancellationTokenSource();
             var ct = _serverCts.Token;
-            _ports = new PortManager { Log = SessionLog.Write };
+            _ports = new PortManager { Log = PortLog };
             SetStatus("Apertura porte sul router…", false);
 
             bool upnp = await _ports.DiscoverAsync(ct);
@@ -287,9 +289,9 @@ namespace IpTrxCtrl.Core
                 if (clientSide) _ = Task.Run(() => ClientAcceptLoopAsync(l, kind, ct));
                 else _ = Task.Run(() => AcceptLoopAsync(l, kind, ct));
                 if (kind == ChannelKind.Audio) await pm.OpenUdpAsync(p, desc + " (UDP)");
-                bool? reach = await PortProbe.TcpReachableAsync(p, SessionLog.Write, ct);
+                bool? reach = await PortProbe.TcpReachableAsync(p, PortLog, ct);
                 if (reach != false) return (p, l);
-                SessionLog.Write($"PORTE {desc}: la porta {p} è aperta sul router ma non è raggiungibile da internet: la chiudo e ne provo un'altra ({i}/6)");
+                PortLog($"PORTE {desc}: la porta {p} è aperta sul router ma non è raggiungibile da internet: la chiudo e ne provo un'altra ({i}/6)");
                 try { l.Stop(); } catch { }
                 await pm.ClosePortAsync(p);
             }
@@ -310,7 +312,7 @@ namespace IpTrxCtrl.Core
             }
             _ctlPort = c.port; _ctlListener = c.listener;
             _audPort = a.port; _audListener = a.listener;
-            SessionLog.Write($"PORTE prime due porte utili del server: controllo TCP {_ctlPort}, audio TCP/UDP {_audPort} · le comunico al broker MQTT");
+            PortLog($"PORTE prime due porte utili del server: controllo TCP {_ctlPort}, audio TCP/UDP {_audPort} · le comunico al broker MQTT");
             return true;
         }
 
@@ -407,6 +409,15 @@ namespace IpTrxCtrl.Core
             }
         }
 
+        private volatile bool _portsBusy, _pairingWatch;
+
+        /// <summary>Riga del registro delle porte; durante l'abbinamento compare anche nella finestra.</summary>
+        private void PortLog(string line)
+        {
+            SessionLog.Write(line);
+            if (_pairingWatch) PairingLog?.Invoke('·', line.StartsWith("PORTE ") ? line[6..] : line);
+        }
+
         private async Task StopServerAsync(bool closeChannels = true)
         {
             _serverCts?.Cancel();
@@ -452,15 +463,37 @@ namespace IpTrxCtrl.Core
         /// <summary>Server: prepara l'abbinamento, avvia l'ascolto sui broker MQTT e restituisce il codice.</summary>
         public async Task<string?> BeginPairingServerAsync(CancellationToken ct)
         {
+            _pairingWatch = true;
             Log('·', "preparo le porte e l'indirizzo pubblico…");
-            for (int i = 0; i < 40 && CurrentServerAddress == null && !ct.IsCancellationRequested; i++)
-                await Task.Delay(500, ct);
+            // «Riprova» dopo un fallimento: si riaprono le porte da capo
+            if (CurrentServerAddress == null && !_portsBusy && _control == null)
+            {
+                Log('·', "riapro le porte sul router con UPnP…");
+                _ = StartServerAsync();
+            }
+            // l'apertura con verifica esterna può durare anche un paio di minuti
+            var start = DateTime.UtcNow;
+            while (CurrentServerAddress == null && !ct.IsCancellationRequested
+                   && (_portsBusy || DateTime.UtcNow - start < TimeSpan.FromSeconds(5))
+                   && DateTime.UtcNow - start < TimeSpan.FromMinutes(4))
+            {
+                try { await Task.Delay(500, ct); } catch { break; }
+            }
             var addr = CurrentServerAddress;
             if (addr == null)
             {
-                Log('✗', "indirizzo pubblico non disponibile: controlla la connessione a internet");
+                _pairingWatch = false;
+                if (ct.IsCancellationRequested) return null;
+                string err = _ports?.LastError ?? "";
+                if (_ports == null || !_ports.UpnpAvailable)
+                    Log('✗', "il router del server non risponde con UPnP: attivalo sul router e premi Riprova" + (err.Length > 0 ? $" ({err})" : ""));
+                else if (_ports.ExternalIp == null)
+                    Log('✗', "indirizzo pubblico non disponibile: controlla la connessione a internet e premi Riprova");
+                else
+                    Log('✗', $"il router ({_ports.ExternalIp}) non ha aperto porte raggiungibili da internet: controlla UPnP o il CGNAT dell'operatore, poi premi Riprova" + (err.Length > 0 ? $" ({err})" : ""));
                 return null;
             }
+            _pairingWatch = false;
             Log('·', $"indirizzo pubblico {addr.Value.Ip} · porte {addr.Value.ControlPort} / {addr.Value.AudioPort} · UPnP {(_ports?.UpnpAvailable == true ? "ok" : "non disponibile")}");
             _pairingSecret = RandomNumberGenerator.GetBytes(Crypto.PairingSecretSize);
             string code = Crypto.MakePairingCode(_pairingSecret, addr.Value);
