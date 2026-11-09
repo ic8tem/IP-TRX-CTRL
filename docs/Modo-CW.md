@@ -1,0 +1,27 @@
+# Modo CW
+
+Quando la radio è in un modo CW, al posto del riquadro audio compare **CW · cascata e decodificatore**. Microfono e audio TX sono nascosti; l'audio di ricezione si sposta su una riga nel riquadro *Radio remota*.
+
+![Bozzetto in modo CW, tema Notte](images/IP-TRX-CTRL_CW_Notte.png)
+
+## Cascata
+
+- Spettro dell'audio ricevuto da **0 a 3000 Hz** (frequenza in verticale, tempo in orizzontale).
+- La fascia del pitch (200–1000 Hz) è evidenziata; una linea verde segna il pitch in uso.
+
+## Pitch
+
+- Casella **Pitch CW (Hz)** da **200 a 1000 Hz**.
+- Il server legge il pitch impostato sulla radio (livello Hamlib `CWPITCH`) e lo propone nella casella; **Leggi dalla radio** lo rilegge. Se si cambia la casella, il pitch viene reimpostato anche sulla radio. Se la radio non supporta il comando, vale il valore scritto a mano.
+
+## Decodificatore
+
+- Lavora sull'audio ricevuto a 8 kHz.
+- Filtro stretto centrato sul pitch (larghezza scelta da 50 a 200 Hz), soglia adattiva sul rumore, misura di punti, linee e pause, riconoscimento automatico della velocità da 5 a 60 WPM.
+- Il testo del segnale sul pitch scorre nella riga sotto la cascata, con i nominativi evidenziati.
+- È scritto da zero, senza codice di altri decodificatori.
+
+## Altri segnali
+
+- Clic su un segnale **dentro** la fascia del pitch: il pitch si sposta su quel segnale.
+- Clic su un segnale **fuori** dal pitch: si apre una **finestra di decodifica in più**, una per ogni segnale. La finestra mostra frequenza, velocità e testo, con i pulsanti **Porta al pitch (QSY)** (sposta il VFO perché il segnale cada sul pitch), **Copia nominativo**, **Pulisci** e **Chiudi**.

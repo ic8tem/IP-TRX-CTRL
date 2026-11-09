@@ -1,0 +1,132 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="IpTrxCtrl.App"
+             RequestedThemeVariant="Light">
+  <Application.Styles>
+    <FluentTheme />
+
+    <Style Selector="Window">
+      <Setter Property="Background" Value="{DynamicResource B.Bg}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.Text}" />
+    </Style>
+
+    <!-- Riquadri -->
+    <Style Selector="Border.panel">
+      <Setter Property="Background" Value="{DynamicResource B.Panel}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource B.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="20" />
+    </Style>
+    <Style Selector="Border.inset">
+      <Setter Property="Background" Value="{DynamicResource B.Inset}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource B.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="12" />
+    </Style>
+    <Style Selector="Border.chip">
+      <Setter Property="Background" Value="{DynamicResource B.Inset}" />
+      <Setter Property="CornerRadius" Value="14" />
+      <Setter Property="Padding" Value="12,6" />
+    </Style>
+
+    <!-- Testi -->
+    <Style Selector="TextBlock.h2">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="LetterSpacing" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource B.Muted}" />
+    </Style>
+    <Style Selector="TextBlock.lbl">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="{DynamicResource B.Muted}" />
+      <Setter Property="Margin" Value="0,0,0,6" />
+    </Style>
+    <Style Selector="TextBlock.sub">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Foreground" Value="{DynamicResource B.Muted}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.mono">
+      <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+    </Style>
+
+    <!-- Pulsanti -->
+    <Style Selector="Button">
+      <Setter Property="Background" Value="{DynamicResource B.BtnBg}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.BtnText}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource B.BtnBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Padding" Value="14,8" />
+      <Setter Property="MinHeight" Value="38" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource B.BtnHover}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.BtnText}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource B.Accent}" />
+    </Style>
+    <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource B.Inset}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.Text}" />
+    </Style>
+    <Style Selector="Button.accent">
+      <Setter Property="Background" Value="{DynamicResource B.Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.AccentText}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource B.Accent}" />
+    </Style>
+    <Style Selector="Button.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource B.Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.AccentText}" />
+      <Setter Property="Opacity" Value="0.9" />
+    </Style>
+    <Style Selector="ToggleButton">
+      <Setter Property="Background" Value="{DynamicResource B.BtnBg}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.BtnText}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource B.BtnBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="MinHeight" Value="36" />
+    </Style>
+    <Style Selector="ToggleButton:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource B.Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.AccentText}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource B.Accent}" />
+    </Style>
+
+    <!-- Campi -->
+    <Style Selector="TextBox">
+      <Setter Property="Background" Value="{DynamicResource B.Field}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.Text}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource B.Border}" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="MinHeight" Value="38" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="Background" Value="{DynamicResource B.Field}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.Text}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource B.Border}" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="MinHeight" Value="38" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ProgressBar">
+      <Setter Property="Background" Value="{DynamicResource B.Track}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.Bar}" />
+      <Setter Property="MinHeight" Value="10" />
+      <Setter Property="Height" Value="10" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Minimum" Value="0" />
+      <Setter Property="Maximum" Value="100" />
+    </Style>
+    <Style Selector="CheckBox">
+      <Setter Property="Foreground" Value="{DynamicResource B.Text}" />
+    </Style>
+  </Application.Styles>
+</Application>

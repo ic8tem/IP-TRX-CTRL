@@ -1,0 +1,69 @@
+IP-TRX-CTRL - NOTE DI TERZE PARTI
+=================================
+
+Questo programma include o usa i componenti di terze parti elencati qui sotto.
+Prima di distribuire gli eseguibili, verifica che titolari e testi corrispondano
+ai file di licenza presenti nei pacchetti effettivamente usati per la compilazione.
+
+---------------------------------------------------------
+Hamlib (libreria: GNU LGPL 2.1 o successiva;
+        programmi rigctld/rigctl: GNU GPL 2 o successiva)
+Sito: https://hamlib.github.io
+Sorgenti: https://github.com/Hamlib/Hamlib
+- Windows: rigctld, rigctl e le loro DLL sono inclusi nell'eseguibile come
+  programmi separati, non modificati, avviati in background e usati via TCP.
+  I testi completi di GPL e LGPL sono inclusi (Informazioni e licenze).
+  La versione inclusa e' indicata nella finestra Informazioni e licenze;
+  i sorgenti di quella versione si trovano nella pagina Releases del
+  repository indicato sopra.
+- Linux, Raspberry Pi e macOS: Hamlib non e' incluso; il programma usa
+  rigctld installato nel sistema (pacchetto libhamlib-utils / hamlib o Homebrew).
+
+---------------------------------------------------------
+Avalonia - licenza MIT - Copyright (c) AvaloniaUI OU e collaboratori
+https://github.com/AvaloniaUI/Avalonia
+(include SkiaSharp e HarfBuzzSharp - licenza MIT - Copyright (c) .NET Foundation
+e collaboratori; le librerie native Skia e HarfBuzz sono distribuite con licenze
+BSD-3-Clause e MIT, vedi https://github.com/mono/SkiaSharp)
+
+Inter (carattere) - SIL Open Font License 1.1 - Copyright (c) The Inter Project Authors
+https://github.com/rsms/inter
+
+MQTTnet - licenza MIT - Copyright (c) .NET Foundation e collaboratori
+https://github.com/dotnet/MQTTnet
+
+Open.NAT - licenza MIT - Copyright (c) Lucas Ontivero e collaboratori
+https://github.com/lontivero/Open.NAT
+
+.NET Runtime, System.IO.Ports, System.Security.Cryptography.ProtectedData
+licenza MIT - Copyright (c) .NET Foundation e collaboratori
+https://github.com/dotnet/runtime
+
+---------------------------------------------------------
+Componenti del sistema operativo usati senza essere inclusi:
+Windows winmm/Core Audio, ALSA (libasound, LGPL 2.1), libX11 (licenza MIT/X11),
+macOS CoreAudio/AudioToolbox/Carbon.
+
+Il keyer deriva da WavPTT, dello stesso autore. Il decodificatore CW, l'audio
+nativo per sistema e il resto del programma sono scritti da zero.
+
+---------------------------------------------------------
+Testo della licenza MIT (vale per tutti i componenti MIT elencati sopra)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -1,0 +1,112 @@
+name: Compilazione
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, rid: win-x64,     hamlib: w64 }
+          - { os: windows-latest, rid: win-x86,     hamlib: w32 }
+          - { os: ubuntu-latest,  rid: linux-x64 }
+          - { os: ubuntu-latest,  rid: linux-arm64 }
+          - { os: ubuntu-latest,  rid: linux-arm }
+          - { os: macos-latest,   rid: osx-arm64 }
+          - { os: macos-latest,   rid: osx-x64 }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Hamlib per Windows (${{ matrix.hamlib }})
+        if: matrix.hamlib != ''
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/get_hamlib.ps1 -Arch ${{ matrix.hamlib }}
+
+      - name: Compila ${{ matrix.rid }}
+        shell: bash
+        run: dotnet publish src/IpTrxCtrl/IpTrxCtrl.csproj -c Release -r ${{ matrix.rid }} -o dist/${{ matrix.rid }}
+
+      - name: Pacchetto Windows
+        if: startsWith(matrix.rid, 'win')
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item THIRD-PARTY-NOTICES.txt dist/${{ matrix.rid }}/
+          Compress-Archive -Path dist/${{ matrix.rid }}/IP-TRX-CTRL.exe, dist/${{ matrix.rid }}/THIRD-PARTY-NOTICES.txt -DestinationPath out/IP-TRX-CTRL-${{ matrix.rid }}.zip
+
+      - name: Pacchetto Linux
+        if: startsWith(matrix.rid, 'linux')
+        shell: bash
+        run: |
+          mkdir -p out pkg/IP-TRX-CTRL
+          cp dist/${{ matrix.rid }}/IP-TRX-CTRL pkg/IP-TRX-CTRL/
+          chmod +x pkg/IP-TRX-CTRL/IP-TRX-CTRL
+          cp THIRD-PARTY-NOTICES.txt pkg/IP-TRX-CTRL/
+          tar -czf out/IP-TRX-CTRL-${{ matrix.rid }}.tar.gz -C pkg IP-TRX-CTRL
+
+      - name: Pacchetto macOS (.app)
+        if: startsWith(matrix.rid, 'osx')
+        shell: bash
+        run: |
+          APP=pkg/IP-TRX-CTRL.app
+          mkdir -p out "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp dist/${{ matrix.rid }}/IP-TRX-CTRL "$APP/Contents/MacOS/"
+          chmod +x "$APP/Contents/MacOS/IP-TRX-CTRL"
+          cp THIRD-PARTY-NOTICES.txt "$APP/Contents/Resources/"
+          cat > "$APP/Contents/Info.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>IP-TRX-CTRL</string>
+            <key>CFBundleDisplayName</key><string>IP-TRX-CTRL</string>
+            <key>CFBundleIdentifier</key><string>it.ic8tem.iptrxctrl</string>
+            <key>CFBundleExecutable</key><string>IP-TRX-CTRL</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>0.1.0</string>
+            <key>CFBundleVersion</key><string>1</string>
+            <key>LSMinimumSystemVersion</key><string>11.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+            <key>NSMicrophoneUsageDescription</key><string>IP-TRX-CTRL usa il microfono per trasmettere la tua voce alla radio remota.</string>
+          </dict>
+          </plist>
+          EOF
+          sed -i '' 's/^          //' "$APP/Contents/Info.plist"
+          codesign --force --deep --sign - "$APP"
+          ditto -c -k --keepParent "$APP" out/IP-TRX-CTRL-${{ matrix.rid }}.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IP-TRX-CTRL-${{ matrix.rid }}
+          path: out/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
