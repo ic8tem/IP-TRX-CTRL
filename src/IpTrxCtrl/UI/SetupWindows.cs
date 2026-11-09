@@ -498,6 +498,11 @@ Impostazioni › «Programmi digitali». Nel programma (WSJT-X, JTDX, JS8Call, f
   ingresso «Monitor of IP-TRX-CTRL_RX», uscita «IP-TRX-CTRL_TX».
 Quando il programma chiede il PTT, IP-TRX-CTRL trasmette con l'audio del programma invece del microfono.
 
+UPNP E LED
+All'avvio (server e client) una finestra dice se il router ha UPnP attivo e, se manca, la causa probabile e cosa
+fare. Il LED «UPnP» in alto è verde lampeggiante finché il router risponde (controllo ogni 60 s), rosso se manca,
+grigio durante la ricerca. Clic sul LED per riaprire la finestra.
+
 PORTE E COLLEGAMENTO
 Il server apre due porte con UPnP (controllo TCP, audio TCP+UDP) e chiede a un server esterno se sono davvero
 raggiungibili da internet; le prime due porte utili vanno sul broker MQTT. Il client le prova; se non riesce apre

@@ -22,6 +22,12 @@
                 <TextBlock x:Name="TxtConnChip" FontSize="13" FontWeight="SemiBold" Text="Avvio…" />
               </StackPanel>
             </Border>
+            <Border x:Name="ChipUpnp" Classes="chip" Margin="0,0,8,0" VerticalAlignment="Center" Cursor="Hand" ToolTip.Tip="UPnP sul router: ricerca in corso">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Ellipse x:Name="LedUpnp" Width="10" Height="10" Fill="{DynamicResource B.Track}" VerticalAlignment="Center" />
+                <TextBlock FontSize="13" FontWeight="SemiBold" Text="UPnP" />
+              </StackPanel>
+            </Border>
             <Border Background="{DynamicResource B.Accent}" CornerRadius="14" Padding="12,6" Margin="0,0,8,0" VerticalAlignment="Center">
               <TextBlock x:Name="TxtRoleBadge" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource B.AccentText}" Text="CLIENT" />
             </Border>

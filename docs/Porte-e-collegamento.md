@@ -2,6 +2,18 @@
 
 Il server e il client si collegano direttamente, senza un server intermedio per l'audio. Perché questo funzioni almeno uno dei due PC deve avere porte raggiungibili da internet. IP-TRX-CTRL le apre da solo con **UPnP** e controlla che funzionino davvero.
 
+## UPnP all'avvio e LED
+
+All'avvio, sia sul server sia sul client, il programma cerca il router con **UPnP** e con **NAT-PMP** (tre tentativi da 10 secondi) e mostra una finestra con il risultato:
+
+- **UPnP attivo**: il router può aprire le porte da solo; la finestra indica il protocollo e l'IP esterno dichiarato dal router;
+- **UPnP non trovato**: la finestra indica la causa più probabile e cosa fare:
+  - rete di Windows impostata come «Pubblica» (Windows blocca le risposte del router: va messa «Privata»);
+  - VPN o altre schede di rete virtuali attive;
+  - UPnP spento sul router: va attivato dalla pagina del router (sul FRITZ!Box anche per il singolo PC).
+
+In alto nella finestra principale il **LED «UPnP»** resta **verde lampeggiante** finché il router risponde (controllo ogni 60 secondi), è **rosso fisso** se UPnP manca e **grigio** durante la ricerca. Se UPnP era attivo e il router smette di rispondere compare di nuovo la finestra. Un clic sul LED la riapre in qualsiasi momento.
+
 ## Il server
 
 All'avvio il server:

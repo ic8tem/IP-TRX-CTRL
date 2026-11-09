@@ -65,6 +65,8 @@ namespace IpTrxCtrl.Core
         public event Action<bool>? LocalPttChanged;
         /// <summary>Server: il router non apre le porte con UPnP; il programma deve chiudersi (motivo).</summary>
         public event Action<string>? PortsFailed;
+        /// <summary>Stato di UPnP sul router di questo PC (server e client), controllato ogni 60 s.</summary>
+        public UpnpCheck Upnp { get; } = new();
         /// <summary>Server: porte aperte ma non raggiungibili da internet (testo con porte e rimedi).</summary>
         public event Action<string>? PortsUnreachable;
         private bool _keptUnreachable;
@@ -130,6 +132,8 @@ namespace IpTrxCtrl.Core
             Audio.Keyer.PttRequest += on => SetPttLocal(on);
             Audio.RxSamples += (f, n) => _digital?.PushRx(f, n);
             _tunnelSrv = new RigTunnelServer(() => Rig.RigctldEndpoint, Send);
+            Upnp.Log = SessionLog.Write;
+            _ = Task.Run(() => Upnp.RunAsync(_life.Token));
             _ = Task.Run(() => HousekeepingAsync(_life.Token));
         }
 

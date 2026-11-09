@@ -86,6 +86,8 @@ namespace IpTrxCtrl.UI
             _node.SwapRequested += answer => Dispatcher.UIThread.Post(() => AskSwap(answer));
             _node.RoleChanged += () => Dispatcher.UIThread.Post(OnRoleChanged);
             _node.PortsFailed += reason => Dispatcher.UIThread.Post(() => ShowPortsFailed(reason));
+            _node.Upnp.Changed += () => Dispatcher.UIThread.Post(OnUpnpChanged);
+            ChipUpnp.PointerPressed += (_, _) => ShowUpnpPopup(true);
             _node.PortsUnreachable += text => Dispatcher.UIThread.Post(() => ShowPortsUnreachable(text));
             _node.LocalPttChanged += on => Dispatcher.UIThread.Post(() => ShowPttState(on));
             _node.Audio.Keyer.Changed += () => Dispatcher.UIThread.Post(RefreshKeyerStatus);
@@ -778,6 +780,12 @@ namespace IpTrxCtrl.UI
             _blinkTick++;
             bool on = tx && (_blinkTick / 4) % 2 == 0;
             LedTx.Fill = this.FindResource(tx ? (on ? "B.Tx" : "B.TxDim") : "B.Track") as IBrush;
+
+            // LED UPnP: verde lampeggiante finché il router risponde, rosso fisso se manca, grigio in ricerca
+            var up = _node.Upnp.State;
+            if (up == UpnpState.Ok) { LedUpnp.Fill = Brushes.LimeGreen; LedUpnp.Opacity = (_blinkTick / 5) % 2 == 0 ? 1.0 : 0.25; }
+            else if (up == UpnpState.Missing) { LedUpnp.Fill = this.FindResource("B.Tx") as IBrush; LedUpnp.Opacity = 1.0; }
+            else { LedUpnp.Fill = this.FindResource("B.Track") as IBrush; LedUpnp.Opacity = (_blinkTick / 3) % 2 == 0 ? 1.0 : 0.4; }
             TxtLed.Text = tx ? "TX" : "RX";
             TxtLed.Foreground = this.FindResource(tx ? "B.Tx" : "B.Muted") as IBrush;
 
@@ -1122,6 +1130,89 @@ namespace IpTrxCtrl.UI
             exit.Click += (_, _) => w.Close();
             await w.ShowDialog(this);
             Close();
+        }
+
+        private bool _upnpPopupShown, _upnpLostShown;
+
+        private void OnUpnpChanged()
+        {
+            var u = _node.Upnp;
+            ToolTip.SetTip(ChipUpnp, u.State switch
+            {
+                UpnpState.Ok => $"UPnP attivo ({u.Method}) · IP esterno {u.ExternalIp} · controllato ogni 60 s",
+                UpnpState.Missing => "UPnP non trovato sul router: clic per i dettagli",
+                _ => "UPnP sul router: ricerca in corso"
+            });
+            // all'avvio, server o client, una finestra dice com'è UPnP
+            if (u.State == UpnpState.Ok) _upnpLostShown = false;
+            if (!_upnpPopupShown && u.State != UpnpState.Searching) { _upnpPopupShown = true; ShowUpnpPopup(false); }
+            else if (u.State == UpnpState.Missing && u.LastOk != DateTime.MinValue && !_upnpLostShown)
+            {
+                _upnpLostShown = true;   // era attivo e si è perso: lo dico una volta
+                ShowUpnpPopup(false);
+            }
+        }
+
+        private bool _upnpPopupOpen;
+
+        private async void ShowUpnpPopup(bool fromClick)
+        {
+            var u = _node.Upnp;
+            if (_upnpPopupOpen || (u.State == UpnpState.Searching && !fromClick)) return;
+            _upnpPopupOpen = true;
+            string role = IsClient ? "client" : "server";
+            string title, body;
+            if (u.State == UpnpState.Ok)
+            {
+                title = $"UPnP attivo sul router ({role})";
+                body = $"Il router risponde con {u.Method}: il programma può aprire da solo le porte. IP esterno dichiarato dal router: {u.ExternalIp}.
+
+" +
+                       "Il LED verde «UPnP» in alto lampeggia finché il router continua a rispondere (controllo ogni 60 secondi).";
+            }
+            else if (u.State == UpnpState.Missing)
+            {
+                title = $"UPnP non trovato sul router ({role})";
+                body = (u.LastOk != DateTime.MinValue ? "UPnP era attivo ma il router ha smesso di rispondere.
+
+" : "") +
+                       (IsClient
+                           ? "Il client funziona lo stesso se il server ha le porte aperte; senza UPnP però non può proporre le sue porte quando quelle del server non bastano.
+
+"
+                           : "Il server userà porte locali: vanno bene dalla stessa rete locale, oppure da fuori con una DMZ o un inoltro manuale sul router.
+
+") +
+                       u.Diagnosis;
+            }
+            else { title = "UPnP: ricerca in corso"; body = "Sto cercando il router: attendi qualche secondo."; }
+
+            var ok = new Button { Content = "OK", MinWidth = 110, HorizontalAlignment = HorizontalAlignment.Right };
+            ok.Classes.Add("accent");
+            var dot = new Avalonia.Controls.Shapes.Ellipse { Width = 14, Height = 14, VerticalAlignment = VerticalAlignment.Center,
+                Fill = u.State == UpnpState.Ok ? Brushes.LimeGreen : u.State == UpnpState.Missing ? this.FindResource("B.Tx") as IBrush : this.FindResource("B.Track") as IBrush };
+            var w = new Window
+            {
+                Title = "IP-TRX-CTRL · UPnP",
+                Width = 560,
+                SizeToContent = SizeToContent.Height,
+                CanResize = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Content = new StackPanel
+                {
+                    Margin = new Thickness(26),
+                    Spacing = 12,
+                    Children =
+                    {
+                        new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Children = { dot,
+                            new TextBlock { Text = title, FontSize = 18, FontWeight = FontWeight.Bold, TextWrapping = TextWrapping.Wrap } } },
+                        new SelectableTextBlock { Text = body, FontSize = 14, TextWrapping = TextWrapping.Wrap },
+                        ok
+                    }
+                }
+            };
+            ok.Click += (_, _) => w.Close();
+            try { await w.ShowDialog(this); } finally { _upnpPopupOpen = false; }
         }
 
         private bool _unreachableShown;

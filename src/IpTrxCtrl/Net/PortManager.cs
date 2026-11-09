@@ -34,12 +34,23 @@ namespace IpTrxCtrl.Net
 
         public async Task<bool> DiscoverAsync(CancellationToken ct)
         {
-            L("ricerca del router UPnP (attesa massima 8 s)…");
+            L("ricerca del router UPnP / NAT-PMP (3 tentativi da 10 s)…");
             try
             {
-                var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(TimeSpan.FromSeconds(8));
-                _device = await new NatDiscoverer().DiscoverDeviceAsync(PortMapper.Upnp, cts);
+                for (int i = 1; ; i++)
+                {
+                    try
+                    {
+                        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        cts.CancelAfter(TimeSpan.FromSeconds(10));
+                        _device = await new NatDiscoverer().DiscoverDeviceAsync(PortMapper.Upnp | PortMapper.Pmp, cts);
+                        break;
+                    }
+                    catch (Exception) when (i < 3 && !ct.IsCancellationRequested)
+                    {
+                        L($"tentativo {i}/3: router non trovato, riprovo");
+                    }
+                }
                 ExternalIp = await _device.GetExternalIPAsync();
                 CgnatSuspected = IsPrivateOrCgnat(ExternalIp);
                 L($"router UPnP trovato · IP esterno dichiarato dal router: {ExternalIp}");
