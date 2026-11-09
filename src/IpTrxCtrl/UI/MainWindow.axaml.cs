@@ -86,6 +86,7 @@ namespace IpTrxCtrl.UI
             _node.SwapRequested += answer => Dispatcher.UIThread.Post(() => AskSwap(answer));
             _node.RoleChanged += () => Dispatcher.UIThread.Post(OnRoleChanged);
             _node.PortsFailed += reason => Dispatcher.UIThread.Post(() => ShowPortsFailed(reason));
+            _node.PortsUnreachable += text => Dispatcher.UIThread.Post(() => ShowPortsUnreachable(text));
             _node.LocalPttChanged += on => Dispatcher.UIThread.Post(() => ShowPttState(on));
             _node.Audio.Keyer.Changed += () => Dispatcher.UIThread.Post(RefreshKeyerStatus);
             _node.Audio.RxSamples += OnRxSamples;
@@ -1121,6 +1122,39 @@ namespace IpTrxCtrl.UI
             exit.Click += (_, _) => w.Close();
             await w.ShowDialog(this);
             Close();
+        }
+
+        private bool _unreachableShown;
+
+        /// <summary>Server: avviso (non blocca) quando da internet le porte non sono raggiungibili.</summary>
+        private async void ShowPortsUnreachable(string text)
+        {
+            if (_unreachableShown) return;
+            _unreachableShown = true;
+            var ok = new Button { Content = "Ho capito", MinWidth = 110, HorizontalAlignment = HorizontalAlignment.Right };
+            ok.Classes.Add("accent");
+            var w = new Window
+            {
+                Title = "IP-TRX-CTRL",
+                Width = 560,
+                SizeToContent = SizeToContent.Height,
+                CanResize = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Content = new StackPanel
+                {
+                    Margin = new Thickness(26),
+                    Spacing = 12,
+                    Children =
+                    {
+                        new TextBlock { Text = "Da fuori casa questo server non è raggiungibile", FontSize = 18, FontWeight = FontWeight.Bold, TextWrapping = TextWrapping.Wrap },
+                        new SelectableTextBlock { Text = text, FontSize = 14, TextWrapping = TextWrapping.Wrap },
+                        new TextBlock { Text = "Il dettaglio è nel registro sessioni.log (Impostazioni › Apri cartella dati). Guida: Aiuto › Porte e collegamento.", FontSize = 13, TextWrapping = TextWrapping.Wrap, Foreground = this.FindResource("B.Muted") as IBrush },
+                        ok
+                    }
+                }
+            };
+            ok.Click += (_, _) => w.Close();
+            if (IsVisible) await w.ShowDialog(this); else w.Show();
         }
 
         // ================================================================= varie

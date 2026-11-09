@@ -65,6 +65,9 @@ namespace IpTrxCtrl.Core
         public event Action<bool>? LocalPttChanged;
         /// <summary>Server: il router non apre le porte con UPnP; il programma deve chiudersi (motivo).</summary>
         public event Action<string>? PortsFailed;
+        /// <summary>Server: porte aperte ma non raggiungibili da internet (testo con porte e rimedi).</summary>
+        public event Action<string>? PortsUnreachable;
+        private bool _keptUnreachable;
         /// <summary>Registro del dialogo di abbinamento (simbolo, testo).</summary>
         public event MqttLog? PairingLog;
 
@@ -297,6 +300,7 @@ namespace IpTrxCtrl.Core
                 // il server tiene comunque l'ultima porta: serve ai PC della stessa rete locale
                 if (!clientSide && i == tries)
                 {
+                    _keptUnreachable = true;
                     PortLog($"PORTE {desc}: la porta {p} non è raggiungibile da internet; la tengo per la rete locale");
                     return (p, l);
                 }
@@ -311,6 +315,7 @@ namespace IpTrxCtrl.Core
         private async Task<bool> OpenServerPortsAsync(CancellationToken ct)
         {
             if (_ports == null) return false;
+            _keptUnreachable = false;
             var c = await OpenVerifiedPortAsync(_ports, "IP-TRX-CTRL controllo", ChannelKind.Control, false, ct);
             var a = c.port > 0 ? await OpenVerifiedPortAsync(_ports, "IP-TRX-CTRL audio", ChannelKind.Audio, false, ct) : (0, null);
             if (c.port == 0 || a.port == 0)
@@ -321,6 +326,20 @@ namespace IpTrxCtrl.Core
             }
             _ctlPort = c.port; _ctlListener = c.listener;
             _audPort = a.port; _audListener = a.listener;
+            if (_keptUnreachable)
+            {
+                string lan = LanIp();
+                PortsUnreachable?.Invoke(
+                    (_ports.UpnpAvailable
+                        ? "Il router ha accettato le porte con UPnP, ma da internet non si entra (spesso è l'IP condiviso dell'operatore, CGNAT)."
+                        : "Il router di questo PC non risponde con UPnP, quindi le porte non sono state aperte.")
+                    + $"\n\nPorte del server: controllo TCP {_ctlPort}, audio TCP e UDP {_audPort} · PC {lan} · IP pubblico {_ports.ExternalIp}."
+                    + "\n\nPer collegarti da fuori casa serve almeno una di queste:"
+                    + "\n• attivare UPnP sul router del server o su quello del client (allora apre le porte il client);"
+                    + $"\n• mettere in DMZ il PC {lan} sul router;"
+                    + $"\n• inoltrare a mano sul router le porte {_ctlPort} (TCP) e {_audPort} (TCP e UDP) verso {lan}."
+                    + "\n\nDalla stessa rete locale il collegamento funziona comunque.");
+            }
             PortLog($"PORTE prime due porte utili del server: controllo TCP {_ctlPort}, audio TCP/UDP {_audPort} · le comunico al broker MQTT");
             return true;
         }

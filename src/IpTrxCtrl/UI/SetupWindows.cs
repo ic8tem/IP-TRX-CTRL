@@ -506,6 +506,7 @@ inverso) oppure cambia le sue porte. Il ciclo si ripete per 20 giri; dopo il ven
 apribile» e il client si chiude con «Exit». Attiva UPnP su almeno uno dei due router.
 Router senza UPnP: il server usa comunque due porte locali (vanno bene con DMZ o inoltro manuale, e sempre dalla
 stessa rete locale). Se i due PC sono nella stessa casa il client prova anche l'indirizzo locale del server.
+Se le porte del server non sono raggiungibili da internet compare un avviso con le porte da inoltrare.
 A collegamento fatto l'audio prova anche UDP (STUN e perforazione del NAT); se UDP non passa resta su TCP.
 Il percorso in uso compare nella riga della rete dell'altro PC («audio UDP» o «audio TCP»).
 
