@@ -11,6 +11,9 @@ namespace IpTrxCtrl.Core
     /// <summary>Metodo con cui il server manda in trasmissione la radio.</summary>
     public enum PttMethod { Cat, Rts, Dtr, Vox, Tci }
 
+    /// <summary>Come il server trasmette il testo CW: keyer della radio via CAT oppure tasto su linea seriale.</summary>
+    public enum CwMethod { Cat, Dtr, Rts }
+
     public sealed class CwMacro
     {
         public string Name { get; set; } = "";
@@ -35,6 +38,8 @@ namespace IpTrxCtrl.Core
         public PttMethod PttMethod { get; set; } = PttMethod.Cat;
         public string PttCom { get; set; } = "";
         public int PttDelayMs { get; set; } = 100;
+        public CwMethod CwMethod { get; set; } = CwMethod.Cat;
+        public string CwCom { get; set; } = "";       // vuoto = stessa porta del PTT
         public string TciHost { get; set; } = "127.0.0.1";
         public int TciPort { get; set; } = 40001;
         public string TxGainLevel { get; set; } = "MICGAIN";

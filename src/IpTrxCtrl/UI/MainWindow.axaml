@@ -204,6 +204,13 @@
                 <TextBlock Text="Ritardo PTT (ms)" Classes="sub" VerticalAlignment="Center" />
                 <TextBox x:Name="TxtPttDelay" Width="80" HorizontalContentAlignment="Right" />
               </StackPanel>
+              <TextBlock Classes="lbl" Text="Invio CW (testo delle macro dal client)" Margin="0,8,0,6" />
+              <ComboBox x:Name="CmbCwMethod" />
+              <StackPanel x:Name="PanelCwCom">
+                <TextBlock Classes="lbl" Text="Porta seriale per il CW" Margin="0,6,0,6" />
+                <ComboBox x:Name="CmbCwCom" />
+              </StackPanel>
+              <TextBlock x:Name="TxtKeyingNote" Classes="sub" FontSize="12" />
             </StackPanel>
 
             <!-- client: metodo impostato sul server -->

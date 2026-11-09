@@ -17,7 +17,12 @@ Comandi comuni: **F1…F8** nella finestra, **Ctrl+Alt+F1…F8** anche da altri 
 
 ## Modo CW: macro di testo
 
-- Ogni tasto trasmette un testo in CW; la radio lo invia con il proprio keyer interno (comando Hamlib `send_morse`), alla velocità impostata.
+- Premendo F1…F8 il client sostituisce le variabili e **inoltra al server il testo della macro come stringa**, insieme alla velocità scelta.
+- Il server lo trasmette in uno dei due modi, scelto nel riquadro PTT del server alla voce **Invio CW**:
+  - **CAT**: il testo va al keyer interno della radio (comando Hamlib `send_morse`, velocità con `KEYSPD`);
+  - **tasto su linea DTR o RTS** di una porta seriale: il server alza il PTT sulla porta indicata, attende il ritardo PTT,
+    batte il CW sulla linea scelta con i tempi Morse alla velocità ricevuta, attende 3 punti e rilascia il PTT.
+    Più macro di fila restano sotto lo stesso PTT. Esc interrompe subito: tasto su e PTT rilasciato.
 - Il pulsante **Macro…** apre la finestra **Macro CW (F1 – F8)**: per ogni tasto il nome che compare sul tasto e il testo da trasmettere. **Prova** fa ascoltare il testo in locale, senza trasmettere.
 - Variabili utilizzabili nei testi:
 
@@ -30,6 +35,18 @@ Comandi comuni: **F1…F8** nella finestra, **Ctrl+Alt+F1…F8** anche da altri 
 
 - Sotto i tasti si impostano la velocità di trasmissione, il mio nominativo, il nominativo del corrispondente e il numero.
 
+### Porte seriali per PTT e CW (server)
+
+| Impostazione | Effetto |
+|---|---|
+| PTT su RTS o DTR, porta X | il server comanda la linea della porta X |
+| CW su DTR o RTS, porta Y (o «stessa porta del PTT») | il server batte il CW sulla linea della porta Y |
+| PTT e CW sulla **stessa porta** | usano linee opposte: se il CW è su DTR il PTT va su RTS, e viceversa |
+| porta PTT uguale alla porta del CAT | il PTT lo comanda rigctld (la porta è sua) |
+| porta CW uguale alla porta del CAT | non si può battere il CW lì: il CW passa via CAT. Usa la seconda porta seriale della radio (per esempio la porta «Standard» delle Yaesu) o un adattatore USB-seriale |
+
+Le scelte effettive e gli eventuali spostamenti di linea sono mostrati sotto le impostazioni e scritti in `sessioni.log` (righe `PTT/CW`).
+
 ## Sul server
 
-Il server non ha tasti F né file WAV: tiene solo il metodo PTT verso la radio (RTS, DTR, CAT o TCI) e il ritardo.
+Il server non ha tasti F né file WAV: tiene il metodo PTT verso la radio (RTS, DTR, CAT, VOX o TCI), il ritardo PTT e il modo di invio del CW (CAT o tasto su DTR/RTS).

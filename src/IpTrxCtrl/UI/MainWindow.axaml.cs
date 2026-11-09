@@ -138,6 +138,8 @@ namespace IpTrxCtrl.UI
             CmbMode.ItemsSource = Modes;
             CmbPttMethod.ItemsSource = new[] { "CAT via rigctld", "Porta seriale – RTS", "Porta seriale – DTR", "VOX (nessun comando)", "TCI (WebSocket)" };
             CmbPttCom.ItemsSource = new[] { "(stessa porta del CAT)" }.Concat(Hamlib.SerialPorts()).ToList();
+            CmbCwMethod.ItemsSource = new[] { "CAT (keyer della radio, send_morse)", "Tasto su linea DTR", "Tasto su linea RTS" };
+            CmbCwCom.ItemsSource = new[] { "(stessa porta del PTT)" }.Concat(Hamlib.SerialPorts()).ToList();
             CmbFilter.ItemsSource = Dsp.FilterNames;
             CmbComp.ItemsSource = new[] { "Compressore off" }.Concat(Enumerable.Range(3, 11).Select(d => $"Compressore {d} dB")).ToList();
             CmbCwWidth.ItemsSource = CwWidths.Select(w => $"{w} Hz").ToList();
@@ -184,6 +186,9 @@ namespace IpTrxCtrl.UI
             TxtTciHost.Text = _s.TciHost;
             TxtTciPort.Text = _s.TciPort.ToString(CultureInfo.InvariantCulture);
             TxtPttDelay.Text = _s.PttDelayMs.ToString(CultureInfo.InvariantCulture);
+            CmbCwMethod.SelectedIndex = (int)_s.CwMethod;
+            CmbCwCom.SelectedItem = string.IsNullOrEmpty(_s.CwCom) ? "(stessa porta del PTT)" : _s.CwCom;
+            if (CmbCwCom.SelectedIndex < 0) CmbCwCom.SelectedIndex = 0;
             SldKeyerVol.Value = _s.KeyerVolume;
             CmbFilter.SelectedIndex = Math.Clamp(_s.KeyerFilter, 0, 3);
             CmbComp.SelectedIndex = _s.KeyerCompDb <= 0 ? 0 : Math.Clamp(_s.KeyerCompDb - 2, 1, 11);
@@ -294,6 +299,8 @@ namespace IpTrxCtrl.UI
             ChkSpace.IsCheckedChanged += (_, _) => { if (!_loading) { _s.PttWithSpace = ChkSpace.IsChecked == true; _s.Save(); } };
             CmbPttMethod.SelectionChanged += (_, _) => PttMethodChanged();
             CmbPttCom.SelectionChanged += (_, _) => PttMethodChanged();
+            CmbCwMethod.SelectionChanged += (_, _) => PttMethodChanged();
+            CmbCwCom.SelectionChanged += (_, _) => PttMethodChanged();
             TxtTciHost.LostFocus += (_, _) => PttMethodChanged();
             TxtTciPort.LostFocus += (_, _) => PttMethodChanged();
             TxtPttDelay.LostFocus += (_, _) =>
@@ -531,7 +538,7 @@ namespace IpTrxCtrl.UI
             if (_cwLayout)
             {
                 if (!TxtKeyerStatus.Text!.StartsWith("TX CW"))
-                    TxtKeyerStatus.Text = "Pronto · F1..F8 trasmettono il testo in CW tramite CAT (send_morse) · Ctrl+Alt+F1..F8 da altri programmi · Esc interrompe";
+                    TxtKeyerStatus.Text = "Pronto · F1..F8 mandano il testo della macro al server, che lo trasmette in CW (" + (_tel.PttInfo.Contains("CW via CAT") ? "keyer della radio via CAT" : "tasto su porta seriale") + ") · Ctrl+Alt+F1..F8 da altri programmi · Esc interrompe";
                 return;
             }
             if (k.Active && k.CurrentIndex >= 0)
@@ -624,6 +631,9 @@ namespace IpTrxCtrl.UI
             _s.PttCom = com.StartsWith("(") ? "" : com;
             _s.TciHost = string.IsNullOrWhiteSpace(TxtTciHost.Text) ? "127.0.0.1" : TxtTciHost.Text.Trim();
             if (int.TryParse(TxtTciPort.Text, out int p) && p > 0 && p < 65536) _s.TciPort = p;
+            _s.CwMethod = (CwMethod)Math.Max(0, CmbCwMethod.SelectedIndex);
+            string cwCom = CmbCwCom.SelectedItem as string ?? "";
+            _s.CwCom = cwCom.StartsWith("(") ? "" : cwCom;
             _s.Save();
             UpdatePttMethodPanels();
             if (_s.Role == NodeRole.Server) _node.Rig.Start();
@@ -633,6 +643,10 @@ namespace IpTrxCtrl.UI
         {
             PanelPttCom.IsVisible = _s.PttMethod == PttMethod.Rts || _s.PttMethod == PttMethod.Dtr;
             PanelTci.IsVisible = _s.PttMethod == PttMethod.Tci;
+            PanelCwCom.IsVisible = _s.CwMethod != CwMethod.Cat;
+            var plan = KeyingPlan.Resolve(_s);
+            TxtKeyingNote.Text = plan.Note;
+            TxtKeyingNote.IsVisible = plan.Note.Length > 0;
         }
 
         // ================================================================= frequenza, split, potenza

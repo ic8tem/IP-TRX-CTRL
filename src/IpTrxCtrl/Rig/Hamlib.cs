@@ -165,14 +165,11 @@ namespace IpTrxCtrl.Rig
             if (exe == null) return null;
             var args = new StringBuilder();
             args.Append($"-m {s.RigModel} -r {s.RigCom} -s {s.RigBaud} -T 127.0.0.1 -t {localPort}");
-            string pttPort = string.IsNullOrEmpty(s.PttCom) ? s.RigCom : s.PttCom;
-            switch (s.PttMethod)
-            {
-                case PttMethod.Cat: args.Append(" -P RIG"); break;
-                case PttMethod.Rts: args.Append($" -P RTS -p {pttPort}"); break;
-                case PttMethod.Dtr: args.Append($" -P DTR -p {pttPort}"); break;
-                default: args.Append(" -P NONE"); break;
-            }
+            // RTS/DTR su una porta diversa da quella del CAT li comanda direttamente il programma (anche per il CW)
+            var plan = KeyingPlan.Resolve(s);
+            if (s.PttMethod == PttMethod.Cat) args.Append(" -P RIG");
+            else if (plan.PttViaRigctld) args.Append($" -P {KeyingPlan.Name(plan.PttLine)} -p {plan.PttPort}");
+            else args.Append(" -P NONE");
             var psi = new ProcessStartInfo(exe, args.ToString())
             {
                 UseShellExecute = false,

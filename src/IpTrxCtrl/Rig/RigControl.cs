@@ -35,6 +35,12 @@ namespace IpTrxCtrl.Rig
         private string _maxKey = "";
         private float _maxW = float.NaN;
         private bool _mw2PowerOk = true;
+        private KeyingPlan _plan = new("", SerialLine.None, false, "", SerialLine.None, false, "");
+        private SerialLines? _pttLines, _cwLines;
+        private CwKeyer? _keyer;
+        private volatile bool _cwPtt;
+        private bool _pttActual;
+        private readonly SemaphoreSlim _pttLock = new(1, 1);
 
         public RigTelemetry Telemetry { get; private set; } = new();
         public string Status { get; private set; } = "Radio non configurata";
@@ -48,6 +54,7 @@ namespace IpTrxCtrl.Rig
         {
             Stop();
             if (_s.PttMethod == PttMethod.Tci) _tci = new TciClient(_s.TciHost, _s.TciPort);
+            OpenKeyingPorts();
             _cts = new CancellationTokenSource();
             var ct = _cts.Token;
             Task.Run(() => LoopAsync(ct));
@@ -66,21 +73,62 @@ namespace IpTrxCtrl.Rig
             }
             _tci?.Dispose();
             _tci = null;
-            _pttWanted = false;
+            _keyer?.Dispose(); _keyer = null;
+            _pttLines?.Dispose(); _pttLines = null;
+            _cwLines?.Dispose(); _cwLines = null;
+            _pttWanted = false; _cwPtt = false; _pttActual = false;
             Telemetry = new RigTelemetry();
         }
 
         public void Dispose() => Stop();
 
-        public string PttInfo => _s.PttMethod switch
+        public KeyingPlan Plan => _plan;
+
+        public string PttInfo
         {
-            PttMethod.Cat => "CAT",
-            PttMethod.Rts => "RTS " + (string.IsNullOrEmpty(_s.PttCom) ? _s.RigCom : _s.PttCom),
-            PttMethod.Dtr => "DTR " + (string.IsNullOrEmpty(_s.PttCom) ? _s.RigCom : _s.PttCom),
-            PttMethod.Vox => "VOX",
-            PttMethod.Tci => $"TCI {_s.TciHost}:{_s.TciPort}",
-            _ => ""
-        };
+            get
+            {
+                string ptt = _s.PttMethod switch
+                {
+                    PttMethod.Cat => "CAT",
+                    PttMethod.Rts or PttMethod.Dtr => $"{KeyingPlan.Name(_plan.PttLine)} {_plan.PttPort}",
+                    PttMethod.Vox => "VOX",
+                    PttMethod.Tci => $"TCI {_s.TciHost}:{_s.TciPort}",
+                    _ => ""
+                };
+                string cw = _plan.CwSerial ? $"CW {KeyingPlan.Name(_plan.CwLine)} {_plan.CwPort}" : "CW via CAT";
+                return $"PTT {ptt} · {cw}";
+            }
+        }
+
+        /// <summary>Apre le porte seriali per PTT (se non le gestisce rigctld) e per il tasto CW.</summary>
+        private void OpenKeyingPorts()
+        {
+            _plan = KeyingPlan.Resolve(_s);
+            if (_plan.Note.Length > 0) SessionLog.Write("PTT/CW " + _plan.Note);
+            try
+            {
+                if ((_s.PttMethod == PttMethod.Rts || _s.PttMethod == PttMethod.Dtr) && !_plan.PttViaRigctld && !string.IsNullOrEmpty(_plan.PttPort))
+                {
+                    _pttLines = SerialLines.Acquire(_plan.PttPort);
+                    SessionLog.Write($"PTT su {KeyingPlan.Name(_plan.PttLine)} della porta {_plan.PttPort}");
+                }
+            }
+            catch (Exception ex) { SetStatus($"Porta PTT {_plan.PttPort} non apribile: {ex.Message}"); SessionLog.Write("PTT porta non apribile: " + ex.Message); }
+            try
+            {
+                if (_plan.CwSerial)
+                {
+                    _cwLines = SerialLines.Acquire(_plan.CwPort);
+                    var lines = _cwLines;
+                    var line = _plan.CwLine;
+                    _keyer = new CwKeyer(down => lines.Set(line, down), on => SetCwPtt(on), () => _s.PttDelayMs);
+                    _keyer.Log += m => SessionLog.Write(m);
+                    SessionLog.Write($"CW su {KeyingPlan.Name(line)} della porta {_plan.CwPort}");
+                }
+            }
+            catch (Exception ex) { SetStatus($"Porta CW {_plan.CwPort} non apribile: {ex.Message}"); SessionLog.Write("CW porta non apribile: " + ex.Message); }
+        }
 
         private async Task LoopAsync(CancellationToken ct)
         {
@@ -369,13 +417,30 @@ namespace IpTrxCtrl.Rig
 
         public Task StopMorseAsync() => SetAsync("\\stop_morse");
 
-        /// <summary>PTT: col metodo VOX non invia comandi; con TCI usa il WebSocket.</summary>
+        /// <summary>PTT dall'operatore (pulsante, barra, messaggi WAV).</summary>
         public async Task SetPttAsync(bool on)
         {
             if (_pttWanted == on) return;
             _pttWanted = on;
+            await ApplyPttAsync();
+        }
+
+        /// <summary>PTT chiesto dal tasto CW seriale (dal suo thread: attende che il PTT sia applicato).</summary>
+        private void SetCwPtt(bool on)
+        {
+            _cwPtt = on;
+            try { ApplyPttAsync().GetAwaiter().GetResult(); } catch { }
+        }
+
+        /// <summary>PTT: col metodo VOX non invia comandi; con TCI usa il WebSocket; RTS/DTR direttamente o tramite rigctld.</summary>
+        private async Task ApplyPttAsync()
+        {
+            await _pttLock.WaitAsync();
             try
             {
+                bool on = _pttWanted || _cwPtt;
+                if (on == _pttActual) return;
+                _pttActual = on;
                 switch (_s.PttMethod)
                 {
                     case PttMethod.Vox: return;
@@ -383,13 +448,30 @@ namespace IpTrxCtrl.Rig
                         _tci ??= new TciClient(_s.TciHost, _s.TciPort);
                         await _tci.SetPttAsync(on);
                         return;
-                    default:
-                        var ct = _cts?.Token ?? CancellationToken.None;
-                        await CommandAsync(on ? "T 1" : "T 0", 1, ct);
-                        return;
+                    case PttMethod.Rts:
+                    case PttMethod.Dtr:
+                        if (_pttLines != null) { _pttLines.Set(_plan.PttLine, on); return; }
+                        break;
                 }
+                var ct = _cts?.Token ?? CancellationToken.None;
+                await CommandAsync(on ? "T 1" : "T 0", 1, ct);
             }
             catch (Exception ex) { SetStatus("PTT non riuscito: " + ex.Message); }
+            finally { _pttLock.Release(); }
+        }
+
+        /// <summary>Testo CW dal client: tasto seriale (DTR/RTS) se impostato, altrimenti keyer della radio via CAT.</summary>
+        public async Task SendCwAsync(string text, int wpm)
+        {
+            if (_keyer != null) { _keyer.Send(text, wpm); return; }
+            if (wpm >= 5) await SetKeySpeedAsync(wpm);
+            await SendMorseAsync(text);
+        }
+
+        public async Task StopCwAsync()
+        {
+            if (_keyer != null) { _keyer.Stop(); return; }
+            await StopMorseAsync();
         }
 
         private void SetStatus(string s)

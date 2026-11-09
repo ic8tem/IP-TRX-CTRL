@@ -601,8 +601,16 @@ namespace IpTrxCtrl.Core
                         case Msg.VfoOp: if (IsServer) _ = Rig.VfoOpAsync(r.Str()); break;
                         case Msg.SetPower: if (IsServer) { float v = r.F32(); bool w = r.Bool(); _ = Rig.SetPowerAsync(v, w); } break;
                         case Msg.SetPitch: if (IsServer) _ = Rig.SetPitchAsync(r.I32()); break;
-                        case Msg.SendMorse: if (IsServer) _ = Rig.SendMorseAsync(r.Str()); break;
-                        case Msg.StopMorse: if (IsServer) _ = Rig.StopMorseAsync(); break;
+                        case Msg.SendMorse:
+                            if (IsServer)
+                            {
+                                string text = r.Str();
+                                int wpm = r.AtEnd ? _s.CwSpeedWpm : r.I32();
+                                SessionLog.Write($"CW dal client ({wpm} WPM): {text}");
+                                _ = Rig.SendCwAsync(text, wpm);
+                            }
+                            break;
+                        case Msg.StopMorse: if (IsServer) _ = Rig.StopCwAsync(); break;
                         case Msg.SetKeySpeed: if (IsServer) _ = Rig.SetKeySpeedAsync(r.I32()); break;
                         case Msg.SetDeviceMute:
                             if (IsServer) { bool input = r.U8() == 0; bool mute = r.Bool(); DeviceMute.SetMute(input ? _s.InputDevice : _s.OutputDevice, input, mute); _ = SendDeviceStateAsync(); }
@@ -761,8 +769,9 @@ namespace IpTrxCtrl.Core
         public void SetPower(float value, bool watts) { if (IsServer) _ = Rig.SetPowerAsync(value, watts); else Send(new MsgWriter(Msg.SetPower).F32(value).Bool(watts).Build()); }
         public void SetPitch(int hz) { if (IsServer) _ = Rig.SetPitchAsync(hz); else Send(new MsgWriter(Msg.SetPitch).I32(hz).Build()); }
         public void SetKeySpeed(int wpm) { if (IsServer) _ = Rig.SetKeySpeedAsync(wpm); else Send(new MsgWriter(Msg.SetKeySpeed).I32(wpm).Build()); }
-        public void SendMorse(string text) { if (IsServer) _ = Rig.SendMorseAsync(text); else Send(new MsgWriter(Msg.SendMorse).Str(text).Build()); }
-        public void StopMorse() { if (IsServer) _ = Rig.StopMorseAsync(); else Send(new MsgWriter(Msg.StopMorse).Build()); }
+        /// <summary>Testo della macro CW: il client lo inoltra al server come stringa, con la velocità.</summary>
+        public void SendMorse(string text) { if (IsServer) _ = Rig.SendCwAsync(text, _s.CwSpeedWpm); else Send(new MsgWriter(Msg.SendMorse).Str(text).I32(_s.CwSpeedWpm).Build()); }
+        public void StopMorse() { if (IsServer) _ = Rig.StopCwAsync(); else Send(new MsgWriter(Msg.StopMorse).Build()); }
 
         public void SetRemoteDeviceMute(bool input, bool mute) => Send(new MsgWriter(Msg.SetDeviceMute).U8((byte)(input ? 0 : 1)).Bool(mute).Build());
         public void SetRemoteDeviceVolume(bool input, float v) => Send(new MsgWriter(Msg.SetDeviceVolume).U8((byte)(input ? 0 : 1)).F32(v).Build());
