@@ -3,7 +3,8 @@
         xmlns:ui="clr-namespace:IpTrxCtrl.UI"
         x:Class="IpTrxCtrl.UI.MainWindow"
         Title="IP-TRX-CTRL" Width="1240" Height="960" MinWidth="980" MinHeight="600"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Icon="avares://IP-TRX-CTRL/Assets/icon.png">
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="22" Spacing="18">
 

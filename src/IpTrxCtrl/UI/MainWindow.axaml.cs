@@ -664,7 +664,7 @@ namespace IpTrxCtrl.UI
             _loading = true;
             SldOffset.Value = khz;
             if (!TxtOffset.IsFocused)
-                TxtOffset.Text = (khz >= 0 ? "+" : "−") + Math.Abs(khz).ToString(OffsetStep < 1 ? "0.0" : "0", CultureInfo.GetCultureInfo("it-IT")) + " kHz";
+                TxtOffset.Text = (khz >= 0 ? "+" : "−") + Math.Abs(khz).ToString(OffsetStep < 1 ? "0.0" : "0", CultureInfo.InvariantCulture).Replace('.', ',') + " kHz";
             _loading = old;
         }
 

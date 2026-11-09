@@ -8,11 +8,13 @@ Versioni: Windows 64 e 32 bit, Linux 64 bit, Raspberry Pi 64 e 32 bit, macOS App
 
 ## Scaricare
 
-I pacchetti vengono compilati a ogni aggiornamento dalla scheda **Actions** (sezione *Artifacts*) e, per le versioni con tag, pubblicati in **Releases**.
+Gli installatori sono nella pagina **Releases**:
 
-- Windows: estrai lo zip e avvia `IP-TRX-CTRL.exe` (Hamlib è incluso).
-- Linux / Raspberry Pi: estrai il `.tar.gz`, installa Hamlib con `sudo apt install libhamlib-utils` e avvia `./IP-TRX-CTRL`.
-- macOS: estrai lo zip, installa Hamlib con `brew install hamlib`, poi clic destro su `IP-TRX-CTRL.app` › Apri.
+- Windows 64 / 32 bit: `…-win-x64-setup.exe` / `…-win-x86-setup.exe` (Hamlib incluso).
+- Linux 64 bit e Raspberry Pi: `ip-trx-ctrl_…_amd64.deb`, `…_arm64.deb` (Raspberry Pi OS 64 bit), `…_armhf.deb` (32 bit); si installano con `sudo apt install ./<file>.deb`, che installa anche Hamlib.
+- macOS: `…-osx-arm64.dmg` (Apple Silicon) o `…-osx-x64.dmg` (Intel); installa Hamlib con `brew install hamlib`; al primo avvio clic destro sull'app › Apri.
+
+Per ogni sistema c'è anche una versione portatile, senza installazione.
 
 La documentazione è nella cartella `docs`. Le note sulle licenze dei componenti di terze parti sono in `THIRD-PARTY-NOTICES.txt` e nella finestra «Informazioni e licenze» del programma.
 

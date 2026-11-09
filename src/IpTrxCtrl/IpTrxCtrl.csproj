@@ -13,7 +13,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
-    <InvariantGlobalization>false</InvariantGlobalization>
+    <!-- niente dipendenza da ICU su Linux/Raspberry -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <!-- Open.NAT e' compilato per .NET Framework ma funziona su .NET 8; CA1416: le API per sistema sono protette da controlli OperatingSystem.Is* -->
     <NoWarn>$(NoWarn);NU1701;CA1416</NoWarn>
   </PropertyGroup>

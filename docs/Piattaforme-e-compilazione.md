@@ -39,11 +39,19 @@ per tutte e sette le versioni. I pacchetti si scaricano dalla scheda **Actions**
 (sezione *Artifacts*). Con un tag `v*` (per esempio `v0.1.0`) i pacchetti vengono pubblicati anche
 nella pagina **Releases**.
 
-| Pacchetto | Contenuto |
-|---|---|
-| `IP-TRX-CTRL-win-x64.zip`, `IP-TRX-CTRL-win-x86.zip` | `IP-TRX-CTRL.exe` con Hamlib incluso |
-| `IP-TRX-CTRL-linux-x64.tar.gz`, `-linux-arm64`, `-linux-arm` | eseguibile `IP-TRX-CTRL` |
-| `IP-TRX-CTRL-osx-arm64.zip`, `-osx-x64` | `IP-TRX-CTRL.app` (firma ad-hoc) |
+| Sistema | Installatore | Versione portatile |
+|---|---|---|
+| Windows 64 bit | `IP-TRX-CTRL-<versione>-win-x64-setup.exe` | `…-win-x64-portatile.zip` |
+| Windows 32 bit | `IP-TRX-CTRL-<versione>-win-x86-setup.exe` | `…-win-x86-portatile.zip` |
+| Linux 64 bit | `ip-trx-ctrl_<versione>_amd64.deb` | `…-linux-x64-portatile.tar.gz` |
+| Raspberry Pi 64 bit | `ip-trx-ctrl_<versione>_arm64.deb` | `…-linux-arm64-portatile.tar.gz` |
+| Raspberry Pi 32 bit | `ip-trx-ctrl_<versione>_armhf.deb` | `…-linux-arm-portatile.tar.gz` |
+| macOS Apple Silicon | `IP-TRX-CTRL-<versione>-osx-arm64.dmg` | `…-osx-arm64-app.zip` |
+| macOS Intel | `IP-TRX-CTRL-<versione>-osx-x64.dmg` | `…-osx-x64-app.zip` |
+
+Il `.deb` si installa con `sudo apt install ./ip-trx-ctrl_<versione>_<arch>.deb`: installa anche Hamlib
+(`libhamlib-utils`) e crea la voce nel menu delle applicazioni. Per usare la porta seriale della radio
+aggiungi il tuo utente al gruppo `dialout` (`sudo usermod -aG dialout $USER`, poi esci e rientra).
 
 Su macOS, al primo avvio: clic destro sull'app › Apri (l'app non è notarizzata).
 

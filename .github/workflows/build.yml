@@ -18,8 +18,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: windows-latest, rid: win-x64,     hamlib: w64 }
-          - { os: windows-latest, rid: win-x86,     hamlib: w32 }
+          - { os: windows-latest, rid: win-x64,     hamlib: w64, arch: x64 }
+          - { os: windows-latest, rid: win-x86,     hamlib: w32, arch: x86 }
           - { os: ubuntu-latest,  rid: linux-x64 }
           - { os: ubuntu-latest,  rid: linux-arm64 }
           - { os: ubuntu-latest,  rid: linux-arm }
@@ -33,6 +33,12 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Versione
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF#refs/tags/v}"; else V="0.1.0"; fi
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+
       - name: Hamlib per Windows (${{ matrix.hamlib }})
         if: matrix.hamlib != ''
         shell: pwsh
@@ -42,56 +48,45 @@ jobs:
 
       - name: Compila ${{ matrix.rid }}
         shell: bash
-        run: dotnet publish src/IpTrxCtrl/IpTrxCtrl.csproj -c Release -r ${{ matrix.rid }} -o dist/${{ matrix.rid }}
+        run: dotnet publish src/IpTrxCtrl/IpTrxCtrl.csproj -c Release -r ${{ matrix.rid }} -p:Version=$VERSION -o dist/${{ matrix.rid }}
 
-      - name: Pacchetto Windows
+      # ---------------------------------------------------------------- Windows: Setup.exe + zip portatile
+      - name: Installatore Windows
         if: startsWith(matrix.rid, 'win')
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force out | Out-Null
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          if (-not (Test-Path $iscc)) { $iscc = (Get-Command iscc -ErrorAction Stop).Source }
+          $src = (Resolve-Path dist/${{ matrix.rid }}).Path
+          $out = (Resolve-Path out).Path
+          & $iscc "/DAppVersion=$env:VERSION" "/DArch=${{ matrix.arch }}" "/DSourceDir=$src" "/DOutDir=$out" packaging/windows/IP-TRX-CTRL.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item THIRD-PARTY-NOTICES.txt dist/${{ matrix.rid }}/
-          Compress-Archive -Path dist/${{ matrix.rid }}/IP-TRX-CTRL.exe, dist/${{ matrix.rid }}/THIRD-PARTY-NOTICES.txt -DestinationPath out/IP-TRX-CTRL-${{ matrix.rid }}.zip
+          Compress-Archive -Path dist/${{ matrix.rid }}/IP-TRX-CTRL.exe, dist/${{ matrix.rid }}/THIRD-PARTY-NOTICES.txt -DestinationPath "out/IP-TRX-CTRL-$env:VERSION-${{ matrix.rid }}-portatile.zip"
 
-      - name: Pacchetto Linux
+      # ---------------------------------------------------------------- Linux e Raspberry: .deb + tar.gz portatile
+      - name: Pacchetti Linux
         if: startsWith(matrix.rid, 'linux')
         shell: bash
         run: |
-          mkdir -p out pkg/IP-TRX-CTRL
+          chmod +x packaging/linux/make-deb.sh
+          packaging/linux/make-deb.sh ${{ matrix.rid }} "$VERSION" dist/${{ matrix.rid }} out
+          mkdir -p pkg/IP-TRX-CTRL
           cp dist/${{ matrix.rid }}/IP-TRX-CTRL pkg/IP-TRX-CTRL/
           chmod +x pkg/IP-TRX-CTRL/IP-TRX-CTRL
-          cp THIRD-PARTY-NOTICES.txt pkg/IP-TRX-CTRL/
-          tar -czf out/IP-TRX-CTRL-${{ matrix.rid }}.tar.gz -C pkg IP-TRX-CTRL
+          cp THIRD-PARTY-NOTICES.txt src/IpTrxCtrl/Assets/icon.png pkg/IP-TRX-CTRL/
+          tar -czf "out/IP-TRX-CTRL-$VERSION-${{ matrix.rid }}-portatile.tar.gz" -C pkg IP-TRX-CTRL
+          dpkg-deb --info out/*.deb | head -20
 
-      - name: Pacchetto macOS (.app)
+      # ---------------------------------------------------------------- macOS: .dmg + .app zip
+      - name: Pacchetti macOS
         if: startsWith(matrix.rid, 'osx')
         shell: bash
         run: |
-          APP=pkg/IP-TRX-CTRL.app
-          mkdir -p out "$APP/Contents/MacOS" "$APP/Contents/Resources"
-          cp dist/${{ matrix.rid }}/IP-TRX-CTRL "$APP/Contents/MacOS/"
-          chmod +x "$APP/Contents/MacOS/IP-TRX-CTRL"
-          cp THIRD-PARTY-NOTICES.txt "$APP/Contents/Resources/"
-          cat > "$APP/Contents/Info.plist" <<'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleName</key><string>IP-TRX-CTRL</string>
-            <key>CFBundleDisplayName</key><string>IP-TRX-CTRL</string>
-            <key>CFBundleIdentifier</key><string>it.ic8tem.iptrxctrl</string>
-            <key>CFBundleExecutable</key><string>IP-TRX-CTRL</string>
-            <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleShortVersionString</key><string>0.1.0</string>
-            <key>CFBundleVersion</key><string>1</string>
-            <key>LSMinimumSystemVersion</key><string>11.0</string>
-            <key>NSHighResolutionCapable</key><true/>
-            <key>NSMicrophoneUsageDescription</key><string>IP-TRX-CTRL usa il microfono per trasmettere la tua voce alla radio remota.</string>
-          </dict>
-          </plist>
-          EOF
-          sed -i '' 's/^          //' "$APP/Contents/Info.plist"
-          codesign --force --deep --sign - "$APP"
-          ditto -c -k --keepParent "$APP" out/IP-TRX-CTRL-${{ matrix.rid }}.zip
+          chmod +x packaging/macos/make-dmg.sh
+          packaging/macos/make-dmg.sh ${{ matrix.rid }} "$VERSION" dist/${{ matrix.rid }} out
 
       - uses: actions/upload-artifact@v4
         with:
@@ -109,4 +104,14 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
+          name: IP-TRX-CTRL ${{ github.ref_name }}
           files: artifacts/*
+          body: |
+            **Windows 64 bit**: `IP-TRX-CTRL-…-win-x64-setup.exe` · **Windows 32 bit**: `…-win-x86-setup.exe` (Hamlib incluso)
+            **Linux 64 bit**: `ip-trx-ctrl_…_amd64.deb`
+            **Raspberry Pi**: `ip-trx-ctrl_…_arm64.deb` (Raspberry Pi OS 64 bit) · `ip-trx-ctrl_…_armhf.deb` (32 bit)
+            **macOS**: `IP-TRX-CTRL-…-osx-arm64.dmg` (Apple Silicon) · `…-osx-x64.dmg` (Intel); al primo avvio clic destro › Apri
+
+            Linux e Raspberry: `sudo apt install ./ip-trx-ctrl_…deb` installa anche Hamlib. Per usare la porta seriale della radio: `sudo usermod -aG dialout $USER`.
+            macOS: Hamlib con `brew install hamlib`.
+            Le versioni *portatile* non richiedono installazione.
