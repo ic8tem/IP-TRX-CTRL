@@ -8,7 +8,18 @@ Comandi comuni: **F1…F8** nella finestra, **Ctrl+Alt+F1…F8** anche da altri 
 
 - Ogni tasto riproduce un file WAV; l'audio va alla radio remota tramite il server, come se si parlasse al microfono, e il PTT viene gestito in automatico.
 - I file vengono convertiti a 8 kHz al caricamento.
-- Catena audio: conversione a 8 kHz → compressore (off oppure da 3 a 13 dB) → filtro (nessuno, 300–2700, 500–2400, 500–2100 Hz) → volume → limitatore.
+- Catena audio: conversione a 8 kHz → **normalizzazione** (picco a −1 dB dal fondo scala, così tutti i file partono dallo stesso livello) → compressore (off oppure da 3 a 13 dB) → filtro (nessuno, 300–2700, 500–2400, 500–2100 Hz) → boost del cursore VOLUME → limitatore.
+- Boost del cursore VOLUME (come WavPTT): guadagno = 1000^(volume/100).
+
+| Cursore | Guadagno |
+|---|---|
+| 0 | silenzio |
+| 33 | ×10 (+20 dB) |
+| 50 | ×31,6 (+30 dB) |
+| 66 | ×100 (+40 dB) |
+| 100 | ×1000 (+60 dB) |
+
+- Il microfono non passa da questa catena: TX gain e «Boost oltre soglia» valgono solo per la voce.
 - Più tasti premuti in sequenza vengono messi in coda; il PTT si rilascia alla fine dell'ultimo messaggio.
 - Il pulsante **File WAV…** apre la finestra **Memorie WAV (F1 – F8)**, ripresa da WavPTT:
   - **…** sceglie il file per quel tasto;

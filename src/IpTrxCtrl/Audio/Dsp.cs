@@ -182,11 +182,28 @@ namespace IpTrxCtrl.Audio
         /// <summary>Volume come in WavPTT: guadagno = 1000^(volume/100), con limitazione finale.</summary>
         public static double GainOf(int volume) => volume <= 0 ? 0 : Math.Pow(1000.0, volume / 100.0);
 
-        /// <summary>Prepara un messaggio WAV: 8 kHz mono, compressore, filtro, volume, limitazione.</summary>
+        /// <summary>Livello di picco della normalizzazione: −1 dB dal fondo scala.</summary>
+        public const double NormalizePeak = 0.891250938;
+
+        /// <summary>Porta il picco di tutti i canali a NormalizePeak (file muti lasciati come sono).</summary>
+        public static void Normalize(double[][] chans)
+        {
+            double peak = 0;
+            foreach (var ch in chans) foreach (double v in ch) peak = Math.Max(peak, Math.Abs(v));
+            if (peak < 1e-6) return;
+            double g = NormalizePeak / peak;
+            foreach (var ch in chans) for (int i = 0; i < ch.Length; i++) ch[i] *= g;
+        }
+
+        /// <summary>
+        /// Prepara un messaggio WAV: 8 kHz, normalizzazione a −1 dBFS, compressore, filtro,
+        /// boost del cursore VOLUME (1000^(volume/100), come WavPTT), limitazione.
+        /// </summary>
         public static short[] PrepareClip(string path, int volume, int filterMode, int compDb)
         {
             var (chans, rate) = ReadWav(path);
             for (int c = 0; c < chans.Length; c++) chans[c] = Resample(chans[c], rate, AudioEngine.SampleRate);
+            Normalize(chans);
             if (compDb > 0) Compress(chans, AudioEngine.SampleRate, compDb);
             int n = chans[0].Length;
             var mono = new double[n];
