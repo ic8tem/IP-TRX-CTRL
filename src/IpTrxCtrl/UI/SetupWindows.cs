@@ -504,6 +504,8 @@ raggiungibili da internet; le prime due porte utili vanno sul broker MQTT. Il cl
 le sue porte, le verifica e le manda al server sul broker MQTT: il server si collega al client (collegamento
 inverso) oppure cambia le sue porte. Il ciclo si ripete per 20 giri; dopo il ventesimo compare «Nessuna porta è
 apribile» e il client si chiude con «Exit». Attiva UPnP su almeno uno dei due router.
+Router senza UPnP: il server usa comunque due porte locali (vanno bene con DMZ o inoltro manuale, e sempre dalla
+stessa rete locale). Se i due PC sono nella stessa casa il client prova anche l'indirizzo locale del server.
 A collegamento fatto l'audio prova anche UDP (STUN e perforazione del NAT); se UDP non passa resta su TCP.
 Il percorso in uso compare nella riga della rete dell'altro PC («audio UDP» o «audio TCP»).
 

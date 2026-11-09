@@ -86,9 +86,14 @@ namespace IpTrxCtrl.Net
         /// <summary>Numero di broker che hanno accettato l'indirizzo.</summary>
         public int LastOkBrokers { get; private set; }
 
-        public async Task<bool> PublishAsync(ServerAddress addr, CancellationToken ct)
+        /// <summary>IP di rete locale del server letto nell'ultima ricerca ("" se assente).</summary>
+        public string LastLan { get; private set; } = "";
+
+        public async Task<bool> PublishAsync(ServerAddress addr, string lan, CancellationToken ct)
         {
-            byte[] plain = Crypto.Concat(addr.ToBytes(), BitConverter.GetBytes(DateTime.UtcNow.Ticks));
+            byte[] lanBytes = System.Net.IPAddress.TryParse(lan, out var l) && l.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
+                ? l.GetAddressBytes() : Array.Empty<byte>();
+            byte[] plain = Crypto.Concat(addr.ToBytes(), BitConverter.GetBytes(DateTime.UtcNow.Ticks), lanBytes);
             byte[] payload = Crypto.Seal(_key, plain);
             int ok = 0;
             foreach (string broker in _brokers)
@@ -165,6 +170,7 @@ namespace IpTrxCtrl.Net
         public async Task<ServerAddress?> LookupAsync(CancellationToken ct)
         {
             ServerAddress? best = null;
+            string bestLan = "";
             long bestTicks = 0;
             int ok = 0;
             foreach (string broker in _brokers)
@@ -188,12 +194,17 @@ namespace IpTrxCtrl.Net
                     byte[] plain = Crypto.Open(_key, received.Task.Result);
                     var addr = ServerAddress.FromBytes(plain, 0);
                     long ticks = BitConverter.ToInt64(plain, 8);
-                    if (addr.IsValid && ticks > bestTicks) { best = addr; bestTicks = ticks; }
+                    if (addr.IsValid && ticks > bestTicks)
+                    {
+                        best = addr; bestTicks = ticks;
+                        bestLan = plain.Length >= 20 ? new System.Net.IPAddress(plain.AsSpan(16, 4)).ToString() : "";
+                    }
                 }
                 catch { }
                 finally { await Mqtt.SafeDisconnect(client); }
             }
             LastOkBrokers = ok;
+            LastLan = bestLan;
             return best;
         }
     }
@@ -231,13 +242,14 @@ namespace IpTrxCtrl.Net
 
         private static byte[] Key(byte[] secret) => Crypto.Hkdf(secret, Array.Empty<byte>(), "iptrx-pair-key");
 
-        private static byte[] ServerPayload(byte[] secret, byte[] nonce, ServerAddress addr, bool upnp) =>
-            Crypto.Seal(Key(secret), Crypto.Concat(nonce, addr.ToBytes(), new[] { (byte)(upnp ? 1 : 0) }, Encoding.UTF8.GetBytes(Version)));
+        // dopo la versione: «|IP di rete locale» (i client vecchi lo mostrano come parte della versione)
+        private static byte[] ServerPayload(byte[] secret, byte[] nonce, ServerAddress addr, bool upnp, string lan) =>
+            Crypto.Seal(Key(secret), Crypto.Concat(nonce, addr.ToBytes(), new[] { (byte)(upnp ? 1 : 0) }, Encoding.UTF8.GetBytes(Version + (lan.Length > 0 ? "|" + lan : ""))));
 
         /// <summary>
         /// Server: resta in ascolto su tutti i broker finché l'abbinamento non è completato (ct annullato).
         /// </summary>
-        public static async Task ServerListenAsync(byte[] secret, Func<(ServerAddress? addr, bool upnp)> current,
+        public static async Task ServerListenAsync(byte[] secret, Func<(ServerAddress? addr, bool upnp, string lan)> current,
             IReadOnlyList<string> brokers, MqttLog log, CancellationToken ct)
         {
             string tCli = Base(secret) + "/cli", tSrv = Base(secret) + "/srv";
@@ -262,11 +274,11 @@ namespace IpTrxCtrl.Net
                             byte[] nonce = plain.AsSpan(0, 16).ToArray();
                             string who = Encoding.UTF8.GetString(plain, 16, plain.Length - 16);
                             log('◀', $"PUBLISH  {Mqtt.Short(tCli)}  HELLO dal client {who} ({raw.Length} B)");
-                            var (addr, upnp) = current();
+                            var (addr, upnp, lan) = current();
                             if (addr == null) { log('✗', "indirizzo pubblico del server non ancora disponibile"); return; }
-                            byte[] payload = ServerPayload(secret, nonce, addr.Value, upnp);
+                            byte[] payload = ServerPayload(secret, nonce, addr.Value, upnp, lan);
                             await c.PublishAsync(Mqtt.Message(tSrv, payload, false), ct);
-                            log('▶', $"PUBLISH  {Mqtt.Short(tSrv)}  IP {addr.Value.Ip} · porte {addr.Value.ControlPort} / {addr.Value.AudioPort}");
+                            log('▶', $"PUBLISH  {Mqtt.Short(tSrv)}  IP {addr.Value.Ip} · porte {addr.Value.ControlPort} / {addr.Value.AudioPort}" + (lan.Length > 0 ? $" · LAN {lan}" : ""));
                         }
                         catch (Exception ex) { log('✗', "messaggio non valido: " + ex.Message); }
                     };
@@ -304,7 +316,7 @@ namespace IpTrxCtrl.Net
         }
 
         /// <summary>Client: cerca il server sui broker. Restituisce l'indirizzo aggiornato o null.</summary>
-        public static async Task<ServerAddress?> ClientFindAsync(byte[] secret, string callsign, IReadOnlyList<string> brokers,
+        public static async Task<(ServerAddress addr, string lan)?> ClientFindAsync(byte[] secret, string callsign, IReadOnlyList<string> brokers,
             MqttLog log, CancellationToken ct)
         {
             string tCli = Base(secret) + "/cli", tSrv = Base(secret) + "/srv";
@@ -359,9 +371,12 @@ namespace IpTrxCtrl.Net
                     var addr = ServerAddress.FromBytes(plain, 16);
                     bool upnp = plain[24] == 1;
                     string ver = Encoding.UTF8.GetString(plain, 25, plain.Length - 25);
-                    log('◀', $"PUBLISH  {Mqtt.Short(tSrv)}  server presente · IP {addr.Ip}");
+                    string lan = "";
+                    int bar = ver.IndexOf('|');
+                    if (bar >= 0) { lan = ver[(bar + 1)..]; ver = ver[..bar]; }
+                    log('◀', $"PUBLISH  {Mqtt.Short(tSrv)}  server presente · IP {addr.Ip}" + (lan.Length > 0 ? $" · LAN {lan}" : ""));
                     log(' ', $"porte {addr.ControlPort} / {addr.AudioPort} · UPnP {(upnp ? "ok" : "non disponibile")} · versione {ver}");
-                    return addr;
+                    return (addr, lan);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
                 catch (Exception ex)

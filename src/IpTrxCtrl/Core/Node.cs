@@ -254,7 +254,7 @@ namespace IpTrxCtrl.Core
             SetStatus("Apertura porte sul router…", false);
 
             bool upnp = await _ports.DiscoverAsync(ct);
-            bool ok = upnp && await OpenServerPortsAsync(ct);
+            bool ok = await OpenServerPortsAsync(ct);
             _ = Task.Run(() => PublishLoopAsync(ct));
             _ = Task.Run(() => ReverseLoopAsync(ct));
 
@@ -279,10 +279,13 @@ namespace IpTrxCtrl.Core
         /// </summary>
         private async Task<(int port, TcpListener? listener)> OpenVerifiedPortAsync(PortManager pm, string desc, ChannelKind kind, bool clientSide, CancellationToken ct)
         {
-            for (int i = 1; i <= 6 && !ct.IsCancellationRequested; i++)
+            bool upnp = pm.UpnpAvailable;
+            int tries = upnp ? 6 : 1;
+            for (int i = 1; i <= tries && !ct.IsCancellationRequested; i++)
             {
-                int p = await pm.OpenRandomPortAsync(desc, ct);
+                int p = upnp ? await pm.OpenRandomPortAsync(desc, ct) : pm.PickLocalPort();
                 if (p == 0) return (0, null);
+                if (!upnp) PortLog($"PORTE {desc}: router senza UPnP, provo la porta locale {p} (funziona con DMZ, inoltro manuale sul router o sulla stessa rete locale)");
                 TcpListener l;
                 try { l = new TcpListener(IPAddress.Any, p); l.Start(); }
                 catch { await pm.ClosePortAsync(p); continue; }
@@ -291,6 +294,12 @@ namespace IpTrxCtrl.Core
                 if (kind == ChannelKind.Audio) await pm.OpenUdpAsync(p, desc + " (UDP)");
                 bool? reach = await PortProbe.TcpReachableAsync(p, PortLog, ct);
                 if (reach != false) return (p, l);
+                // il server tiene comunque l'ultima porta: serve ai PC della stessa rete locale
+                if (!clientSide && i == tries)
+                {
+                    PortLog($"PORTE {desc}: la porta {p} non è raggiungibile da internet; la tengo per la rete locale");
+                    return (p, l);
+                }
                 PortLog($"PORTE {desc}: la porta {p} è aperta sul router ma non è raggiungibile da internet: la chiudo e ne provo un'altra ({i}/6)");
                 try { l.Stop(); } catch { }
                 await pm.ClosePortAsync(p);
@@ -503,7 +512,7 @@ namespace IpTrxCtrl.Core
             var secret = _pairingSecret;
             var lct = _pairListenCts.Token;
             _ = Task.Run(() => PairingRendezvous.ServerListenAsync(secret,
-                () => (CurrentServerAddress, _ports?.UpnpAvailable == true), _s.MqttBrokers, Log, lct));
+                () => (CurrentServerAddress, _ports?.UpnpAvailable == true, LanIp() == "—" ? "" : LanIp()), _s.MqttBrokers, Log, lct));
             return code;
         }
 
@@ -599,7 +608,7 @@ namespace IpTrxCtrl.Core
         {
             var addr = CurrentServerAddress;
             if (addr == null || _rdv == null || _master == null) return;
-            bool ok = await _rdv.PublishAsync(addr.Value, ct);
+            bool ok = await _rdv.PublishAsync(addr.Value, LanIp(), ct);
             Stats.MqttOk = _rdv.LastOkBrokers;
             FallbackCodeChanged?.Invoke(ok ? null : Crypto.MakeFallbackCode(_master, addr.Value));
         }
@@ -657,15 +666,26 @@ namespace IpTrxCtrl.Core
             }
             Log('·', $"codice letto · indirizzo nel codice {addr.Ip} · porte {addr.ControlPort} / {addr.AudioPort}");
             var found = await PairingRendezvous.ClientFindAsync(secret, _s.Callsign, _s.MqttBrokers, Log, ct);
-            if (found != null) addr = found.Value;
+            string lan = "";
+            if (found != null) { addr = found.Value.addr; lan = found.Value.lan; }
             else Log('·', "nessuna risposta dai broker: provo l'indirizzo scritto nel codice");
 
             try
             {
+                byte[] master;
                 Log('▶', $"TCP {addr.Ip}:{addr.ControlPort}  apertura canale di controllo");
-                byte[] master = await SecureChannel.PairAsClientAsync(addr, secret, ct);
+                try { master = await SecureChannel.PairAsClientAsync(addr, secret, ct); }
+                catch (Exception ex) when (!ct.IsCancellationRequested && IPAddress.TryParse(lan, out var lanIp)
+                                           && (ex is OperationCanceledException || ex is SocketException))
+                {
+                    Log('✗', $"la porta {addr.ControlPort} non risponde dall'indirizzo pubblico: provo la rete locale");
+                    addr = addr with { Ip = lanIp };
+                    Log('▶', $"TCP {addr.Ip}:{addr.ControlPort}  apertura canale di controllo (rete locale)");
+                    master = await SecureChannel.PairAsClientAsync(addr, secret, ct);
+                }
                 Log('◀', "handshake ECDH P-256 ok · chiave AES-256 derivata");
                 SetMaster(master);
+                _s.LastServerLan = lan;
                 RememberServer(addr);
                 Log('✓', "Abbinamento completato");
                 PairingCompleted?.Invoke();
@@ -732,11 +752,21 @@ namespace IpTrxCtrl.Core
                     SetStatus("Cerco il server…", false);
                     var found = await _rdv.LookupAsync(ct);
                     Stats.MqttOk = _rdv.LastOkBrokers;
+                    if (_rdv.LastLan.Length > 0 && _rdv.LastLan != _s.LastServerLan) { _s.LastServerLan = _rdv.LastLan; _s.Save(); }
                     if (found != null && !found.Equals(target))
                     {
                         target = found;
                         ctl = await TryConnectAsync(found.Value, ChannelKind.Control, ct);
                     }
+                }
+
+                // stessa rete locale: il router spesso non permette di rientrare dal proprio IP pubblico
+                if (ctl == null && target != null && IPAddress.TryParse(_s.LastServerLan, out var lanIp) && !lanIp.Equals(target.Value.Ip))
+                {
+                    var lanTarget = target.Value with { Ip = lanIp };
+                    SessionLog.Write($"PORTE provo il server sulla rete locale {lanIp}:{lanTarget.ControlPort}");
+                    ctl = await TryConnectAsync(lanTarget, ChannelKind.Control, ct);
+                    if (ctl != null) target = lanTarget;
                 }
 
                 bool reverse = false;

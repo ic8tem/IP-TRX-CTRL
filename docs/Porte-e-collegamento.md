@@ -11,7 +11,9 @@ All'avvio il server:
 3. si mette in ascolto e chiede a un server esterno (ifconfig.co) di collegarsi a quella porta: se dall'esterno non si entra, chiude la porta e ne prova un'altra (fino a 6 volte per porta);
 4. le **prime due porte utili** vengono pubblicate, cifrate, sul broker MQTT insieme all'indirizzo IP pubblico.
 
-Se il router non apre nessuna porta il server non si spegne: resta in attesa delle porte proposte dal client.
+**Router senza UPnP.** Il server usa comunque due porte locali, le verifica dall'esterno e le pubblica: funzionano se sul router c'è una DMZ o un inoltro manuale verso il PC del server, e in ogni caso dai PC della **stessa rete locale**. Se nemmeno così il client entra, il server resta in attesa delle porte proposte dal client (collegamento inverso).
+
+**Stessa rete locale.** Il server pubblica anche il suo indirizzo di rete locale (per esempio 192.168.1.20). Molti router non permettono a un PC di casa di rientrare dall'indirizzo pubblico della casa stessa: in quel caso il client prova da solo l'indirizzo locale, sia nell'abbinamento sia nei collegamenti successivi.
 
 ## Il client e il ciclo delle porte
 

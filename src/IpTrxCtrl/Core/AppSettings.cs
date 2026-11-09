@@ -117,6 +117,7 @@ namespace IpTrxCtrl.Core
         public string LastServerIp { get; set; } = "";
         public int LastServerControlPort { get; set; }
         public int LastServerAudioPort { get; set; }
+        public string LastServerLan { get; set; } = "";   // IP di rete locale del server (stessa rete del client)
         public List<string> MqttBrokers { get; set; } = new() { "broker.hivemq.com:1883", "test.mosquitto.org:1883", "broker.emqx.io:1883" };
 
         public static List<CwMacro> DefaultMacros() => new()
