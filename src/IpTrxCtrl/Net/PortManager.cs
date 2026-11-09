@@ -28,8 +28,13 @@ namespace IpTrxCtrl.Net
         public bool UpnpAvailable => _device != null;
         public string LastError { get; private set; } = "";
 
+        /// <summary>Ogni passaggio sulle porte viene scritto qui (registro delle sessioni).</summary>
+        public Action<string>? Log;
+        private void L(string text) => Log?.Invoke("PORTE " + text);
+
         public async Task<bool> DiscoverAsync(CancellationToken ct)
         {
+            L("ricerca del router UPnP (attesa massima 8 s)…");
             try
             {
                 var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -37,6 +42,7 @@ namespace IpTrxCtrl.Net
                 _device = await new NatDiscoverer().DiscoverDeviceAsync(PortMapper.Upnp, cts);
                 ExternalIp = await _device.GetExternalIPAsync();
                 CgnatSuspected = IsPrivateOrCgnat(ExternalIp);
+                L($"router UPnP trovato · IP esterno dichiarato dal router: {ExternalIp}");
 
                 // Controllo aggiuntivo: l'IP che vede internet deve coincidere con quello del router
                 IPAddress? pub = await GetPublicIpAsync(ct);
@@ -44,13 +50,16 @@ namespace IpTrxCtrl.Net
                 {
                     if (!pub.Equals(ExternalIp)) CgnatSuspected = true;
                     if (CgnatSuspected || ExternalIp == null || IsPrivateOrCgnat(ExternalIp)) ExternalIp = pub;
+                    L($"IP pubblico visto da internet: {pub}" + (CgnatSuspected ? " · NON coincide con quello del router: probabile CGNAT o doppio NAT" : " · coincide"));
                 }
+                else L("IP pubblico non verificabile dai servizi esterni");
                 return true;
             }
             catch (Exception ex)
             {
                 _device = null;
                 LastError = "UPnP non disponibile: " + ex.Message;
+                L("router UPnP non trovato: " + ex.Message);
                 ExternalIp = await GetPublicIpAsync(ct);
                 return false;
             }
@@ -59,7 +68,7 @@ namespace IpTrxCtrl.Net
         /// <summary>Apre una porta TCP libera; restituisce il numero o 0 se non riesce.</summary>
         public async Task<int> OpenRandomPortAsync(string description, CancellationToken ct)
         {
-            if (_device == null) return 0;
+            if (_device == null) { L($"{description}: nessun router UPnP, porta non aperta"); return 0; }
             HashSet<int> used = new();
             try
             {
@@ -76,14 +85,17 @@ namespace IpTrxCtrl.Net
                     var map = new Mapping(Protocol.Tcp, port, port, 0, description);
                     await _device.CreatePortMapAsync(map);
                     lock (_mappings) _mappings.Add(map);
+                    L($"{description}: porta TCP {port} aperta sul router (tentativo {i + 1})");
                     return port;
                 }
                 catch (Exception ex)
                 {
                     LastError = $"Porta {port} rifiutata: {ex.Message}";
+                    L($"{description}: porta {port} rifiutata dal router ({ex.Message})");
                     used.Add(port);
                 }
             }
+            L($"{description}: nessuna porta aperta dopo {MaxAttempts} tentativi");
             return 0;
         }
 
@@ -103,7 +115,8 @@ namespace IpTrxCtrl.Net
             Mapping? m;
             lock (_mappings) m = _mappings.FirstOrDefault(x => x.PublicPort == port);
             if (m == null || _device == null) return;
-            try { await _device.DeletePortMapAsync(m); } catch { }
+            try { await _device.DeletePortMapAsync(m); L($"porta {port} chiusa sul router"); }
+            catch (Exception ex) { L($"porta {port}: chiusura non riuscita ({ex.Message})"); }
             lock (_mappings) _mappings.Remove(m);
         }
 
@@ -113,7 +126,8 @@ namespace IpTrxCtrl.Net
             lock (_mappings) copy = _mappings.ToList();
             foreach (var m in copy)
             {
-                try { if (_device != null) await _device.DeletePortMapAsync(m); } catch { }
+                try { if (_device != null) { await _device.DeletePortMapAsync(m); L($"porta {m.PublicPort} chiusa sul router"); } }
+                catch (Exception ex) { L($"porta {m.PublicPort}: chiusura non riuscita ({ex.Message})"); }
             }
             lock (_mappings) _mappings.Clear();
         }

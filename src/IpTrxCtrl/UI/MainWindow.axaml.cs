@@ -83,6 +83,7 @@ namespace IpTrxCtrl.UI
             _node.Notice += msg => Dispatcher.UIThread.Post(() => { TxtNotice.Text = msg; TxtNotice.IsVisible = true; });
             _node.SwapRequested += answer => Dispatcher.UIThread.Post(() => AskSwap(answer));
             _node.RoleChanged += () => Dispatcher.UIThread.Post(OnRoleChanged);
+            _node.PortsFailed += reason => Dispatcher.UIThread.Post(() => ShowPortsFailed(reason));
             _node.LocalPttChanged += on => Dispatcher.UIThread.Post(() => ShowPttState(on));
             _node.Audio.Keyer.Changed += () => Dispatcher.UIThread.Post(RefreshKeyerStatus);
             _node.Audio.RxSamples += OnRxSamples;
@@ -387,6 +388,8 @@ namespace IpTrxCtrl.UI
                 : "RADIO REMOTA" + (_tel.RigName.Length > 0 ? " · " + _tel.RigName.ToUpperInvariant() : "");
             TxtPeerTitle.Text = server ? "CLIENT (OPERATORE REMOTO)" : "SERVER (STAZIONE RADIO)";
             TxtClientIpLabel.Text = server ? "IP client" : "Mio IP (client)";
+            TxtNetLocalLabel.Text = server ? "Rete server" : "Rete client";
+            TxtNetPeerLabel.Text = server ? "Rete client" : "Rete server";
             TxtPeerLevelLabel.Text = server ? "Livello audio ricevuto dal client" : "Livello audio ricevuto dal server";
             TxtInLabel.Text = server ? "Ingresso: audio RX della radio (va al client)" : "Microfono (verso la radio)";
             TxtOutLabel.Text = server ? "Uscita: verso l'ingresso TX della radio" : "Altoparlante (dalla radio)";
@@ -747,6 +750,8 @@ namespace IpTrxCtrl.UI
             TxtPeerLatency.Text = TxtLatency.Text;
             TxtServerIp.Text = string.IsNullOrEmpty(st.ServerEndpoint) ? "—" : st.ServerEndpoint;
             TxtClientIp.Text = string.IsNullOrEmpty(st.ClientEndpoint) ? (IsClient ? "— · LAN " + Node.LanIp() : "—") : st.ClientEndpoint;
+            TxtNetLocal.Text = st.LocalNet.Length > 0 ? st.LocalNet : "verifico IPv4 / IPv6…";
+            TxtNetPeer.Text = st.Connected && st.PeerNet.Length > 0 ? st.PeerNet : "—";
             if (st.Connected && IsClient) PanelFallbackClient.IsVisible = false;
             if (IsClient && _s.PeerCallsign.Length > 0 && !TxtRoleLine.Text!.Contains(_s.PeerCallsign)) ApplyRoleTexts();
         }
@@ -983,6 +988,43 @@ namespace IpTrxCtrl.UI
 
         internal int CurrentPitch => _s.CwPitch;
         internal RigTelemetry Telemetry => _tel;
+
+        // ================================================================= porte non aperte: il programma si spegne
+
+        private bool _portsFailedShown;
+
+        private async void ShowPortsFailed(string reason)
+        {
+            if (_portsFailedShown) return;
+            _portsFailedShown = true;
+            Program.LogError("SPEGNIMENTO: porte non aperte con UPnP · " + reason);
+            var exit = new Button { Content = "Exit", MinWidth = 110, HorizontalAlignment = HorizontalAlignment.Right };
+            exit.Classes.Add("accent");
+            var w = new Window
+            {
+                Title = "IP-TRX-CTRL",
+                Width = 520,
+                SizeToContent = SizeToContent.Height,
+                CanResize = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Content = new StackPanel
+                {
+                    Margin = new Thickness(26),
+                    Spacing = 12,
+                    Children =
+                    {
+                        new TextBlock { Text = "Io mi spengo perché non riesco a funzionare.", FontSize = 18, FontWeight = FontWeight.Bold, TextWrapping = TextWrapping.Wrap },
+                        new TextBlock { Text = "Non riesco ad aprire le due porte sul router con UPnP: senza porte aperte il client non può collegarsi a questo server.", FontSize = 14, TextWrapping = TextWrapping.Wrap },
+                        new TextBlock { Text = "Motivo: " + reason, FontSize = 13, TextWrapping = TextWrapping.Wrap, Foreground = this.FindResource("B.Muted") as IBrush },
+                        new TextBlock { Text = "Attiva UPnP sul router e riavvia il programma. Il dettaglio è nel registro sessioni.log (Impostazioni › Apri cartella dati).", FontSize = 13, TextWrapping = TextWrapping.Wrap },
+                        exit
+                    }
+                }
+            };
+            exit.Click += (_, _) => w.Close();
+            await w.ShowDialog(this);
+            Close();
+        }
 
         // ================================================================= varie
 

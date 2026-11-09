@@ -155,7 +155,7 @@
                 <TextBlock x:Name="TxtLed" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource B.Muted}" VerticalAlignment="Center" Text="RX" />
               </StackPanel>
             </Grid>
-            <Grid ColumnDefinitions="130,*" RowDefinitions="28,28,28,28,28">
+            <Grid ColumnDefinitions="130,*" RowDefinitions="28,28,28,28,28,Auto,Auto">
               <TextBlock Text="Nominativo" Classes="sub" VerticalAlignment="Center" />
               <TextBlock x:Name="TxtPeerCall" Grid.Column="1" Classes="mono" FontWeight="SemiBold" VerticalAlignment="Center" Text="—" />
               <TextBlock Grid.Row="1" Text="IP server" Classes="sub" VerticalAlignment="Center" />
@@ -166,6 +166,10 @@
               <TextBlock x:Name="TxtPeerSince" Grid.Row="3" Grid.Column="1" Classes="mono" VerticalAlignment="Center" Text="—" />
               <TextBlock Grid.Row="4" Text="Latenza" Classes="sub" VerticalAlignment="Center" />
               <TextBlock x:Name="TxtPeerLatency" Grid.Row="4" Grid.Column="1" Classes="mono" VerticalAlignment="Center" Text="—" />
+              <TextBlock Grid.Row="5" x:Name="TxtNetLocalLabel" Text="Rete client" Classes="sub" Margin="0,5,0,0" />
+              <TextBlock x:Name="TxtNetLocal" Grid.Row="5" Grid.Column="1" Classes="mono" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" Text="verifico IPv4 / IPv6…" />
+              <TextBlock Grid.Row="6" x:Name="TxtNetPeerLabel" Text="Rete server" Classes="sub" Margin="0,5,0,0" />
+              <TextBlock x:Name="TxtNetPeer" Grid.Row="6" Grid.Column="1" Classes="mono" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" Text="—" />
             </Grid>
             <TextBlock x:Name="TxtPeerLevelLabel" Classes="sub" Text="Livello audio ricevuto dal server" />
             <ProgressBar x:Name="PbPeerLevel" />

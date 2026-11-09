@@ -17,7 +17,7 @@ Su Windows: Win+R, scrivi `%APPDATA%\IP-TRX-CTRL` e premi Invio.
 | File | Contenuto |
 |---|---|
 | `errori.log` | errori imprevisti, con data, ora e punto del programma in cui sono avvenuti. Il file compare solo dopo il primo errore |
-| `sessioni.log` | registro dei collegamenti: abbinamento (compreso il dialogo con i broker MQTT), connessioni, cambi di ruolo, rilasci del PTT di sicurezza. Ora in UTC |
+| `sessioni.log` | registro dei collegamenti: ogni passaggio sulle porte (righe `PORTE`: ricerca del router UPnP, porte aperte o rifiutate, IP pubblico, chiusura), tipo di rete (righe `RETE`: IPv4 / IPv6), abbinamento con il dialogo MQTT, connessioni, cambi di ruolo, rilasci del PTT di sicurezza. Ora in UTC |
 | `settings.json` | impostazioni |
 | `pairing.key` | chiave dell'abbinamento, cifrata (Windows: con l'utente di Windows; Linux/Raspberry: legata a macchina e utente). Su macOS la chiave è nel Portachiavi, voce «IP-TRX-CTRL» |
 | `WAV/` | i file dei messaggi del keyer |
@@ -38,6 +38,7 @@ Le segnalazioni si aprono nella scheda **Issues** del repository.
 
 | Sintomo | Cosa controllare |
 |---|---|
+| Popup «Io mi spengo perché non riesco a funzionare» con il pulsante Exit (server) | il router non ha aperto le due porte con UPnP: attiva UPnP sul router e riavvia. Le righe `PORTE` di `sessioni.log` dicono quale passaggio è fallito |
 | L'abbinamento si ferma con «la porta … non risponde» | UPnP attivo sul router del server; se l'operatore usa il CGNAT il server non è raggiungibile da internet |
 | «nessun broker disponibile» | connessione internet del PC, porta 1883 non bloccata dalla rete |
 | «Hamlib non trovato» (Linux, Raspberry, macOS) | `sudo apt install libhamlib-utils` oppure `brew install hamlib` |

@@ -28,6 +28,8 @@ namespace IpTrxCtrl.Core
         public int MqttOk = -1;            // broker che hanno risposto (-1 sconosciuto)
         public string ServerEndpoint = "";  // IP pubblico e porte del server
         public string ClientEndpoint = "";  // IP pubblico e di rete locale del client
+        public string LocalNet = "";        // IPv4 / IPv6 di questo PC
+        public string PeerNet = "";         // IPv4 / IPv6 dell'altro PC
     }
 
     /// <summary>
@@ -58,6 +60,8 @@ namespace IpTrxCtrl.Core
         public event Action? RoleChanged;
         public event Action<string>? Notice;
         public event Action<bool>? LocalPttChanged;
+        /// <summary>Server: il router non apre le porte con UPnP; il programma deve chiudersi (motivo).</summary>
+        public event Action<string>? PortsFailed;
         /// <summary>Registro del dialogo di abbinamento (simbolo, testo).</summary>
         public event MqttLog? PairingLog;
 
@@ -157,7 +161,7 @@ namespace IpTrxCtrl.Core
             await StopServerAsync(!keepChannels);
             _serverCts = new CancellationTokenSource();
             var ct = _serverCts.Token;
-            _ports = new PortManager();
+            _ports = new PortManager { Log = SessionLog.Write };
             SetStatus("Apertura porte sul router…", false);
 
             bool upnp = await _ports.DiscoverAsync(ct);
@@ -166,8 +170,17 @@ namespace IpTrxCtrl.Core
                 _ctlPort = await _ports.OpenRandomPortAsync("IP-TRX-CTRL controllo", ct);
                 _audPort = await _ports.OpenRandomPortAsync("IP-TRX-CTRL audio", ct);
             }
-            if (_ctlPort == 0) _ctlPort = _ports.PickLocalPort();
-            if (_audPort == 0) _audPort = _ports.PickLocalPort();
+            if (!upnp || _ctlPort == 0 || _audPort == 0)
+            {
+                string reason = !upnp
+                    ? "il router non risponde con UPnP (" + _ports.LastError + ")"
+                    : $"il router non ha aperto {(_ctlPort == 0 && _audPort == 0 ? "nessuna delle due porte" : "una delle due porte")} ({_ports.LastError})";
+                SessionLog.Write("PORTE impossibile aprire le due porte: " + reason + " · il programma si spegne");
+                await _ports.CloseAllAsync();
+                SetStatus("Porte non aperte: il programma si spegne", false);
+                PortsFailed?.Invoke(reason);
+                return;
+            }
 
             _ctlListener = new TcpListener(IPAddress.Any, _ctlPort);
             _audListener = new TcpListener(IPAddress.Any, _audPort);
@@ -179,8 +192,6 @@ namespace IpTrxCtrl.Core
 
             if (_ports.CgnatSuspected)
                 Notice?.Invoke("Il tuo operatore sembra usare il CGNAT: il server potrebbe non essere raggiungibile da internet.");
-            else if (!upnp)
-                Notice?.Invoke("UPnP non disponibile sul router: abilitalo, altrimenti il client non potrà collegarsi.");
             UpdateServerEndpoint();
             SetStatus(IsPaired ? "In attesa del client" : "In attesa dell'abbinamento", false);
         }
@@ -346,8 +357,15 @@ namespace IpTrxCtrl.Core
             if (_ports == null) return;
             try { _audListener?.Stop(); } catch { }
             await _ports.ClosePortAsync(_audPort);
+            SessionLog.Write($"PORTE il client non raggiunge la porta audio {_audPort}: ne apro un'altra");
             int p = _ports.UpnpAvailable ? await _ports.OpenRandomPortAsync("IP-TRX-CTRL audio", ct) : 0;
-            if (p == 0) p = _ports.PickLocalPort();
+            if (p == 0)
+            {
+                string reason = "il router non ha aperto la nuova porta audio (" + _ports.LastError + ")";
+                SessionLog.Write("PORTE " + reason + " · il programma si spegne");
+                PortsFailed?.Invoke(reason);
+                return;
+            }
             _audPort = p;
             _audListener = new TcpListener(IPAddress.Any, p);
             _audListener.Start();
@@ -534,7 +552,7 @@ namespace IpTrxCtrl.Core
 
         private async Task SendHelloAsync(SecureChannel ch)
         {
-            try { await ch.SendAsync(new MsgWriter(Msg.Hello).Str(_s.Callsign).Build()); } catch { }
+            try { await ch.SendAsync(new MsgWriter(Msg.Hello).Str(_s.Callsign).Str(Stats.LocalNet).Build()); } catch { }
         }
 
         private bool IsServer => _s.Role == NodeRole.Server;
@@ -552,7 +570,9 @@ namespace IpTrxCtrl.Core
                     {
                         case Msg.Audio: OnAudioPacket(r); break;
                         case Msg.Hello:
-                            _s.PeerCallsign = r.Str(); _s.Save(); StatsChanged?.Invoke(); break;
+                            _s.PeerCallsign = r.Str();
+                            Stats.PeerNet = r.AtEnd ? "" : r.Str();
+                            _s.Save(); StatsChanged?.Invoke(); break;
                         case Msg.PeerInfo:
                             _clientPublicIp = r.Str(); UpdateClientEndpoint(); StatsChanged?.Invoke(); break;
                         case Msg.Ping:
@@ -883,6 +903,7 @@ namespace IpTrxCtrl.Core
         private async Task HousekeepingAsync(CancellationToken ct)
         {
             int tick = 0;
+            DateTime lastNet = DateTime.MinValue;
             while (!ct.IsCancellationRequested)
             {
                 try { await Task.Delay(250, ct); } catch { break; }
@@ -900,6 +921,22 @@ namespace IpTrxCtrl.Core
                         _remotePtt = false;
                         await ApplyPttAsync();
                         SessionLog.Write("PTT remoto rilasciato dal watchdog (nessun rinnovo entro 1 s)");
+                    }
+
+                    if (DateTime.UtcNow - lastNet > TimeSpan.FromMinutes(5))
+                    {
+                        lastNet = DateTime.UtcNow;
+                        _ = Task.Run(async () =>
+                        {
+                            string net = await NetInfo.DescribeAsync(ct);
+                            if (net != Stats.LocalNet)
+                            {
+                                Stats.LocalNet = net;
+                                SessionLog.Write("RETE questo PC: " + net);
+                                var c = _control;
+                                if (c != null) await SendHelloAsync(c);
+                            }
+                        });
                     }
 
                     if (IsServer && DateTime.UtcNow - _lastDevicePoll > TimeSpan.FromSeconds(3))

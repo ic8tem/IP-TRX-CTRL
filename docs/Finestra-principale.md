@@ -14,6 +14,7 @@ La finestra del client è divisa in riquadri. Il programma si chiama **IP-TRX-CT
 ## Server (stazione radio)
 
 - Nominativo del server, **IP del server con le porte**, **IP del client** (pubblico e di rete locale), ora di collegamento, latenza.
+- **Rete** di questo PC e dell'altro: se c'è IPv4 e/o IPv6 verso internet (con «IPv6 solo locale» quando la scheda ha un indirizzo IPv6 ma internet non risponde in IPv6).
 - Livello dell'audio che arriva dal server.
 - **Spia RX/TX** in alto a destra: grigia in ricezione, **rossa lampeggiante** quando la radio è in trasmissione (anche durante un messaggio F1…F8).
 - **PTT**: pulsante "premi e tieni", anche con la barra spaziatrice. Sotto è indicato il metodo PTT impostato sul server (RTS, DTR, CAT o TCI) e il ritardo.
