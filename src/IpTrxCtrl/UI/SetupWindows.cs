@@ -412,7 +412,11 @@ SCHEDE AUDIO DEL SERVER
 Il client vede se le schede del server sono silenziate dal sistema operativo e può togliere il mute.
 
 AUDIO
-Sempre 8 kHz, 16 bit mono, cifrato AES-256-GCM.";
+Sempre 8 kHz, 16 bit mono, cifrato AES-256-GCM.
+
+ERRORI E REGISTRI
+Impostazioni › «Apri cartella dati»: errori.log (errori imprevisti) e sessioni.log (collegamenti e abbinamento).
+Windows: %APPDATA%\IP-TRX-CTRL · Linux, Raspberry Pi e macOS: ~/.config/IP-TRX-CTRL";
 
         public HelpWindow()
         {

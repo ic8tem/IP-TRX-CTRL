@@ -16,6 +16,16 @@ Gli installatori sono nella pagina **Releases**:
 
 Per ogni sistema c'è anche una versione portatile, senza installazione.
 
+## Errori e registri
+
+Il programma scrive gli errori in `errori.log` e il registro dei collegamenti in `sessioni.log`, nella cartella dei dati:
+
+- Windows: `%APPDATA%\IP-TRX-CTRL` (Win+R, scrivi il percorso e premi Invio)
+- Linux e Raspberry Pi: `~/.config/IP-TRX-CTRL`
+- macOS: `~/.config/IP-TRX-CTRL`
+
+Dal programma: **Impostazioni › Apri cartella dati**. Per segnalare un problema apri una **Issue** e allega `errori.log` (e `sessioni.log` per i problemi di collegamento). Dettagli in `docs/Registri-e-risoluzione-problemi.md`.
+
 La documentazione è nella cartella `docs`. Le note sulle licenze dei componenti di terze parti sono in `THIRD-PARTY-NOTICES.txt` e nella finestra «Informazioni e licenze» del programma.
 
 Uso dichiarato: attività radioamatoriale.
