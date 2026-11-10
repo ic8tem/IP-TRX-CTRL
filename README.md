@@ -30,6 +30,17 @@ La documentazione è nella cartella `docs`. Le note sulle licenze dei componenti
 
 Uso dichiarato: attività radioamatoriale.
 
+## Versioni compatibili
+
+Server e client devono avere versioni dello stesso protocollo:
+
+| Versioni | Protocollo | Compatibili con |
+|---|---|---|
+| 0.1.0 – 0.1.3 | 1 | solo le 0.1.x |
+| 0.2.0 – 0.2.3 | 2 | tutte le 0.2.x (alcune funzioni richiedono una versione minima su entrambi i PC) |
+
+Dettagli e controllo automatico: [docs/Versioni-compatibili.md](docs/Versioni-compatibili.md).
+
 ## Licenza
 
 IP-TRX-CTRL è software libero, Copyright (C) 2026 IC8TEM, distribuito secondo la **GNU General Public License versione 3 o successiva** (file [`LICENSE`](LICENSE)), senza alcuna garanzia. Le licenze dei componenti di terze parti sono in `THIRD-PARTY-NOTICES.txt`.

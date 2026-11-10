@@ -33,6 +33,7 @@ namespace IpTrxCtrl.Core
         public string LocalNet = "";        // IPv4 / IPv6 di questo PC
         public string PeerNet = "";         // IPv4 / IPv6 dell'altro PC
         public string AudioPath = "";       // «TCP» o «UDP» (percorso dell'audio)
+        public string PeerVersion = "";     // versione del programma sull'altro PC
     }
 
     /// <summary>
@@ -65,6 +66,8 @@ namespace IpTrxCtrl.Core
         public event Action<bool>? LocalPttChanged;
         /// <summary>Server: il router non apre le porte con UPnP; il programma deve chiudersi (motivo).</summary>
         public event Action<string>? PortsFailed;
+        /// <summary>Versione dell'altro PC da segnalare (testo, compatibile sì/no).</summary>
+        public event Action<string, bool>? VersionWarning;
         /// <summary>Stato di UPnP sul router di questo PC (server e client), controllato ogni 60 s.</summary>
         public UpnpCheck Upnp { get; } = new();
         /// <summary>Server: porte aperte ma non raggiungibili da internet (testo con porte e rimedi).</summary>
@@ -631,7 +634,7 @@ namespace IpTrxCtrl.Core
         {
             var addr = CurrentServerAddress;
             if (addr == null || _rdv == null || _master == null) return;
-            bool ok = await _rdv.PublishAsync(addr.Value, LanIp(), ct);
+            bool ok = await _rdv.PublishAsync(addr.Value, LanIp(), AppVersion.Tag, ct);
             Stats.MqttOk = _rdv.LastOkBrokers;
             FallbackCodeChanged?.Invoke(ok ? null : Crypto.MakeFallbackCode(_master, addr.Value));
         }
@@ -690,7 +693,19 @@ namespace IpTrxCtrl.Core
             Log('·', $"codice letto · indirizzo nel codice {addr.Ip} · porte {addr.ControlPort} / {addr.AudioPort}");
             var found = await PairingRendezvous.ClientFindAsync(secret, _s.Callsign, _s.MqttBrokers, Log, ct);
             string lan = "";
-            if (found != null) { addr = found.Value.addr; lan = found.Value.lan; }
+            if (found != null)
+            {
+                addr = found.Value.addr; lan = found.Value.lan;
+                var (sp, sv) = AppVersion.Parse(found.Value.version);
+                if (!AppVersion.Compatible(sp))
+                {
+                    string msg = AppVersion.Notes(sp, sv, true);
+                    Log('✗', msg);
+                    return msg;
+                }
+                string n = AppVersion.Notes(sp, sv, true);
+                Log(n.Length > 0 ? '·' : '✓', n.Length > 0 ? n : $"versioni compatibili: server {sv}, client {AppVersion.Text}");
+            }
             else Log('·', "nessuna risposta dai broker: provo l'indirizzo scritto nel codice");
 
             try
@@ -989,7 +1004,7 @@ namespace IpTrxCtrl.Core
 
         private async Task SendHelloAsync(SecureChannel ch)
         {
-            try { await ch.SendAsync(new MsgWriter(Msg.Hello).Str(_s.Callsign).Str(Stats.LocalNet).Build()); } catch { }
+            try { await ch.SendAsync(new MsgWriter(Msg.Hello).Str(_s.Callsign).Str(Stats.LocalNet).Str(AppVersion.Tag).Build()); } catch { }
         }
 
         private bool IsServer => _s.Role == NodeRole.Server;
@@ -1007,9 +1022,17 @@ namespace IpTrxCtrl.Core
                     {
                         case Msg.Audio: OnAudioPacket(r); break;
                         case Msg.Hello:
-                            _s.PeerCallsign = r.Str();
-                            Stats.PeerNet = r.AtEnd ? "" : r.Str();
-                            _s.Save(); StatsChanged?.Invoke(); break;
+                            {
+                                _s.PeerCallsign = r.Str();
+                                Stats.PeerNet = r.AtEnd ? "" : r.Str();
+                                var (pp, pv) = AppVersion.Parse(r.AtEnd ? "" : r.Str());
+                                Stats.PeerVersion = AppVersion.Show(pv);
+                                string note = AppVersion.Notes(pp, pv, !IsServer);
+                                SessionLog.Write($"VERSIONE questo PC {AppVersion.Text} · altro PC {Stats.PeerVersion} (protocollo {pp})" + (note.Length > 0 ? " · " + note : " · compatibili"));
+                                if (note.Length > 0) VersionWarning?.Invoke(note, AppVersion.Compatible(pp));
+                                _s.Save(); StatsChanged?.Invoke();
+                            }
+                            break;
                         case Msg.PeerInfo:
                             _clientPublicIp = r.Str(); UpdateClientEndpoint(); StatsChanged?.Invoke(); break;
                         case Msg.Ping:

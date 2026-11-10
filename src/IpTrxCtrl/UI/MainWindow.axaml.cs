@@ -87,6 +87,7 @@ namespace IpTrxCtrl.UI
             _node.RoleChanged += () => Dispatcher.UIThread.Post(OnRoleChanged);
             _node.PortsFailed += reason => Dispatcher.UIThread.Post(() => ShowPortsFailed(reason));
             _node.Upnp.Changed += () => Dispatcher.UIThread.Post(OnUpnpChanged);
+            _node.VersionWarning += (text, ok) => Dispatcher.UIThread.Post(() => ShowVersionWarning(text, ok));
             ChipUpnp.PointerPressed += (_, _) => ShowUpnpPopup(true);
             _node.PortsUnreachable += text => Dispatcher.UIThread.Post(() => ShowPortsUnreachable(text));
             _node.LocalPttChanged += on => Dispatcher.UIThread.Post(() => ShowPttState(on));
@@ -834,6 +835,7 @@ namespace IpTrxCtrl.UI
             TxtNetLocal.Text = st.LocalNet.Length > 0 ? st.LocalNet : "verifico IPv4 / IPv6…";
             TxtNetPeer.Text = st.Connected && st.PeerNet.Length > 0 ? st.PeerNet : "—";
             if (st.Connected && st.AudioPath.Length > 0) TxtNetPeer.Text += " · audio " + st.AudioPath;
+            if (st.Connected && st.PeerVersion.Length > 0) TxtNetPeer.Text += " · versione " + st.PeerVersion;
             if (st.Connected && IsClient) PanelFallbackClient.IsVisible = false;
             if (IsClient && _s.PeerCallsign.Length > 0 && !TxtRoleLine.Text!.Contains(_s.PeerCallsign)) ApplyRoleTexts();
         }
@@ -1213,6 +1215,39 @@ namespace IpTrxCtrl.UI
             };
             ok.Click += (_, _) => w.Close();
             try { await w.ShowDialog(this); } finally { _upnpPopupOpen = false; }
+        }
+
+        private string _versionShown = "";
+
+        /// <summary>Versione dell'altro PC non compatibile o vecchia: finestra (una volta per collegamento uguale).</summary>
+        private async void ShowVersionWarning(string text, bool compatible)
+        {
+            if (_versionShown == text) return;
+            _versionShown = text;
+            var ok = new Button { Content = "OK", MinWidth = 110, HorizontalAlignment = HorizontalAlignment.Right };
+            ok.Classes.Add("accent");
+            var w = new Window
+            {
+                Title = "IP-TRX-CTRL · versioni",
+                Width = 560,
+                SizeToContent = SizeToContent.Height,
+                CanResize = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Content = new StackPanel
+                {
+                    Margin = new Thickness(26),
+                    Spacing = 12,
+                    Children =
+                    {
+                        new TextBlock { Text = compatible ? "L'altro PC ha una versione più vecchia" : "Versioni non compatibili", FontSize = 18, FontWeight = FontWeight.Bold, TextWrapping = TextWrapping.Wrap },
+                        new SelectableTextBlock { Text = text, FontSize = 14, TextWrapping = TextWrapping.Wrap },
+                        new TextBlock { Text = $"Questo PC: IP-TRX-CTRL {AppVersion.Text}. Tabella delle versioni compatibili: Aiuto › Versioni compatibili.", FontSize = 13, TextWrapping = TextWrapping.Wrap, Foreground = this.FindResource("B.Muted") as IBrush },
+                        ok
+                    }
+                }
+            };
+            ok.Click += (_, _) => w.Close();
+            await w.ShowDialog(this);
         }
 
         private bool _unreachableShown;

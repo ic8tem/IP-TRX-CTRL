@@ -151,4 +151,6 @@ jobs:
             macOS: Hamlib con `brew install hamlib`.
             Le versioni *portatile* non richiedono installazione.
 
+            **Compatibilità**: server e client devono essere entrambi 0.2.x (protocollo 2); le 0.1.x non sono compatibili. Tabella completa: [Versioni compatibili](https://github.com/ic8tem/IP-TRX-CTRL/blob/main/docs/Versioni-compatibili.md).
+
             `hamlib-…-sorgenti.tar.gz`: sorgenti di Hamlib (GPL 2 / LGPL 2.1), la stessa versione di rigctld inclusa negli installatori Windows.

@@ -20,6 +20,8 @@ I ruoli si scelgono al primo avvio e si possono invertire in qualsiasi momento.
 - Pedale PTT e tasto CW meccanico su una porta seriale del client.
 - Ciclo delle porte tra server e client (UPnP verificato dall'esterno, collegamento inverso, 20 giri) e audio su UDP quando possibile: vedi [Porte e collegamento](Porte-e-collegamento.md).
 - Sei temi di colore: Chiaro, Notte, Nero, Blu, Viola, Verde.
+
+Prima di aggiornare uno dei due PC guarda le [Versioni compatibili](Versioni-compatibili.md).
 - Un unico codice sorgente per **Windows 64 bit, Windows 32 bit, macOS, Linux e Raspberry Pi**.
 
 ![Bozzetto in modo CW, tema Chiaro](images/IP-TRX-CTRL_CW_Chiaro.png)

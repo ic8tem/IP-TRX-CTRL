@@ -510,6 +510,19 @@ Impostazioni › «Programmi digitali». Nel programma (WSJT-X, JTDX, JS8Call, f
   ingresso «Monitor of IP-TRX-CTRL_RX», uscita «IP-TRX-CTRL_TX».
 Quando il programma chiede il PTT, IP-TRX-CTRL trasmette con l'audio del programma invece del microfono.
 
+VERSIONI COMPATIBILI
+Server e client devono avere versioni dello stesso «protocollo». La versione di questo PC è nella finestra «Informazioni e licenze».
+  Versioni          Protocollo   Compatibili con
+  0.1.0 – 0.1.3     1            solo 0.1.x
+  0.2.0 – 0.2.3     2            tutte le 0.2.x
+Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
+  scelta delle schede audio del server dal client ......... 0.2.1 o successiva
+  server senza UPnP e collegamento sulla rete locale ...... 0.2.2 o successiva
+  scambio della versione e controllo automatico ........... 0.2.3 o successiva
+Dalla 0.2.3 i due PC si scambiano la versione (sul broker MQTT durante l'abbinamento e all'inizio di ogni
+collegamento). Se il protocollo è diverso l'abbinamento si ferma e compare una finestra; se l'altro PC è
+più vecchio compare un avviso. La versione dell'altro PC si vede nella riga della sua rete.
+
 UPNP E LED
 All'avvio (server e client) una finestra dice se il router ha UPnP attivo e, se manca, la causa probabile e cosa
 fare. Il LED «UPnP» in alto è verde lampeggiante finché il router risponde (controllo ogni 60 s), rosso se manca,
