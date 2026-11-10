@@ -65,6 +65,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item THIRD-PARTY-NOTICES.txt dist/${{ matrix.rid }}/
           Compress-Archive -Path dist/${{ matrix.rid }}/IP-TRX-CTRL.exe, dist/${{ matrix.rid }}/THIRD-PARTY-NOTICES.txt -DestinationPath "out/IP-TRX-CTRL-$env:VERSION-${{ matrix.rid }}-portatile.zip"
+          # versione di Hamlib inclusa: serve alla release per allegare i sorgenti giusti (GPL)
+          Copy-Item src/IpTrxCtrl/hamlib/VERSION.txt "out/hamlib-version-${{ matrix.hamlib }}.txt"
 
       # ---------------------------------------------------------------- Linux e Raspberry: .deb + tar.gz portatile
       - name: Pacchetti Linux
@@ -109,6 +111,28 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      - name: Sorgenti di Hamlib (obbligo GPL per i rigctld inclusi negli installatori Windows)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          VERS=$(cat artifacts/hamlib-version-*.txt 2>/dev/null | tr -d '\r' | sort -u)
+          rm -f artifacts/hamlib-version-*.txt
+          for V in $VERS; do
+            [ -z "$V" ] && continue
+            echo "Hamlib incluso: $V"
+            URL=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/Hamlib/Hamlib/releases/tags/$V" \
+                  | jq -r --arg n "hamlib-$V.tar.gz" '.assets[] | select(.name == $n) | .browser_download_url' || true)
+            if [ -n "$URL" ]; then
+              curl -fsSL -o "artifacts/hamlib-$V-sorgenti.tar.gz" "$URL"
+            else
+              # nessun archivio ufficiale tra i file della release: sorgenti dal tag
+              curl -fsSL -o "artifacts/hamlib-$V-sorgenti.tar.gz" "https://github.com/Hamlib/Hamlib/archive/refs/tags/$V.tar.gz"
+            fi
+            ls -l "artifacts/hamlib-$V-sorgenti.tar.gz"
+          done
+
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
@@ -125,3 +149,5 @@ jobs:
             Linux e Raspberry: `sudo apt install ./ip-trx-ctrl_…deb` installa anche Hamlib. Per usare la porta seriale della radio: `sudo usermod -aG dialout $USER`.
             macOS: Hamlib con `brew install hamlib`.
             Le versioni *portatile* non richiedono installazione.
+
+            `hamlib-…-sorgenti.tar.gz`: sorgenti di Hamlib (GPL 2 / LGPL 2.1), la stessa versione di rigctld inclusa negli installatori Windows.

@@ -13,9 +13,10 @@ Sorgenti: https://github.com/Hamlib/Hamlib
 - Windows: rigctld, rigctl e le loro DLL sono inclusi nell'eseguibile come
   programmi separati, non modificati, avviati in background e usati via TCP.
   I testi completi di GPL e LGPL sono inclusi (Informazioni e licenze).
-  La versione inclusa e' indicata nella finestra Informazioni e licenze;
-  i sorgenti di quella versione si trovano nella pagina Releases del
-  repository indicato sopra.
+  La versione inclusa e' indicata nella finestra Informazioni e licenze.
+  I sorgenti completi di quella stessa versione sono allegati a ogni release
+  di IP-TRX-CTRL (file hamlib-<versione>-sorgenti.tar.gz):
+  https://github.com/ic8tem/IP-TRX-CTRL/releases
 - Linux, Raspberry Pi e macOS: Hamlib non e' incluso; il programma usa
   rigctld installato nel sistema (pacchetto libhamlib-utils / hamlib o Homebrew).
 
