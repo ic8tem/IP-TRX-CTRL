@@ -1167,24 +1167,16 @@ namespace IpTrxCtrl.UI
             if (u.State == UpnpState.Ok)
             {
                 title = $"UPnP attivo sul router ({role})";
-                body = $"Il router risponde con {u.Method}: il programma può aprire da solo le porte. IP esterno dichiarato dal router: {u.ExternalIp}.
-
-" +
+                body = $"Il router risponde con {u.Method}: il programma può aprire da solo le porte. IP esterno dichiarato dal router: {u.ExternalIp}.\n\n" +
                        "Il LED verde «UPnP» in alto lampeggia finché il router continua a rispondere (controllo ogni 60 secondi).";
             }
             else if (u.State == UpnpState.Missing)
             {
                 title = $"UPnP non trovato sul router ({role})";
-                body = (u.LastOk != DateTime.MinValue ? "UPnP era attivo ma il router ha smesso di rispondere.
-
-" : "") +
+                body = (u.LastOk != DateTime.MinValue ? "UPnP era attivo ma il router ha smesso di rispondere.\n\n" : "") +
                        (IsClient
-                           ? "Il client funziona lo stesso se il server ha le porte aperte; senza UPnP però non può proporre le sue porte quando quelle del server non bastano.
-
-"
-                           : "Il server userà porte locali: vanno bene dalla stessa rete locale, oppure da fuori con una DMZ o un inoltro manuale sul router.
-
-") +
+                           ? "Il client funziona lo stesso se il server ha le porte aperte; senza UPnP però non può proporre le sue porte quando quelle del server non bastano.\n\n"
+                           : "Il server userà porte locali: vanno bene dalla stessa rete locale, oppure da fuori con una DMZ o un inoltro manuale sul router.\n\n") +
                        u.Diagnosis;
             }
             else { title = "UPnP: ricerca in corso"; body = "Sto cercando il router: attendi qualche secondo."; }
