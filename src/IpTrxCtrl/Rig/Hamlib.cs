@@ -159,6 +159,33 @@ namespace IpTrxCtrl.Rig
             return null;
         }
 
+        /// <summary>rigctld «Dummy» (modello 1): con il CAT via TCI risponde ai comandi non legati alla radio
+        /// (\dump_state, \chk_vfo…) per i programmi Hamlib. Null se rigctld non c'è: il TCI funziona lo stesso.</summary>
+        public static Process? StartDummyRigctld(AppSettings s, int localPort)
+        {
+            string? exe = Find("rigctld", s);
+            if (exe == null) return null;
+            var psi = new ProcessStartInfo(exe, $"-m 1 -T 127.0.0.1 -t {localPort}")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = Path.GetDirectoryName(exe)!
+            };
+            try
+            {
+                var p = Process.Start(psi);
+                if (p == null) return null;
+                p.OutputDataReceived += (_, _) => { };
+                p.ErrorDataReceived += (_, _) => { };
+                p.BeginOutputReadLine();
+                p.BeginErrorReadLine();
+                return p;
+            }
+            catch { return null; }
+        }
+
         public static Process? StartRigctld(AppSettings s, int localPort)
         {
             string? exe = Find("rigctld", s);

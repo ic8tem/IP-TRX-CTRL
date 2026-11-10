@@ -1,6 +1,6 @@
 # IP-TRX-CTRL
 
-Comando a distanza di una radio HF via internet: audio bidirezionale a 8 kHz cifrato AES-256, controllo CAT con Hamlib, PTT (CAT, RTS, DTR, VOX, TCI), keyer con messaggi WAV in SSB e macro di testo in CW, cascata e decodificatore CW, VFO B con split, potenza TX, protezione ROS (avviso e blocco della trasmissione), mute delle schede audio del server. Sul client: programmi digitali (WSJT-X, JTDX, fldigi…) con rigctld locale e cavi audio virtuali, pedale PTT e tasto CW meccanico su porta seriale. Porte aperte con UPnP e verificate dall'esterno, collegamento inverso e audio su UDP quando possibile.
+Comando a distanza di una radio HF via internet: audio bidirezionale a 8 kHz cifrato AES-256, controllo CAT con Hamlib o TCI (anche l'audio della radio via TCI, senza schede né cavi), PTT (CAT, RTS, DTR, VOX, TCI), keyer con messaggi WAV in SSB e macro di testo in CW, cascata e decodificatore CW, VFO B con split, potenza TX, protezione ROS (avviso e blocco della trasmissione), mute delle schede audio del server. Sul client: programmi digitali (WSJT-X, JTDX, fldigi…) con rigctld locale e cavi audio virtuali, pedale PTT e tasto CW meccanico su porta seriale. Porte aperte con UPnP e verificate dall'esterno, collegamento inverso e audio su UDP quando possibile.
 
 Un unico programma per i due PC: **server** (la radio è collegata qui) e **client** (l'operatore). I ruoli si scelgono al primo avvio e si possono invertire.
 
@@ -37,7 +37,7 @@ Server e client devono avere versioni dello stesso protocollo:
 | Versioni | Protocollo | Compatibili con |
 |---|---|---|
 | 0.1.0 – 0.1.3 | 1 | solo le 0.1.x |
-| 0.2.0 – 0.2.4 | 2 | tutte le 0.2.x (alcune funzioni richiedono una versione minima su entrambi i PC) |
+| 0.2.0 – 0.2.5 | 2 | tutte le 0.2.x (alcune funzioni richiedono una versione minima su entrambi i PC) |
 
 Dettagli e controllo automatico: [docs/Versioni-compatibili.md](docs/Versioni-compatibili.md).
 

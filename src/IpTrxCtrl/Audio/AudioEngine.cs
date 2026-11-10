@@ -105,7 +105,11 @@ namespace IpTrxCtrl.Audio
         public const int FrameMs = 40;
         public const int FrameSamples = SampleRate * FrameMs / 1000;   // 320
 
-        private readonly IAudioBackend _backend = AudioBackends.Create();
+        private readonly IAudioBackend _native = AudioBackends.Create();
+        private readonly TciAudioBackend _tci = new();
+        private IAudioBackend? _active;
+        /// <summary>Server con il CAT via TCI: negli elenchi delle schede compare anche «TCI».</summary>
+        public bool OfferTci { get; set; }
         private readonly short[] _rxCopy = new short[FrameSamples];
         private readonly object _localLock = new();
         private short[]? _local;
@@ -116,23 +120,32 @@ namespace IpTrxCtrl.Audio
         public volatile float TxGain = 1.0f;
         public volatile float RxGain = 1.0f;
         public float TxPeak, RxPeak;
-        public string LastError => _backend.LastError;
+        public string LastError => (_active ?? _native).LastError;
 
         /// <summary>Blocco PCM catturato (16 bit LE), con guadagno o messaggio WAV già applicato.</summary>
         public event Action<byte[], int>? Captured;
         /// <summary>Audio ricevuto prima del volume, per cascata e decodificatori CW.</summary>
         public event Action<short[], int>? RxSamples;
 
-        public List<string> Inputs() => _backend.Inputs();
-        public List<string> Outputs() => _backend.Outputs();
+        public List<string> Inputs() => WithTci(_native.Inputs());
+        public List<string> Outputs() => WithTci(_native.Outputs());
+
+        private List<string> WithTci(List<string> list)
+        {
+            if (OfferTci && !list.Contains(TciAudioBackend.DeviceName)) list.Insert(0, TciAudioBackend.DeviceName);
+            return list;
+        }
 
         public void Start(string input, string output)
         {
             Playback.Reset();
-            _backend.Start(input, output, OnCapture, OnFill);
+            // «TCI» come ingresso o uscita: tutto l'audio passa dal TCI (niente schede né cavi virtuali)
+            bool tci = input == TciAudioBackend.DeviceName || output == TciAudioBackend.DeviceName;
+            _active = tci ? _tci : _native;
+            _active.Start(input, output, OnCapture, OnFill);
         }
 
-        public void Stop() => _backend.Stop();
+        public void Stop() { _native.Stop(); _tci.Stop(); }
 
         private void OnCapture(short[] frame)
         {
@@ -203,7 +216,7 @@ namespace IpTrxCtrl.Audio
 
         public bool LocalPlaying { get { lock (_localLock) return _local != null; } }
 
-        public void Dispose() => _backend.Dispose();
+        public void Dispose() { _native.Dispose(); _tci.Dispose(); }
 
         /// <summary>Guadagno = volume (0–100 %) × (1 + boost oltre soglia in %).</summary>
         public static float GainFrom(int volumePercent, int boostPercent)

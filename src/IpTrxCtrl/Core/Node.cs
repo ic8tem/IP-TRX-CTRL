@@ -221,6 +221,8 @@ namespace IpTrxCtrl.Core
 
         public void ApplyAudioSettings()
         {
+            Audio.OfferTci = IsServer && _s.CatViaTci;   // «TCI» tra le schede del server
+            _devListsAt = DateTime.MinValue;
             Audio.RxGain = AudioEngine.GainFrom(_s.RxVolume, _s.RxBoost);
             Audio.TxGain = AudioEngine.GainFrom(_s.TxVolume, _s.TxBoost);
             Audio.Playback.PrefillSamples = Math.Clamp(_s.PrefillMs, 20, 1000) * AudioEngine.SampleRate / 1000;

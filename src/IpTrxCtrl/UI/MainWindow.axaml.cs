@@ -30,7 +30,7 @@ namespace IpTrxCtrl.UI
         private readonly Node _node;
         private readonly GlobalHotkeys _hotkeys = new();
         private IpTrxCtrl.Platform.SerialInput? _serialIn;
-        private readonly DispatcherTimer _uiTimer;
+        private readonly DispatcherTimer _uiTimer, _wfTimer;
         private RigTelemetry _tel = new();
         private bool _loading = true;
         private bool _manualPtt;
@@ -102,6 +102,10 @@ namespace IpTrxCtrl.UI
             _uiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
             _uiTimer.Tick += (_, _) => OnUiTick();
             _uiTimer.Start();
+            // la cascata CW scorre a 62,5 righe al secondo: ridisegno ogni 40 ms per un movimento continuo
+            _wfTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+            _wfTimer.Tick += (_, _) => { if (_cwActive) Wf.Flush(); };
+            _wfTimer.Start();
 
             Opened += OnOpened;
             Closing += (_, _) => OnClosingWindow();
@@ -127,6 +131,7 @@ namespace IpTrxCtrl.UI
         private void OnClosingWindow()
         {
             _uiTimer.Stop();
+            _wfTimer.Stop();
             foreach (var w in _decodeWindows.ToList()) w.Close();
             _hotkeys.Dispose();
             _serialIn?.Dispose();
@@ -473,11 +478,14 @@ namespace IpTrxCtrl.UI
             if (w.Saved || w.PairingReset)
             {
                 ApplyRoleTexts();
+                _node.ApplyAudioSettings();      // prima degli elenchi: con il CAT via TCI compare la scheda «TCI»
                 _loading = true;
                 FillAudioDevices();
+                TxtTciHost.Text = _s.TciHost;
+                TxtTciPort.Text = _s.TciPort.ToString(CultureInfo.InvariantCulture);
                 _loading = false;
-                _node.ApplyAudioSettings();
                 if (w.RigChanged && _s.Role == NodeRole.Server) _node.Rig.Start();
+                if (w.AudioChanged && _s.Role == NodeRole.Server) _node.RestartAudio();
                 if (w.DigitalChanged) _node.StartDigital();
                 if (w.SerialInputChanged) StartSerialInput();
                 if (w.PairingReset) ShowPairing();
@@ -486,7 +494,7 @@ namespace IpTrxCtrl.UI
 
         // ================================================================= modo CW / fonia
 
-        /// <summary>In CW apre il filtro della radio alla larghezza scelta, così la cascata 0-3000 Hz mostra i segnali.</summary>
+        /// <summary>In CW apre il filtro della radio alla larghezza scelta, così la cascata 0-2000 Hz mostra i segnali.</summary>
         private void ApplyCwFilter()
         {
             if (!IsClient || !RigTelemetry.IsCw(_tel.Mode) || !_s.CwWideFilter) return;
@@ -823,7 +831,6 @@ namespace IpTrxCtrl.UI
 
             if (_cwActive)
             {
-                Wf.Flush();
                 string txt;
                 lock (_decLock) txt = _decoded.ToString();
                 if (txt.Length > 90) txt = txt[^90..];
@@ -868,6 +875,9 @@ namespace IpTrxCtrl.UI
                 TxtCatStatus.Text = t.CatOk ? "CAT ok · rigctld" : (server ? _node.Rig.Status : (_node.Stats.Connected ? (t.Status.Length > 0 ? t.Status : "CAT del server non disponibile") : "—"));
                 TxtCatStatus.Foreground = this.FindResource(t.CatOk ? "B.Ok" : "B.Muted") as IBrush;
                 TxtQrg.Text = t.FreqHz > 0 ? FormatQrg(t.FreqHz) : "--.---.---";
+                // cascata CW: QRG reale a sinistra (CW sopra la portante, CW-R sotto)
+                Wf.DialHz = t.FreqHz;
+                Wf.Reverse = string.Equals(t.Mode, "CWR", StringComparison.OrdinalIgnoreCase);
                 TxtMode.Text = "MHz · " + (string.IsNullOrEmpty(t.Mode) ? "—" : t.Mode);
                 TxtQrgB.Text = t.FreqBHz > 0 ? FormatQrg(t.FreqBHz) : "--.---.---";
                 TxtModeB.Text = "MHz" + (string.IsNullOrEmpty(t.Mode) ? "" : " · " + t.Mode);

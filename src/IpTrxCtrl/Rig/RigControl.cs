@@ -31,6 +31,10 @@ namespace IpTrxCtrl.Rig
         private bool? _wattsMeter;
         private bool _pttWanted;
         private TciClient? _tci;
+        // CAT via TCI: collegamento, traduttore rigctld e rigctld «Dummy» per i comandi non legati alla radio
+        private TciLink? _tciLink;
+        private TciRigctl? _tciBridge;
+        private Process? _dummyProc;
         private int _cycle;
         private string _maxKey = "";
         private float _maxW = float.NaN;
@@ -58,12 +62,20 @@ namespace IpTrxCtrl.Rig
         /// <summary>Trasmissione bloccata dalla protezione ROS.</summary>
         public bool TxBlocked => _txBlocked;
 
-        public bool IsConfigured => _s.UseExternalRigctld || (_s.RigModel > 0 && !string.IsNullOrEmpty(_s.RigCom));
+        public bool IsConfigured => _s.CatViaTci || _s.UseExternalRigctld || (_s.RigModel > 0 && !string.IsNullOrEmpty(_s.RigCom));
+
+        /// <summary>CAT tramite TCI attivo.</summary>
+        public bool CatViaTci => _tciLink != null;
 
         public void Start()
         {
             Stop();
-            if (_s.PttMethod == PttMethod.Tci) _tci = new TciClient(_s.TciHost, _s.TciPort);
+            if (_s.CatViaTci)
+            {
+                _tciLink = new TciLink(_s.TciHost, _s.TciPort);
+                SessionLog.Write($"RADIO CAT via TCI {_s.TciHost}:{_s.TciPort}");
+            }
+            else if (_s.PttMethod == PttMethod.Tci) _tci = new TciClient(_s.TciHost, _s.TciPort);
             OpenKeyingPorts();
             _cts = new CancellationTokenSource();
             var ct = _cts.Token;
@@ -83,6 +95,14 @@ namespace IpTrxCtrl.Rig
             }
             _tci?.Dispose();
             _tci = null;
+            _tciBridge?.Dispose(); _tciBridge = null;
+            _tciLink?.Dispose(); _tciLink = null;
+            if (_dummyProc != null)
+            {
+                try { if (!_dummyProc.HasExited) _dummyProc.Kill(true); } catch { }
+                _dummyProc.Dispose();
+                _dummyProc = null;
+            }
             _keyer?.Dispose(); _keyer = null;
             _manual?.Dispose(); _manual = null;
             _pttLines?.Dispose(); _pttLines = null;
@@ -100,6 +120,7 @@ namespace IpTrxCtrl.Rig
         {
             get
             {
+                if (_tciBridge != null) return ("127.0.0.1", _tciBridge.Port);
                 if (_s.UseExternalRigctld) return (_s.ExternalRigctldHost, _s.ExternalRigctldPort);
                 try { if (_procPort > 0 && _proc != null && !_proc.HasExited) return ("127.0.0.1", _procPort); } catch { }
                 return null;
@@ -112,7 +133,7 @@ namespace IpTrxCtrl.Rig
             {
                 string ptt = _s.PttMethod switch
                 {
-                    PttMethod.Cat => "CAT",
+                    PttMethod.Cat => _s.CatViaTci ? "CAT (TCI)" : "CAT",
                     PttMethod.Rts or PttMethod.Dtr => $"{KeyingPlan.Name(_plan.PttLine)} {_plan.PttPort}",
                     PttMethod.Vox => "VOX",
                     PttMethod.Tci => $"TCI {_s.TciHost}:{_s.TciPort}",
@@ -186,7 +207,22 @@ namespace IpTrxCtrl.Rig
         {
             if (_tcp != null && _tcp.Connected) return;
             string host; int port;
-            if (_s.UseExternalRigctld)
+            if (_tciLink != null)
+            {
+                // CAT via TCI: il traduttore fa da rigctld; il «Dummy» serve solo ai programmi digitali
+                if (_tciBridge == null)
+                {
+                    int dp = FreeLocalPort();
+                    _dummyProc = Hamlib.StartDummyRigctld(_s, dp);
+                    if (_dummyProc == null) { dp = 0; SessionLog.Write("TCI: rigctld non trovato, i programmi digitali avranno risposte ridotte"); }
+                    else await Task.Delay(800, ct);
+                    _tciBridge = new TciRigctl(_tciLink, dp);
+                }
+                if (!_tciLink.Ready) throw new IOException(_tciLink.Status);
+                host = "127.0.0.1";
+                port = _tciBridge.Port;
+            }
+            else if (_s.UseExternalRigctld)
             {
                 host = _s.ExternalRigctldHost; port = _s.ExternalRigctldPort;
             }
@@ -218,7 +254,7 @@ namespace IpTrxCtrl.Rig
             _maxKey = "";
             _mw2PowerOk = true;
             _cycle = 0;
-            SetStatus("CAT OK");
+            SetStatus(_tciLink != null ? _tciLink.Status : "CAT OK");
         }
 
         private void Disconnect()
@@ -292,6 +328,7 @@ namespace IpTrxCtrl.Rig
 
         private async Task PollAsync(CancellationToken ct)
         {
+            if (_tciLink != null && !_tciLink.Ready) throw new IOException(_tciLink.Status);
             var t = Telemetry.Clone();
             bool slow = _cycle++ % 4 == 0;
             var f = await CommandAsync("f", 1, ct);
@@ -338,7 +375,7 @@ namespace IpTrxCtrl.Rig
                 t.Mute = mute == null ? -1 : (mute.Trim() == "1" ? 1 : 0);
             }
             t.CatOk = true;
-            t.RigName = _s.RigModelName;
+            t.RigName = _tciLink != null ? "TCI · " + (_tciLink.Device.Length > 0 ? _tciLink.Device : _tciLink.Endpoint) : _s.RigModelName;
             t.PttInfo = PttInfo;
             t.PttDelayMs = _s.PttDelayMs;
             t.Status = _tci != null && _s.PttMethod == PttMethod.Tci ? _tci.Status : Status;
@@ -556,6 +593,9 @@ namespace IpTrxCtrl.Rig
                 switch (_s.PttMethod)
                 {
                     case PttMethod.Vox: return;
+                    case PttMethod.Tci when _tciLink != null:
+                        await _tciLink.SetTrxAsync(on);
+                        return;
                     case PttMethod.Tci:
                         _tci ??= new TciClient(_s.TciHost, _s.TciPort);
                         await _tci.SetPttAsync(on);

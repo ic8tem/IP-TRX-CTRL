@@ -36,9 +36,10 @@ namespace IpTrxCtrl.Rig
                 pttLine = cwLine == SerialLine.Dtr ? SerialLine.Rts : SerialLine.Dtr;
                 notes.Add($"stessa porta per PTT e CW: CW su {Name(cwLine)}, PTT spostato su {Name(pttLine)}");
             }
-            bool pttViaRigctld = pttSerial && Same(pttPort, s.RigCom) && !s.UseExternalRigctld;
+            bool catSerial = !s.UseExternalRigctld && !s.CatViaTci;   // con il TCI nessuna porta seriale è aperta da rigctld
+            bool pttViaRigctld = pttSerial && Same(pttPort, s.RigCom) && catSerial;
             if (pttViaRigctld) notes.Add($"PTT {Name(pttLine)} sulla porta del CAT: lo comanda rigctld");
-            if (cwSerial && Same(cwPort, s.RigCom) && !s.UseExternalRigctld)
+            if (cwSerial && Same(cwPort, s.RigCom) && catSerial)
             {
                 cwSerial = false;
                 notes.Add("la porta CW coincide con quella del CAT (aperta da rigctld): il CW viene inviato via CAT; scegli la seconda porta seriale della radio o un adattatore");

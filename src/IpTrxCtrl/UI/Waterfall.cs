@@ -14,15 +14,17 @@ using IpTrxCtrl.Audio;
 namespace IpTrxCtrl.UI
 {
     /// <summary>
-    /// Cascata 0-3000 Hz: tempo in orizzontale (scorre verso sinistra), frequenza in verticale.
+    /// Cascata 0-2000 Hz: tempo in orizzontale (scorre verso sinistra), frequenza in verticale.
+    /// A sinistra la QRG reale di sintonia, a destra lo scostamento dal pitch (000 sul pitch).
     /// Evidenzia la fascia del pitch (200-1000 Hz), la linea del pitch e i segnali aperti in altre finestre.
     /// </summary>
     public sealed class Waterfall : Control
     {
         private const int Cols = 640;
         private static readonly int Rows = Spectrum.Bins;
-        private const double AxisW = 48;
+        private const double AxisL = 84, AxisR = 48;   // a sinistra la QRG, a destra lo scostamento dal pitch
         private readonly int[] _pixels = new int[Cols * Rows];
+        private int _head;   // colonna più vecchia: la prossima riga dello spettro si scrive qui (buffer circolare)
         private WriteableBitmap? _bmp;
         private readonly ConcurrentQueue<float[]> _queue = new();
         private readonly int[] _palette = BuildPalette();
@@ -62,7 +64,7 @@ namespace IpTrxCtrl.UI
         /// <summary>Chiamato dal thread audio.</summary>
         public void Push(float[] row)
         {
-            if (_queue.Count < 64) _queue.Enqueue(row);
+            if (_queue.Count < 256) _queue.Enqueue(row);
         }
 
         /// <summary>Chiamato dal timer dell'interfaccia: aggiunge le righe arrivate e ridisegna.</summary>
@@ -76,27 +78,46 @@ namespace IpTrxCtrl.UI
                 var copy = (float[])row.Clone();
                 Array.Sort(copy);
                 double med = copy[copy.Length / 2];
-                _floor += (med - _floor) * 0.05;
+                // righe più frequenti: passo più piccolo, stessa velocità di adattamento al rumore di prima
+                _floor += (med - _floor) * 0.05 * Spectrum.Hop / 512.0;
+                double offset = 15 - Intensity * 0.3;              // da +15 dB (scura) a -15 dB (chiara) sopra il rumore
                 for (int y = 0; y < Rows; y++)
                 {
-                    int off = y * Cols;
-                    Array.Copy(_pixels, off + 1, _pixels, off, Cols - 1);
                     int bin = Rows - 1 - y;   // in alto le frequenze alte
-                    double offset = 15 - Intensity * 0.3;          // da +15 dB (scura) a -15 dB (chiara) sopra il rumore
                     double v = (row[bin] - _floor - offset) / 30.0;
                     int idx = (int)Math.Clamp(v * 255, 0, 255);
-                    _pixels[off + Cols - 1] = _palette[idx];
+                    _pixels[y * Cols + _head] = _palette[idx];
                 }
+                _head = (_head + 1) % Cols;
             }
             if (any) InvalidateVisual();
         }
 
         private static double Y(double hz, double h) => (1 - hz / Spectrum.MaxHz) * h;
+        private static double HzAt(double y, double h) => Math.Clamp((1 - y / h) * Spectrum.MaxHz, 0, Spectrum.MaxHz);
+
+        /// <summary>QRG della radio in ricezione (0 = sconosciuta): a sinistra si legge la frequenza reale dei segnali.</summary>
+        public long DialHz { get; set; }
+        /// <summary>CW-R (banda laterale inferiore): la QRG scende quando il tono sale.</summary>
+        public bool Reverse { get; set; }
+
+        private double _hoverY = -1;
+
+        /// <summary>Frequenza reale di un segnale che si sente a <paramref name="audioHz"/>: la radio in CW mostra la
+        /// frequenza del segnale che si sente sul pitch.</summary>
+        public long QrgAt(double audioHz) => DialHz <= 0 ? 0 : DialHz + (long)Math.Round((Reverse ? -1 : 1) * (audioHz - PitchHz));
+
+        private static string FormatQrg(long hz) => $"{hz / 1_000_000}.{(hz / 1000) % 1000:D3}.{hz % 1000:D3}";
+        private static string FormatOffset(double d)
+        {
+            int v = (int)Math.Round(d);
+            return v == 0 ? "000" : (v > 0 ? "+" : "-") + Math.Abs(v).ToString(CultureInfo.InvariantCulture);
+        }
 
         public override void Render(DrawingContext context)
         {
             // prima dell'impaginazione (o con la cascata nascosta) le dimensioni possono essere nulle
-            if (Bounds.Width < AxisW + 20 || Bounds.Height < 40) return;
+            if (Bounds.Width < AxisL + AxisR + 20 || Bounds.Height < 40) return;
             try { RenderCore(context); }
             catch (Exception ex)
             {
@@ -108,55 +129,100 @@ namespace IpTrxCtrl.UI
 
         private void RenderCore(DrawingContext context)
         {
-            double w = Math.Max(10, Bounds.Width - AxisW), h = Bounds.Height;
+            double x0 = AxisL, w = Math.Max(10, Bounds.Width - AxisL - AxisR), x1 = x0 + w, h = Bounds.Height;
             _bmp ??= new WriteableBitmap(new PixelSize(Cols, Rows), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
             using (var fb = _bmp.Lock())
             {
+                // dalla colonna più vecchia (a sinistra) alla più nuova (a destra)
+                int older = Cols - _head;
                 for (int y = 0; y < Rows; y++)
-                    Marshal.Copy(_pixels, y * Cols, fb.Address + y * fb.RowBytes, Cols);
+                {
+                    IntPtr line = fb.Address + y * fb.RowBytes;
+                    Marshal.Copy(_pixels, y * Cols + _head, line, older);
+                    if (_head > 0) Marshal.Copy(_pixels, y * Cols, line + older * 4, _head);
+                }
             }
-            var dest = new Rect(0, 0, w, h);
-            context.DrawImage(_bmp, new Rect(0, 0, Cols, Rows), dest);
+            context.DrawImage(_bmp, new Rect(0, 0, Cols, Rows), new Rect(x0, 0, w, h));
 
             // fascia del pitch e linee
             double y1000 = Y(1000, h), y200 = Y(200, h);
-            context.FillRectangle(new SolidColorBrush(Color.FromArgb(26, 124, 242, 154)), new Rect(0, y1000, w, y200 - y1000));
+            context.FillRectangle(new SolidColorBrush(Color.FromArgb(26, 124, 242, 154)), new Rect(x0, y1000, w, y200 - y1000));
             var green = new Pen(new SolidColorBrush(Color.FromRgb(124, 242, 154)), 1, new DashStyle(new double[] { 6, 4 }, 0));
             double yp = Y(PitchHz, h);
-            context.DrawLine(green, new Point(0, yp), new Point(w, yp));
+            context.DrawLine(green, new Point(x0, yp), new Point(x1, yp));
             foreach (var (hz, brush) in Markers)
             {
                 double ym = Y(hz, h);
-                context.DrawLine(new Pen(brush, 1, new DashStyle(new double[] { 6, 4 }, 0)), new Point(0, ym), new Point(w, ym));
+                context.DrawLine(new Pen(brush, 1, new DashStyle(new double[] { 6, 4 }, 0)), new Point(x0, ym), new Point(x1, ym));
             }
 
-            // asse delle frequenze
+            // assi: a destra lo scostamento dal pitch (000 sul pitch), a sinistra la QRG reale di sintonia
             var axisBrush = Application.Current?.FindResource("B.Muted") as IBrush ?? Brushes.Gray;
+            var pitchBrush = new SolidColorBrush(Color.FromRgb(34, 164, 71));
             var tf = new Typeface("Consolas, Menlo, DejaVu Sans Mono, monospace");
-            foreach (int f in new[] { 3000, 2500, 2000, 1500, 1000, 500, 0 })
+            double step = 500;
+            foreach (double st in new double[] { 50, 100, 200, 250, 500 })
+                if (st / Spectrum.MaxHz * h >= 18) { step = st; break; }
+            int kMin = (int)Math.Ceiling((0 - PitchHz) / step), kMax = (int)Math.Floor((Spectrum.MaxHz - PitchHz) / step);
+            var tick = new Pen(axisBrush, 1);
+            for (int k = kMin; k <= kMax; k++)
             {
-                var ft = new FormattedText(f.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, tf, 11, axisBrush);
-                double y = Math.Max(0, Math.Min(Y(f, h) - ft.Height / 2, h - ft.Height));
-                context.DrawText(ft, new Point(w + 14, y));
+                double f = PitchHz + k * step, yt = Y(f, h);
+                var brush = k == 0 ? pitchBrush : axisBrush;
+                var right = new FormattedText(FormatOffset(k * step), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, tf, 11, brush);
+                context.DrawText(right, new Point(x1 + 14, Math.Clamp(yt - right.Height / 2, 0, h - right.Height)));
+                string leftTxt = DialHz > 0 ? FormatQrg(QrgAt(f)) : f.ToString("0", CultureInfo.InvariantCulture) + " Hz";
+                var left = new FormattedText(leftTxt, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, tf, 11, brush);
+                context.DrawText(left, new Point(x0 - 6 - left.Width, Math.Clamp(yt - left.Height / 2, 0, h - left.Height)));
+                context.DrawLine(tick, new Point(x0 - 4, yt), new Point(x0, yt));
             }
             var arrow = new StreamGeometry();
             using (var g = arrow.Open())
             {
-                g.BeginFigure(new Point(w + 2, yp), true);
-                g.LineTo(new Point(w + 12, yp - 7));
-                g.LineTo(new Point(w + 12, yp + 7));
+                g.BeginFigure(new Point(x1 + 2, yp), true);
+                g.LineTo(new Point(x1 + 12, yp - 7));
+                g.LineTo(new Point(x1 + 12, yp + 7));
                 g.EndFigure(true);
             }
-            context.DrawGeometry(new SolidColorBrush(Color.FromRgb(34, 164, 71)), null, arrow);
+            context.DrawGeometry(pitchBrush, null, arrow);
+
+            // sotto il mouse: QRG precisa e scostamento dal pitch
+            if (_hoverY >= 0 && _hoverY <= h)
+            {
+                double f = HzAt(_hoverY, h);
+                context.DrawLine(new Pen(new SolidColorBrush(Color.FromArgb(160, 255, 255, 255)), 1), new Point(x0, _hoverY), new Point(x1, _hoverY));
+                string txt = (DialHz > 0 ? FormatQrg(QrgAt(f)) + "  " : "") + FormatOffset(f - PitchHz) + " Hz";
+                var ft = new FormattedText(txt, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, tf, 12, Brushes.White);
+                double ty = _hoverY - ft.Height - 4 < 0 ? _hoverY + 4 : _hoverY - ft.Height - 4;
+                var box = new Rect(x0 + 6, ty - 1, ft.Width + 10, ft.Height + 2);
+                context.FillRectangle(new SolidColorBrush(Color.FromArgb(200, 0, 0, 0)), box);
+                context.DrawText(ft, new Point(x0 + 11, ty));
+            }
+        }
+
+        private bool InImage(Point p) => p.X >= AxisL && p.X <= Bounds.Width - AxisR;
+
+        protected override void OnPointerMoved(PointerEventArgs e)
+        {
+            base.OnPointerMoved(e);
+            var p = e.GetPosition(this);
+            _hoverY = InImage(p) ? p.Y : -1;
+            InvalidateVisual();
+        }
+
+        protected override void OnPointerExited(PointerEventArgs e)
+        {
+            base.OnPointerExited(e);
+            _hoverY = -1;
+            InvalidateVisual();
         }
 
         protected override void OnPointerPressed(PointerPressedEventArgs e)
         {
             base.OnPointerPressed(e);
             var p = e.GetPosition(this);
-            double w = Math.Max(10, Bounds.Width - AxisW);
-            if (p.X > w) return;
-            double hz = Math.Clamp((1 - p.Y / Bounds.Height) * Spectrum.MaxHz, 0, Spectrum.MaxHz);
+            if (!InImage(p)) return;
+            double hz = HzAt(p.Y, Bounds.Height);
             FrequencyClicked?.Invoke(Math.Round(hz / 10) * 10);
         }
     }

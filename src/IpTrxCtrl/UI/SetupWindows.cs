@@ -26,6 +26,12 @@ namespace IpTrxCtrl.UI
         public readonly ComboBox Baud = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
         public readonly Button Detect = Ui.Btn("Rileva");
         public readonly TextBlock Info = Ui.Sub("", 12);
+        // collegamento CAT: Hamlib (seriale/rete) oppure TCI (ExpertSDR, Thetis…), anche per l'audio
+        public readonly ComboBox Cat = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
+        public readonly TextBox TciHost = new();
+        public readonly TextBox TciPort = new() { Width = 110 };
+        public readonly CheckBox TciAudio = new() { Content = "Audio della radio via TCI (niente schede audio né cavi virtuali sul server)" };
+        private Control? _hamlibPanel, _tciPanel;
         private List<RigModelInfo> _models = new();
         private readonly AppSettings _s;
 
@@ -39,6 +45,12 @@ namespace IpTrxCtrl.UI
             Baud.SelectedItem = s.RigBaud;
             if (Baud.SelectedIndex < 0) Baud.SelectedItem = 38400;
             Detect.Click += async (_, _) => await DetectAsync();
+            Cat.ItemsSource = new[] { "Hamlib (porta seriale o rete)", "TCI (ExpertSDR, Thetis e altri SDR)" };
+            Cat.SelectedIndex = s.CatViaTci ? 1 : 0;
+            Cat.SelectionChanged += (_, _) => UpdCat();
+            TciHost.Text = s.TciHost;
+            TciPort.Text = s.TciPort.ToString(CultureInfo.InvariantCulture);
+            TciAudio.IsChecked = s.InputDeviceServer == IpTrxCtrl.Audio.TciAudioBackend.DeviceName || s.OutputDeviceServer == IpTrxCtrl.Audio.TciAudioBackend.DeviceName;
             _ = LoadModelsAsync();
         }
 
@@ -74,12 +86,40 @@ namespace IpTrxCtrl.UI
             Info.Text = $"Trovata su {res.Value.com} a {res.Value.baud} baud.";
         }
 
-        public void Save()
+        /// <summary>Salva i campi; restituisce true se sono cambiate le schede audio del server (audio TCI).</summary>
+        public bool Save()
         {
-            var m = Selected;
-            if (m != null) { _s.RigModel = m.Id; _s.RigModelName = m.ToString(); }
-            _s.RigCom = Com.SelectedItem as string ?? _s.RigCom;
-            if (Baud.SelectedItem is int b) _s.RigBaud = b;
+            bool tci = Cat.SelectedIndex == 1;
+            _s.CatViaTci = tci;
+            if (tci)
+            {
+                _s.TciHost = string.IsNullOrWhiteSpace(TciHost.Text) ? "127.0.0.1" : TciHost.Text.Trim();
+                if (int.TryParse(TciPort.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int tp) && tp > 0 && tp < 65536) _s.TciPort = tp;
+            }
+            else
+            {
+                var m = Selected;
+                if (m != null) { _s.RigModel = m.Id; _s.RigModelName = m.ToString(); }
+                _s.RigCom = Com.SelectedItem as string ?? _s.RigCom;
+                if (Baud.SelectedItem is int b) _s.RigBaud = b;
+            }
+            // audio TCI: le schede del server diventano «TCI»; togliendolo tornano a quelle predefinite
+            string dev = IpTrxCtrl.Audio.TciAudioBackend.DeviceName;
+            string oldIn = _s.InputDeviceServer, oldOut = _s.OutputDeviceServer;
+            if (tci && TciAudio.IsChecked == true) { _s.InputDeviceServer = dev; _s.OutputDeviceServer = dev; }
+            else
+            {
+                if (_s.InputDeviceServer == dev) _s.InputDeviceServer = "";
+                if (_s.OutputDeviceServer == dev) _s.OutputDeviceServer = "";
+            }
+            return oldIn != _s.InputDeviceServer || oldOut != _s.OutputDeviceServer;
+        }
+
+        private void UpdCat()
+        {
+            bool tci = Cat.SelectedIndex == 1;
+            if (_hamlibPanel != null) _hamlibPanel.IsVisible = !tci;
+            if (_tciPanel != null) _tciPanel.IsVisible = tci;
         }
 
         public Control Build()
@@ -91,7 +131,19 @@ namespace IpTrxCtrl.UI
             A(Ui.Col(0, Ui.Lbl("Velocità"), Baud), 4);
             Detect.VerticalAlignment = VerticalAlignment.Bottom;
             A(Detect, 6);
-            return Ui.Col(6, g, Info);
+            _hamlibPanel = Ui.Col(6, g, Info);
+
+            var t = new Grid { ColumnDefinitions = new ColumnDefinitions("*,10,110") };
+            var hostCol = Ui.Col(0, Ui.Lbl("Indirizzo del programma della radio (TCI)"), TciHost);
+            var portCol = Ui.Col(0, Ui.Lbl("Porta TCI"), TciPort);
+            Grid.SetColumn(portCol, 2);
+            t.Children.Add(hostCol); t.Children.Add(portCol);
+            _tciPanel = Ui.Col(6, t, TciAudio,
+                Ui.Sub("Attiva il TCI nel programma della radio (ExpertSDR: Opzioni › TCI, porta 40001 di serie; Thetis: Setup › Network › TCI). "
+                     + "Dal TCI arrivano frequenze, modo, split, potenza, S-meter, potenza in uscita e ROS; il PTT «CAT» diventa il PTT TCI. "
+                     + "Con l'audio TCI l'audio di ricezione e trasmissione passa dal WebSocket, senza schede né cavi.", 12));
+            UpdCat();
+            return Ui.Col(8, Ui.Col(0, Ui.Lbl("Collegamento CAT"), Cat), _hamlibPanel, _tciPanel);
         }
     }
 
@@ -175,6 +227,7 @@ namespace IpTrxCtrl.UI
     {
         public bool Saved { get; private set; }
         public bool RigChanged { get; private set; }
+        public bool AudioChanged { get; private set; }
         public bool PairingReset { get; private set; }
         public bool DigitalChanged { get; private set; }
         public bool SerialInputChanged { get; private set; }
@@ -296,9 +349,10 @@ namespace IpTrxCtrl.UI
                 }
                 int oldModel = s.RigModel, oldBaud = s.RigBaud, oldPort = s.ExternalRigctldPort;
                 string oldCom = s.RigCom, oldHost = s.ExternalRigctldHost, oldPath = s.RigctldPath;
-                bool oldExt = s.UseExternalRigctld;
+                bool oldExt = s.UseExternalRigctld, oldTci = s.CatViaTci;
+                string oldTciHost = s.TciHost; int oldTciPort = s.TciPort;
                 s.Callsign = call.Text.Trim().ToUpperInvariant();
-                radio.Save();
+                AudioChanged = radio.Save();
                 s.RigctldPath = (rigPath.Text ?? "").Trim();
                 s.TxGainLevel = string.IsNullOrWhiteSpace(gain.Text) ? "MICGAIN" : gain.Text.Trim();
                 s.UseExternalRigctld = ext.IsChecked == true;
@@ -321,7 +375,8 @@ namespace IpTrxCtrl.UI
                 var list = (brokers.Text ?? "").Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
                 if (list.Count > 0) s.MqttBrokers = list;
                 RigChanged = oldModel != s.RigModel || oldBaud != s.RigBaud || oldCom != s.RigCom || oldExt != s.UseExternalRigctld
-                             || oldHost != s.ExternalRigctldHost || oldPort != s.ExternalRigctldPort || oldPath != s.RigctldPath;
+                             || oldHost != s.ExternalRigctldHost || oldPort != s.ExternalRigctldPort || oldPath != s.RigctldPath
+                             || oldTci != s.CatViaTci || oldTciHost != s.TciHost || oldTciPort != s.TciPort;
                 var newRole = role.SelectedIndex == 0 ? NodeRole.Server : NodeRole.Client;
                 bool roleChanged = newRole != s.Role;
                 s.Role = newRole;
@@ -482,7 +537,7 @@ namespace IpTrxCtrl.UI
 @"IP-TRX-CTRL – GUIDA RAPIDA
 
 RUOLI
-Server = il PC collegato alla radio (audio, CAT con Hamlib, PTT).
+Server = il PC collegato alla radio (audio, CAT con Hamlib o TCI, PTT).
 Client = il PC dell'operatore. «Inverti ruoli» scambia i ruoli tra i due PC collegati.
 
 ABBINAMENTO (una sola volta)
@@ -500,8 +555,16 @@ CW: F1..F8 trasmettono testi in CW con il keyer interno della radio (pulsante «
 Variabili: {MYCALL} {CALL} {NR} {RST}. Ctrl+Alt+F1..F8 funzionano anche da altri programmi. Esc interrompe.
 
 MODO CW
-Cascata 0-3000 Hz e decodificatore sul pitch (200-1000 Hz, letto dalla radio). Clic su un segnale nella fascia
+Cascata 0-2000 Hz e decodificatore sul pitch (200-1000 Hz, letto dalla radio). Clic su un segnale nella fascia
 del pitch per spostare il pitch; clic fuori dalla fascia per aprire una finestra di decodifica in più.
+
+CAT VIA TCI (ExpertSDR, Thetis e altri SDR)
+Impostazioni › Radio (server) › Collegamento CAT: «TCI», con indirizzo e porta del programma della radio (di serie
+127.0.0.1 e 40001). Frequenze, modo, split, potenza, S-meter, potenza in uscita e ROS arrivano dal TCI; il PTT
+«CAT» diventa il PTT TCI e il testo CW parte con il keyer del programma della radio. Con «Audio della radio via
+TCI» anche l'audio di ricezione e trasmissione passa dal TCI: niente schede audio né cavi virtuali sul server.
+I programmi digitali del client funzionano come con Hamlib. Il pitch CW non arriva dal TCI: va regolato uguale
+nel programma e nella radio.
 
 SPLIT
 VFO B = VFO A + offset, da −50 a +50 kHz; passo 1 kHz in fonia, 0,1 kHz in CW.
@@ -520,8 +583,10 @@ Sempre 8 kHz, 16 bit mono, cifrato AES-256-GCM.
 
 MODO CW: FILTRO E CASCATA
 Entrando in CW il programma chiede alla radio il filtro largo (3000 Hz di serie, scelta 1200-3600 Hz) così la
-cascata mostra tutta la banda 0-3000 Hz; togli «Filtro largo» per tornare al filtro stretto. Il cursore
-«Intensità» abbassa il colore del rumore e fa risaltare i segnali.
+cascata mostra tutta la banda 0-2000 Hz; togli «Filtro largo» per tornare al filtro stretto. Il cursore
+«Intensità» abbassa il colore del rumore e fa risaltare i segnali. Dalla 0.2.5 la cascata scorre 3 volte più
+veloce (una colonna ogni 21 ms circa, circa 14 secondi visibili). A destra lo scostamento dal pitch (000 sul
+pitch), a sinistra la QRG reale dei segnali; col mouse sulla cascata si legge la QRG precisa del punto.
 
 PEDALE PTT E TASTO CW (client)
 Impostazioni › «Pedale PTT e tasto CW». Collega un pedale tra RTS e CTS e un tasto verticale tra DTR e DSR di una
@@ -543,13 +608,14 @@ VERSIONI COMPATIBILI
 Server e client devono avere versioni dello stesso «protocollo». La versione di questo PC è nella finestra «Informazioni e licenze».
   Versioni          Protocollo   Compatibili con
   0.1.0 – 0.1.3     1            solo 0.1.x
-  0.2.0 – 0.2.4     2            tutte le 0.2.x
+  0.2.0 – 0.2.5     2            tutte le 0.2.x
 Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   scelta delle schede audio del server dal client ......... 0.2.1 o successiva
   server senza UPnP e collegamento sulla rete locale ...... 0.2.2 o successiva
   scambio della versione e controllo automatico ........... 0.2.3 o successiva
   porte in uscita del client comunicate al server ......... 0.2.4 o successiva
   protezione ROS (avviso e blocco della trasmissione) ..... 0.2.4 o successiva
+  CAT e audio del server via TCI ......................... 0.2.5 sul server
 Dalla 0.2.3 i due PC si scambiano la versione (sul broker MQTT durante l'abbinamento e all'inizio di ogni
 collegamento). Se il protocollo è diverso l'abbinamento si ferma e compare una finestra; se l'altro PC è
 più vecchio compare un avviso. La versione dell'altro PC si vede nella riga della sua rete.

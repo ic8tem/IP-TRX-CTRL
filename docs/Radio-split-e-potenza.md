@@ -1,6 +1,6 @@
 # Radio, split e potenza
 
-Tutti i comandi verso la radio passano dal server, che usa **Hamlib** (`rigctld`). All'avvio del collegamento il server riconosce sempre il modello di radio e quali comandi supporta.
+Tutti i comandi verso la radio passano dal server, che usa **Hamlib** (`rigctld`) oppure, dalla 0.2.5, il **TCI** dei programmi SDR (vedi *Collegamento TCI*). All'avvio del collegamento il server riconosce sempre il modello di radio e quali comandi supporta.
 
 ## VFO A, VFO B e split
 

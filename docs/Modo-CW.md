@@ -6,8 +6,12 @@ Quando la radio è in un modo CW, al posto del riquadro audio compare **CW · ca
 
 ## Cascata
 
-- Spettro dell'audio ricevuto da **0 a 3000 Hz** (frequenza in verticale, tempo in orizzontale).
+- Spettro dell'audio ricevuto da **0 a 2000 Hz** (frequenza in verticale, tempo in orizzontale).
 - La fascia del pitch (200–1000 Hz) è evidenziata; una linea verde segna il pitch in uso.
+- **Scala a destra**: scostamento dal pitch in Hz, con **000** sulla linea del pitch (e la freccia verde), +/− sopra e sotto.
+- **Scala a sinistra**: la **QRG reale** di ogni segnale (MHz.kHz.Hz), calcolata dalla frequenza della radio e dal pitch: in CW un segnale più acuto sta sopra la QRG della radio, in CW-R sotto. Senza la frequenza della radio la scala a sinistra mostra i Hz audio.
+- Passando il mouse sulla cascata compare la QRG precisa e lo scostamento dal pitch del punto indicato.
+- Dalla 0.2.5 scorre 3 volte più veloce: una nuova colonna ogni 21 ms circa (47 al secondo), circa 14 secondi di storia sulla larghezza della cascata. Ogni colonna analizza 64 ms di audio, così punti e linee del CW si vedono separati.
 
 ## Pitch
 

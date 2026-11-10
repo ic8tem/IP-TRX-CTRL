@@ -45,6 +45,8 @@ namespace IpTrxCtrl.Core
         public string CwCom { get; set; } = "";       // vuoto = stessa porta del PTT
         public string TciHost { get; set; } = "127.0.0.1";
         public int TciPort { get; set; } = 40001;
+        // CAT tramite TCI (ExpertSDR, Thetis…) al posto di Hamlib; l'audio TCI si sceglie come scheda «TCI»
+        public bool CatViaTci { get; set; }
         public string TxGainLevel { get; set; } = "MICGAIN";
         public bool UseExternalRigctld { get; set; }
         public string ExternalRigctldHost { get; set; } = "127.0.0.1";

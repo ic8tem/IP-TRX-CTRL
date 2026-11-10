@@ -88,6 +88,11 @@ com0com (Windows, porte seriali virtuali) - GNU GPL 2 - Vyacheslav Frolov
 https://com0com.sourceforge.net
 Non incluso: facoltativo per collegare la porta virtuale di un altro programma.
 
+Protocollo TCI (Transceiver Control Interface) di Expert Electronics: il programma
+lo implementa per conto suo (nessun codice di terzi incluso) per comandare la radio e
+scambiare l'audio con ExpertSDR, Thetis e gli altri programmi compatibili, solo se
+l'utente lo sceglie. TCI ed ExpertSDR sono nomi di Expert Electronics.
+
 Servizi di rete usati: broker MQTT pubblici (indirizzi cifrati), server STUN
 pubblici (indirizzo UDP pubblico), ifconfig.co, portchecker.io, portquiz.net e api.ipify.org (verifica delle
 porte e dell'indirizzo IP pubblico).

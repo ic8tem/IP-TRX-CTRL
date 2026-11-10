@@ -155,15 +155,18 @@ namespace IpTrxCtrl.Audio
         private void Emit(string s) => Text?.Invoke(s);
     }
 
-    /// <summary>Spettro per la cascata: FFT 1024 punti con finestra di Hann, passo 512 campioni (64 ms), 0-3000 Hz.</summary>
+    /// <summary>Spettro per la cascata: finestra di Hann di 512 campioni con zeri fino a 1024 punti, passo 171 campioni (21 ms), 0-2000 Hz.</summary>
     public sealed class Spectrum
     {
-        public const int N = 1024, Hop = 512;
-        public const double MaxHz = 3000;
-        public static readonly int Bins = (int)(MaxHz * N / AudioEngine.SampleRate);   // 384
-        private readonly double[] _buf = new double[N];
+        // 0.2.5: una riga ogni 171 campioni, circa 21 ms (prima 512, 64 ms), cioè 3 volte più veloce. La finestra
+        // è di 64 ms (512 campioni) completata con zeri a 1024 punti: punti e linee del CW restano separati.
+        // Spettro visibile da 0 a 2000 Hz: 256 righe da 7,8 Hz.
+        public const int N = 1024, W = 512, Hop = 171;
+        public const double MaxHz = 2000;
+        public static readonly int Bins = (int)(MaxHz * N / AudioEngine.SampleRate);   // 256
+        private readonly double[] _buf = new double[W];
         private int _fill;
-        private readonly double[] _win = new double[N];
+        private readonly double[] _win = new double[W];
         private readonly double[] _re = new double[N], _im = new double[N];
 
         /// <summary>Riga di magnitudini in dB (Bins valori, da 0 Hz a 3000 Hz).</summary>
@@ -171,7 +174,7 @@ namespace IpTrxCtrl.Audio
 
         public Spectrum()
         {
-            for (int i = 0; i < N; i++) _win[i] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / (N - 1));
+            for (int i = 0; i < W; i++) _win[i] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / (W - 1));
         }
 
         public void Process(short[] x, int count)
@@ -179,18 +182,18 @@ namespace IpTrxCtrl.Audio
             for (int n = 0; n < count; n++)
             {
                 _buf[_fill++] = x[n] / 32768.0;
-                if (_fill == N)
+                if (_fill == W)
                 {
                     Compute();
-                    Array.Copy(_buf, Hop, _buf, 0, N - Hop);
-                    _fill = N - Hop;
+                    Array.Copy(_buf, Hop, _buf, 0, W - Hop);
+                    _fill = W - Hop;
                 }
             }
         }
 
         private void Compute()
         {
-            for (int i = 0; i < N; i++) { _re[i] = _buf[i] * _win[i]; _im[i] = 0; }
+            for (int i = 0; i < N; i++) { _re[i] = i < W ? _buf[i] * _win[i] : 0; _im[i] = 0; }
             Fft(_re, _im);
             var row = new float[Bins];
             for (int k = 0; k < Bins; k++)

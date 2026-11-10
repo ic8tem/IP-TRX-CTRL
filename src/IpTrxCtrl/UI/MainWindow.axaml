@@ -303,7 +303,7 @@
         <StackPanel Spacing="12">
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Classes="h2" Text="CW · CASCATA E DECODIFICATORE" />
-            <TextBlock Grid.Column="1" Classes="sub" Text="Spettro 0–3000 Hz · pitch 200–1000 Hz" />
+            <TextBlock Grid.Column="1" Classes="sub" Text="Spettro 0–2000 Hz · pitch 200–1000 Hz" />
           </Grid>
           <Grid ColumnDefinitions="Auto,*,Auto,Auto,180" Margin="0,0,0,4">
             <CheckBox x:Name="ChkWideFilter" Content="Apri il filtro della radio in CW (per vedere tutta la cascata)" VerticalAlignment="Center" />
