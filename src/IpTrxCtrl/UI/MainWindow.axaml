@@ -2,11 +2,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="clr-namespace:IpTrxCtrl.UI"
         x:Class="IpTrxCtrl.UI.MainWindow"
-        Title="IP-TRX-CTRL" Width="1240" Height="960" MinWidth="980" MinHeight="600"
+        Title="IP-TRX-CTRL" Width="1240" Height="816" MinWidth="980" MinHeight="510"
         WindowStartupLocation="CenterScreen"
         Icon="avares://IP-TRX-CTRL/Assets/icon.png">
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-    <StackPanel Margin="22" Spacing="18">
+    <StackPanel Margin="16" Spacing="14">
 
       <!-- ===================== Intestazione ===================== -->
       <Border Classes="panel" Padding="20,16">
@@ -42,9 +42,11 @@
 
       <!-- ===================== Radio + Server ===================== -->
       <Grid ColumnDefinitions="3*,18,2*">
+        <!-- colonna sinistra: radio e audio -->
+        <Grid RowDefinitions="Auto,14,*">
         <!-- Radio -->
         <Border Classes="panel">
-          <StackPanel Spacing="12">
+          <StackPanel Spacing="10">
             <Grid ColumnDefinitions="*,Auto">
               <TextBlock x:Name="TxtRadioTitle" Classes="h2" Text="RADIO REMOTA" />
               <TextBlock x:Name="TxtCatStatus" Grid.Column="1" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource B.Ok}" />
@@ -101,7 +103,7 @@
               <Button x:Name="BtnSetQrg" Grid.Column="4" Classes="accent" Content="Imposta" VerticalAlignment="Bottom" />
             </Grid>
 
-            <Grid ColumnDefinitions="110,*,80" RowDefinitions="26,26,26,26">
+            <Grid ColumnDefinitions="110,*,80" RowDefinitions="24,24,24,24">
               <TextBlock Text="S-meter" Classes="sub" VerticalAlignment="Center" />
               <ProgressBar x:Name="PbS" Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center" />
               <TextBlock x:Name="TxtS" Grid.Column="2" Classes="mono" HorizontalAlignment="Right" VerticalAlignment="Center" Text="—" />
@@ -151,6 +153,52 @@
           </StackPanel>
         </Border>
 
+          <!-- Audio (fonia): sotto la radio, occupa lo spazio che restava vuoto -->
+          <Border x:Name="PanelAudio" Grid.Row="2" Classes="panel">
+            <StackPanel Spacing="10">
+              <TextBlock Classes="h2" Text="AUDIO · 8 kHz, 16 bit mono · modalità condivisa" />
+              <Grid ColumnDefinitions="*,12,*">
+                <StackPanel>
+                  <TextBlock x:Name="TxtInLabel" Classes="lbl" Text="Microfono (verso la radio)" />
+                  <ComboBox x:Name="CmbIn" />
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                  <TextBlock x:Name="TxtOutLabel" Classes="lbl" Text="Altoparlante (dalla radio)" />
+                  <ComboBox x:Name="CmbOut" />
+                </StackPanel>
+              </Grid>
+              <Grid ColumnDefinitions="*,12,*">
+                <Border Classes="inset" Padding="10">
+                  <StackPanel Spacing="6">
+                    <TextBlock x:Name="TxtRxTitle" Text="RX · audio ricevuto" FontWeight="SemiBold" />
+                    <TextBlock x:Name="TxtRxVol" Classes="lbl" />
+                    <Slider x:Name="SldRx" Minimum="0" Maximum="100" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="Boost oltre soglia" Classes="sub" VerticalAlignment="Center" />
+                      <TextBox x:Name="TxtRxBoost" Width="70" HorizontalContentAlignment="Right" />
+                      <TextBlock Text="%" Classes="sub" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <ProgressBar x:Name="PbRx" Height="8" MinHeight="8" />
+                  </StackPanel>
+                </Border>
+                <Border Grid.Column="2" Classes="inset" Padding="10">
+                  <StackPanel Spacing="6">
+                    <TextBlock x:Name="TxtTxTitle" Text="TX · audio inviato" FontWeight="SemiBold" />
+                    <TextBlock x:Name="TxtTxVol" Classes="lbl" />
+                    <Slider x:Name="SldTx" Minimum="0" Maximum="100" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="Boost oltre soglia" Classes="sub" VerticalAlignment="Center" />
+                      <TextBox x:Name="TxtTxBoost" Width="70" HorizontalContentAlignment="Right" />
+                      <TextBlock Text="%" Classes="sub" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <ProgressBar x:Name="PbTx" Height="8" MinHeight="8" />
+                  </StackPanel>
+                </Border>
+              </Grid>
+            </StackPanel>
+          </Border>
+        </Grid>
+
         <!-- Server / peer -->
         <Border Grid.Column="2" Classes="panel">
           <StackPanel Spacing="8">
@@ -161,7 +209,7 @@
                 <TextBlock x:Name="TxtLed" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource B.Muted}" VerticalAlignment="Center" Text="RX" />
               </StackPanel>
             </Grid>
-            <Grid ColumnDefinitions="130,*" RowDefinitions="28,28,28,28,28,Auto,Auto">
+            <Grid ColumnDefinitions="130,*" RowDefinitions="25,25,25,25,25,Auto,Auto">
               <TextBlock Text="Nominativo" Classes="sub" VerticalAlignment="Center" />
               <TextBlock x:Name="TxtPeerCall" Grid.Column="1" Classes="mono" FontWeight="SemiBold" VerticalAlignment="Center" Text="—" />
               <TextBlock Grid.Row="1" Text="IP server" Classes="sub" VerticalAlignment="Center" />
@@ -179,10 +227,10 @@
             </Grid>
             <TextBlock x:Name="TxtPeerLevelLabel" Classes="sub" Text="Livello audio ricevuto dal server" />
             <ProgressBar x:Name="PbPeerLevel" />
-            <Rectangle Height="1" Fill="{DynamicResource B.Border}" Margin="0,10" />
+            <Rectangle Height="1" Fill="{DynamicResource B.Border}" Margin="0,6" />
 
             <TextBlock Classes="h2" Text="PTT" />
-            <Border x:Name="BtnPtt" Height="104" CornerRadius="10" BorderThickness="2" Cursor="Hand"
+            <Border x:Name="BtnPtt" Height="84" CornerRadius="10" BorderThickness="2" Cursor="Hand"
                     Background="{DynamicResource B.Inset}" BorderBrush="{DynamicResource B.Border}">
               <TextBlock x:Name="TxtPtt" Text="PTT (PREMI E TIENI)" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Border>
@@ -229,7 +277,7 @@
             </StackPanel>
 
             <!-- Schede audio del server -->
-            <Rectangle Height="1" Fill="{DynamicResource B.Border}" Margin="0,10" />
+            <Rectangle Height="1" Fill="{DynamicResource B.Border}" Margin="0,6" />
             <TextBlock Classes="h2" Text="SCHEDE AUDIO DEL SERVER" />
             <Grid ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
               <TextBlock Text="Ingresso" Classes="sub" VerticalAlignment="Center" Margin="0,0,8,0" />
@@ -252,51 +300,6 @@
           </StackPanel>
         </Border>
       </Grid>
-
-      <!-- ===================== Audio (fonia) ===================== -->
-      <Border x:Name="PanelAudio" Classes="panel">
-        <StackPanel Spacing="14">
-          <TextBlock Classes="h2" Text="AUDIO · 8 kHz, 16 bit mono · modalità condivisa" />
-          <Grid ColumnDefinitions="*,12,*">
-            <StackPanel>
-              <TextBlock x:Name="TxtInLabel" Classes="lbl" Text="Microfono (verso la radio)" />
-              <ComboBox x:Name="CmbIn" />
-            </StackPanel>
-            <StackPanel Grid.Column="2">
-              <TextBlock x:Name="TxtOutLabel" Classes="lbl" Text="Altoparlante (dalla radio)" />
-              <ComboBox x:Name="CmbOut" />
-            </StackPanel>
-          </Grid>
-          <Grid ColumnDefinitions="*,20,*">
-            <Border Classes="inset" Padding="14">
-              <StackPanel Spacing="8">
-                <TextBlock x:Name="TxtRxTitle" Text="RX · audio ricevuto" FontWeight="SemiBold" />
-                <TextBlock x:Name="TxtRxVol" Classes="lbl" />
-                <Slider x:Name="SldRx" Minimum="0" Maximum="100" />
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <TextBlock Text="Boost oltre soglia" Classes="sub" VerticalAlignment="Center" />
-                  <TextBox x:Name="TxtRxBoost" Width="70" HorizontalContentAlignment="Right" />
-                  <TextBlock Text="%" Classes="sub" VerticalAlignment="Center" />
-                </StackPanel>
-                <ProgressBar x:Name="PbRx" Height="8" MinHeight="8" />
-              </StackPanel>
-            </Border>
-            <Border Grid.Column="2" Classes="inset" Padding="14">
-              <StackPanel Spacing="8">
-                <TextBlock x:Name="TxtTxTitle" Text="TX · audio inviato" FontWeight="SemiBold" />
-                <TextBlock x:Name="TxtTxVol" Classes="lbl" />
-                <Slider x:Name="SldTx" Minimum="0" Maximum="100" />
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <TextBlock Text="Boost oltre soglia" Classes="sub" VerticalAlignment="Center" />
-                  <TextBox x:Name="TxtTxBoost" Width="70" HorizontalContentAlignment="Right" />
-                  <TextBlock Text="%" Classes="sub" VerticalAlignment="Center" />
-                </StackPanel>
-                <ProgressBar x:Name="PbTx" Height="8" MinHeight="8" />
-              </StackPanel>
-            </Border>
-          </Grid>
-        </StackPanel>
-      </Border>
 
       <!-- ===================== CW: cascata e decodificatore ===================== -->
       <Border x:Name="PanelCw" Classes="panel" IsVisible="False">
@@ -333,7 +336,7 @@
             </StackPanel>
           </Grid>
           <Border CornerRadius="8" ClipToBounds="True" BorderBrush="{DynamicResource B.Border}" BorderThickness="1">
-            <ui:Waterfall x:Name="Wf" Height="300" />
+            <ui:Waterfall x:Name="Wf" Height="255" />
           </Border>
           <Border Background="{DynamicResource B.Field}" BorderBrush="{DynamicResource B.Border}" BorderThickness="1" CornerRadius="8" Padding="12,8">
             <TextBlock x:Name="TxtDecoded" Classes="mono" FontSize="16" TextTrimming="None" TextWrapping="NoWrap" HorizontalAlignment="Right" Text=" " />

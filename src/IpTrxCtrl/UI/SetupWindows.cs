@@ -565,6 +565,13 @@ Impostazioni › Radio (server) › Collegamento CAT: «TCI», con indirizzo e p
 TCI» anche l'audio di ricezione e trasmissione passa dal TCI: niente schede audio né cavi virtuali sul server.
 I programmi digitali del client funzionano come con Hamlib. Il pitch CW non arriva dal TCI: va regolato uguale
 nel programma e nella radio.
+Fonti usate per il protocollo (confrontate tra loro; dove non concordano il programma legge i dati di ogni blocco):
+- Hamlib TCI Audio Sidechannel Protocol: intestazione audio di 64 byte, formati, TX_CHRONO
+  https://raw.githubusercontent.com/jfrancis42/hamlib-tci-sidecar/HEAD/PROTOCOL.md
+- JTDX, interfaccia TCI: tipi di flusso e comandi vfo, modulation, trx, split_enable, drive
+  https://deepwiki.com/jtdx-project/jtdx/4.1-tci-transceiver-interface
+- PE5JW, panoramica del protocollo TCI: comandi audio, sensori (rx_smeter, tx_sensors) e differenze tra programmi
+  https://github.com/pe5jw/tci-protocol-overview
 
 SPLIT
 VFO B = VFO A + offset, da −50 a +50 kHz; passo 1 kHz in fonia, 0,1 kHz in CW.

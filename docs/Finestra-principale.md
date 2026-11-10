@@ -1,6 +1,6 @@
 # Finestra principale (client)
 
-La finestra del client è divisa in riquadri. Il programma si chiama **IP-TRX-CTRL** e il nome compare in alto a sinistra; accanto ci sono lo stato del collegamento, il ruolo (CLIENT o SERVER), la scelta dei colori, **Impostazioni**, **Inverti ruoli** e **Help**.
+La finestra del client è divisa in riquadri: in alto **radio** e **audio** a sinistra, **server e PTT** a destra; sotto, a tutta larghezza, cascata CW, keyer e collegamento. Dalla 0.2.5 la finestra si apre alta 816 punti (prima 960): se lo schermo è più basso del contenuto compare la barra di scorrimento. Il programma si chiama **IP-TRX-CTRL** e il nome compare in alto a sinistra; accanto ci sono lo stato del collegamento, il ruolo (CLIENT o SERVER), la scelta dei colori, **Impostazioni**, **Inverti ruoli** e **Help**.
 
 ## Radio remota
 
@@ -21,7 +21,7 @@ La finestra del client è divisa in riquadri. Il programma si chiama **IP-TRX-CT
 
 ## Audio (modi fonia)
 
-Scelta di microfono e altoparlante, volume e boost per RX e TX, indicatori di livello. In modo CW questo riquadro è sostituito da cascata e decodificatore (vedi *Modo CW*).
+Sotto la radio, nella colonna di sinistra (dalla 0.2.5, per non lasciare spazio vuoto accanto al riquadro del server). Scelta di microfono e altoparlante, volume e boost per RX e TX, indicatori di livello. In modo CW questo riquadro si nasconde e sotto i riquadri compaiono cascata e decodificatore (vedi *Modo CW*).
 
 ## Keyer
 

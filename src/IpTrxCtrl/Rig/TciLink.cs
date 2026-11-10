@@ -229,11 +229,11 @@ namespace IpTrxCtrl.Rig
                     if (a.Length >= 3 && Rx0(a[0]) && a[1] == "0" && TryFloat(a[2], out float dbm)) { _smeterDbm = dbm; _smeterAt = DateTime.UtcNow; }
                     break;
                 case "tx_sensors":
-                    // tx_sensors:ricevitore,microfono dB,potenza efficace W,potenza di picco W,ROS;
+                    // tx_sensors:ricevitore,microfono dB,potenza in uscita W,terzo valore,ROS; le fonti concordano sul
+                    // 3° campo (potenza diretta/efficace) e sul 5° (ROS), non sul 4° (picco o riflessa): non lo uso
                     if (a.Length >= 5 && Rx0(a[0]))
                     {
-                        if (TryFloat(a[3], out float pk)) _powerW = pk;
-                        else if (TryFloat(a[2], out float rms)) _powerW = rms;
+                        if (TryFloat(a[2], out float fwd)) _powerW = fwd;
                         if (TryFloat(a[4], out float swr)) _swr = swr;
                         _txSensorsAt = DateTime.UtcNow;
                     }
