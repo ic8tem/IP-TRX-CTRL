@@ -1,6 +1,8 @@
 IP-TRX-CTRL - NOTE DI TERZE PARTI
 =================================
 
+IP-TRX-CTRL: Copyright (C) 2026 IC8TEM - GNU GPL 3.0 o successiva (file LICENSE).
+
 Questo programma include o usa i componenti di terze parti elencati qui sotto.
 Prima di distribuire gli eseguibili, verifica che titolari e testi corrispondano
 ai file di licenza presenti nei pacchetti effettivamente usati per la compilazione.

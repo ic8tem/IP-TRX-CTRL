@@ -17,7 +17,8 @@ install -d "$PKG/DEBIAN" "$PKG/opt/ip-trx-ctrl" "$PKG/usr/bin" "$PKG/usr/share/a
 install -m 755 "$SRC/IP-TRX-CTRL" "$PKG/opt/ip-trx-ctrl/IP-TRX-CTRL"
 ln -s /opt/ip-trx-ctrl/IP-TRX-CTRL "$PKG/usr/bin/ip-trx-ctrl"
 install -m 644 "$ROOT/src/IpTrxCtrl/Assets/icon.png" "$PKG/usr/share/icons/hicolor/256x256/apps/ip-trx-ctrl.png"
-install -m 644 "$ROOT/THIRD-PARTY-NOTICES.txt" "$PKG/usr/share/doc/ip-trx-ctrl/copyright"
+{ printf "IP-TRX-CTRL - Copyright (C) 2026 IC8TEM\nLicenza: GNU GPL 3.0 o successiva (/usr/share/common-licenses/GPL-3)\n\n"; cat "$ROOT/THIRD-PARTY-NOTICES.txt"; } > "$PKG/usr/share/doc/ip-trx-ctrl/copyright"
+chmod 644 "$PKG/usr/share/doc/ip-trx-ctrl/copyright"
 install -m 644 "$ROOT/README.md" "$PKG/usr/share/doc/ip-trx-ctrl/README.md"
 
 cat > "$PKG/usr/share/applications/ip-trx-ctrl.desktop" <<EOF

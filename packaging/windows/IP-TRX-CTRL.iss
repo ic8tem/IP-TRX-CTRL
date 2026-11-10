@@ -46,6 +46,7 @@ Name: "vbcable"; Description: "Installa il cavo audio virtuale VB-CABLE (VB-Audi
 [Files]
 Source: "{#SourceDir}\IP-TRX-CTRL.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "..\..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]

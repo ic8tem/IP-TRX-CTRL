@@ -64,7 +64,8 @@ jobs:
           & $iscc "/DAppVersion=$env:VERSION" "/DArch=${{ matrix.arch }}" "/DSourceDir=$src" "/DOutDir=$out" packaging/windows/IP-TRX-CTRL.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item THIRD-PARTY-NOTICES.txt dist/${{ matrix.rid }}/
-          Compress-Archive -Path dist/${{ matrix.rid }}/IP-TRX-CTRL.exe, dist/${{ matrix.rid }}/THIRD-PARTY-NOTICES.txt -DestinationPath "out/IP-TRX-CTRL-$env:VERSION-${{ matrix.rid }}-portatile.zip"
+          Copy-Item LICENSE dist/${{ matrix.rid }}/LICENSE.txt
+          Compress-Archive -Path dist/${{ matrix.rid }}/IP-TRX-CTRL.exe, dist/${{ matrix.rid }}/THIRD-PARTY-NOTICES.txt, dist/${{ matrix.rid }}/LICENSE.txt -DestinationPath "out/IP-TRX-CTRL-$env:VERSION-${{ matrix.rid }}-portatile.zip"
           # versione di Hamlib inclusa: serve alla release per allegare i sorgenti giusti (GPL)
           Copy-Item src/IpTrxCtrl/hamlib/VERSION.txt "out/hamlib-version-${{ matrix.hamlib }}.txt"
 
@@ -78,7 +79,7 @@ jobs:
           mkdir -p pkg/IP-TRX-CTRL
           cp dist/${{ matrix.rid }}/IP-TRX-CTRL pkg/IP-TRX-CTRL/
           chmod +x pkg/IP-TRX-CTRL/IP-TRX-CTRL
-          cp THIRD-PARTY-NOTICES.txt src/IpTrxCtrl/Assets/icon.png pkg/IP-TRX-CTRL/
+          cp THIRD-PARTY-NOTICES.txt LICENSE src/IpTrxCtrl/Assets/icon.png pkg/IP-TRX-CTRL/
           tar -czf "out/IP-TRX-CTRL-$VERSION-${{ matrix.rid }}-portatile.tar.gz" -C pkg IP-TRX-CTRL
           dpkg-deb --info out/*.deb | head -20
 

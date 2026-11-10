@@ -43,6 +43,7 @@
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
     <EmbeddedResource Include="..\..\THIRD-PARTY-NOTICES.txt" LogicalName="notices/THIRD-PARTY-NOTICES.txt" />
+    <EmbeddedResource Include="..\..\LICENSE" LogicalName="notices/LICENSE" />
   </ItemGroup>
 
   <!-- Hamlib per Windows (rigctld, rigctl, DLL, licenze): la cartella hamlib viene preparata dalla compilazione -->

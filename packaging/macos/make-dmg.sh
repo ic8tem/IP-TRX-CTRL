@@ -10,7 +10,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$OUT"
 
 cp "$SRC/IP-TRX-CTRL" "$APP/Contents/MacOS/"
 chmod +x "$APP/Contents/MacOS/IP-TRX-CTRL"
-cp "$ROOT/THIRD-PARTY-NOTICES.txt" "$APP/Contents/Resources/"
+cp "$ROOT/THIRD-PARTY-NOTICES.txt" "$ROOT/LICENSE" "$APP/Contents/Resources/"
 
 # icona .icns
 ICONSET="$WORK/icon.iconset"

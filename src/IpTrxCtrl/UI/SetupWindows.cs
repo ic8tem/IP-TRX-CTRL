@@ -410,11 +410,23 @@ namespace IpTrxCtrl.UI
                 notices = st == null ? "" : new StreamReader(st).ReadToEnd();
             var sb = new StringBuilder();
             sb.AppendLine($"IP-TRX-CTRL {asm.GetName().Version}");
+            sb.AppendLine("Copyright (C) 2026 IC8TEM");
+            sb.AppendLine("Questo programma è software libero: puoi ridistribuirlo e/o modificarlo secondo i termini della");
+            sb.AppendLine("GNU General Public License, versione 3 o (a tua scelta) successiva, pubblicata dalla Free Software");
+            sb.AppendLine("Foundation. È distribuito nella speranza che sia utile, ma SENZA ALCUNA GARANZIA; senza neppure la");
+            sb.AppendLine("garanzia implicita di COMMERCIABILITÀ o IDONEITÀ PER UN PARTICOLARE SCOPO. Il testo completo è in fondo.");
             sb.AppendLine("Sorgenti: https://github.com/ic8tem/IP-TRX-CTRL");
             string hv = Hamlib.Version(s);
             sb.AppendLine("Hamlib: " + (hv.Length > 0 ? hv : "non trovato") + (OperatingSystem.IsWindows() && Hamlib.IsEmbedded ? " (incluso nel programma)" : " (installato nel sistema)"));
             sb.AppendLine();
             sb.AppendLine(notices);
+            using (var lic = asm.GetManifestResourceStream("notices/LICENSE"))
+                if (lic != null)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("==================== IP-TRX-CTRL – GNU GPL 3.0 ====================");
+                    sb.AppendLine(new StreamReader(lic).ReadToEnd());
+                }
             foreach (string f in new[] { "COPYING", "COPYING.LIB" })
             {
                 string? t = Hamlib.ReadText(f);
