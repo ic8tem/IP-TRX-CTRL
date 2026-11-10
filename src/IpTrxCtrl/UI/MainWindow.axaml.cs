@@ -48,6 +48,12 @@ namespace IpTrxCtrl.UI
         // split e potenza (modifiche in attesa di invio)
         private double _offsetKhz;
         private DateTime _offsetEditedAt = DateTime.MinValue;
+        // sintonia con la rotella sulle cifre della QRG (VFO A e VFO B)
+        private readonly DispatcherTimer _qrgTimer = new() { Interval = TimeSpan.FromMilliseconds(120) };
+        private long _qrgPendingA, _qrgPendingB, _qrgSentA, _qrgSentB;
+        private DateTime _qrgWheelAtA = DateTime.MinValue, _qrgWheelAtB = DateTime.MinValue;
+        private double _qrgWheelAcc;
+        private static readonly TimeSpan QrgHold = TimeSpan.FromSeconds(1.5);
         private double? _powerPending;
         private DateTime _powerPendingAt, _powerSentAt = DateTime.MinValue;
         private float? _devVolPendingIn, _devVolPendingOut;
@@ -274,6 +280,13 @@ namespace IpTrxCtrl.UI
             BtnHelp.Click += async (_, _) => await new HelpWindow().ShowDialog(this);
 
             BtnSetQrg.Click += (_, _) => SendQrg();
+            // rotella sulle cifre: cambia la cifra sotto il mouse (con riporto sulle altre)
+            TxtQrg.PointerWheelChanged += (_, e) => OnQrgWheel(TxtQrg, false, e);
+            TxtQrgB.PointerWheelChanged += (_, e) => OnQrgWheel(TxtQrgB, true, e);
+            TxtQrg.Cursor = TxtQrgB.Cursor = new Cursor(StandardCursorType.SizeNorthSouth);
+            ToolTip.SetTip(TxtQrg, "Rotella del mouse su una cifra: cambia quella cifra");
+            ToolTip.SetTip(TxtQrgB, "Rotella del mouse su una cifra: cambia quella cifra");
+            _qrgTimer.Tick += (_, _) => FlushQrg();
             TxtNewQrg.KeyDown += (_, e) => { if (e.Key == Key.Enter) SendQrg(); };
 
             // VFO B e split
@@ -863,6 +876,72 @@ namespace IpTrxCtrl.UI
             if (IsClient && _s.PeerCallsign.Length > 0 && !TxtRoleLine.Text!.Contains(_s.PeerCallsign)) ApplyRoleTexts();
         }
 
+        /// <summary>
+        /// Rotella sulla QRG: la cifra sotto il mouse sale o scende di uno (10 Hz, 100 Hz, 1 kHz…), con riporto.
+        /// La frequenza si manda al massimo ogni 120 ms, e comunque l'ultimo valore arriva sempre alla radio.
+        /// </summary>
+        private void OnQrgWheel(TextBlock tb, bool vfoB, PointerWheelEventArgs e)
+        {
+            e.Handled = true;   // la finestra non scorre mentre si sintonizza
+            int place = DigitPlaceAt(tb, e.GetPosition(tb));
+            if (place < 0) return;
+            bool session = DateTime.UtcNow - (vfoB ? _qrgWheelAtB : _qrgWheelAtA) < QrgHold;
+            long cur = vfoB ? (session && _qrgPendingB > 0 ? _qrgPendingB : _tel.FreqBHz)
+                            : (session && _qrgPendingA > 0 ? _qrgPendingA : _tel.FreqHz);
+            if (cur <= 0) return;
+            _qrgWheelAcc += e.Delta.Y;              // i touchpad danno passi frazionari
+            int steps = (int)_qrgWheelAcc;
+            if (steps == 0) return;
+            _qrgWheelAcc -= steps;
+            long step = 1;
+            for (int i = 0; i < place; i++) step *= 10;
+            long nf = Math.Clamp(cur + steps * step, 1_000L, 99_999_999_999L);
+            if (vfoB)
+            {
+                if (!session) _qrgSentB = 0;
+                _qrgPendingB = nf; _qrgWheelAtB = DateTime.UtcNow; TxtQrgB.Text = FormatQrg(nf);
+                _offsetEditedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                if (!session) _qrgSentA = 0;
+                _qrgPendingA = nf; _qrgWheelAtA = DateTime.UtcNow; TxtQrg.Text = FormatQrg(nf);
+            }
+            if (!_qrgTimer.IsEnabled) { FlushQrg(); _qrgTimer.Start(); }
+        }
+
+        private void FlushQrg()
+        {
+            bool sent = false;
+            if (_qrgPendingA > 0 && _qrgPendingA != _qrgSentA) { _node.SetFreqMode(_qrgPendingA, ""); _qrgSentA = _qrgPendingA; sent = true; }
+            if (_qrgPendingB > 0 && _qrgPendingB != _qrgSentB) { _node.SetVfoB(_qrgPendingB); _qrgSentB = _qrgPendingB; sent = true; }
+            if (!sent) _qrgTimer.Stop();
+        }
+
+        /// <summary>Posizione della cifra sotto il mouse (0 = unità di Hz), quella più vicina se il mouse è su un punto; -1 fuori dal numero.</summary>
+        private static int DigitPlaceAt(TextBlock tb, Point p)
+        {
+            string text = tb.Text ?? "";
+            if (text.Length == 0 || !char.IsDigit(text[^1])) return -1;
+            var layout = tb.TextLayout;
+            int best = -1;
+            double bestDist = double.MaxValue, left = double.MaxValue, right = double.MinValue;
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (!char.IsDigit(text[i])) continue;
+                foreach (var r in layout.HitTestTextRange(i, 1))
+                {
+                    left = Math.Min(left, r.Left); right = Math.Max(right, r.Right);
+                    double d = Math.Abs(p.X - (r.Left + r.Right) / 2);
+                    if (d < bestDist) { bestDist = d; best = i; }
+                }
+            }
+            if (best < 0 || p.X < left - 4 || p.X > right + 4) return -1;
+            int place = 0;
+            for (int i = best + 1; i < text.Length; i++) if (char.IsDigit(text[i])) place++;
+            return place;
+        }
+
         private static string FormatQrg(long hz) => $"{hz / 1_000_000}.{(hz / 1000) % 1000:D3}.{hz % 1000:D3}";
 
         private void RefreshRadio()
@@ -872,14 +951,15 @@ namespace IpTrxCtrl.UI
             _loading = true;
             try
             {
-                TxtCatStatus.Text = t.CatOk ? "CAT ok · rigctld" : (server ? _node.Rig.Status : (_node.Stats.Connected ? (t.Status.Length > 0 ? t.Status : "CAT del server non disponibile") : "—"));
+                TxtCatStatus.Text = t.CatOk ? (t.RigName.StartsWith("TCI", StringComparison.Ordinal) ? "CAT ok · TCI" : "CAT ok · rigctld") : (server ? _node.Rig.Status : (_node.Stats.Connected ? (t.Status.Length > 0 ? t.Status : "CAT del server non disponibile") : "—"));
                 TxtCatStatus.Foreground = this.FindResource(t.CatOk ? "B.Ok" : "B.Muted") as IBrush;
-                TxtQrg.Text = t.FreqHz > 0 ? FormatQrg(t.FreqHz) : "--.---.---";
+                // mentre si gira la rotella resta il valore scelto, non quello (ancora vecchio) letto dalla radio
+                if (DateTime.UtcNow - _qrgWheelAtA > QrgHold) TxtQrg.Text = t.FreqHz > 0 ? FormatQrg(t.FreqHz) : "--.---.---";
                 // cascata CW: QRG reale a sinistra (CW sopra la portante, CW-R sotto)
                 Wf.DialHz = t.FreqHz;
                 Wf.Reverse = string.Equals(t.Mode, "CWR", StringComparison.OrdinalIgnoreCase);
                 TxtMode.Text = "MHz · " + (string.IsNullOrEmpty(t.Mode) ? "—" : t.Mode);
-                TxtQrgB.Text = t.FreqBHz > 0 ? FormatQrg(t.FreqBHz) : "--.---.---";
+                if (DateTime.UtcNow - _qrgWheelAtB > QrgHold) TxtQrgB.Text = t.FreqBHz > 0 ? FormatQrg(t.FreqBHz) : "--.---.---";
                 TxtModeB.Text = "MHz" + (string.IsNullOrEmpty(t.Mode) ? "" : " · " + t.Mode);
                 BtnSplit.IsChecked = t.Split;
                 UpdateSplitNote(t.Split);

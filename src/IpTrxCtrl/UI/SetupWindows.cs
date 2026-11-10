@@ -573,6 +573,11 @@ Fonti usate per il protocollo (confrontate tra loro; dove non concordano il prog
 - PE5JW, panoramica del protocollo TCI: comandi audio, sensori (rx_smeter, tx_sensors) e differenze tra programmi
   https://github.com/pe5jw/tci-protocol-overview
 
+SINTONIA CON LA ROTELLA
+Mouse su una cifra della QRG (VFO A o VFO B) e rotella: quella cifra sale o scende di uno, con riporto sulle
+cifre a sinistra (sulle centinaia di Hz un passo = 100 Hz, sui kHz = 1 kHz…). La radio riceve la frequenza
+mentre giri; il numero mostrato è quello scelto finché la radio non conferma.
+
 SPLIT
 VFO B = VFO A + offset, da −50 a +50 kHz; passo 1 kHz in fonia, 0,1 kHz in CW.
 

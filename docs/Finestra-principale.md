@@ -4,7 +4,7 @@ La finestra del client è divisa in riquadri: in alto **radio** e **audio** a si
 
 ## Radio remota
 
-- **VFO A** in grande, con frequenza e modo.
+- **VFO A** in grande, con frequenza e modo. **Sintonia con la rotella** (dalla 0.2.6): con il mouse su una cifra della QRG, la rotella fa salire o scendere quella cifra di uno, con riporto sulle cifre a sinistra; vale anche per il VFO B.
 - **VFO B** con i pulsanti **A/B** (scambio), **A=B** (copia) e **SPLIT**. Con lo split attivo si riceve su A e si trasmette su B. Vedi *Radio, split e potenza*.
 - Casella per impostare una nuova frequenza in Hz e il modo.
 - Indicatori: S-meter, potenza RF in uscita, SWR. Con la **protezione ROS** la barra del SWR lampeggia in rosso sopra la soglia di avviso; se la trasmissione è bloccata, un clic sulla barra riapre la finestra di sblocco (vedi *Radio, split e potenza*).
