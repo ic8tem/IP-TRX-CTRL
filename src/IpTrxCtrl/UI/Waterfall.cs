@@ -127,9 +127,41 @@ namespace IpTrxCtrl.UI
 
         private bool _errorLogged;
 
+        // bordi dell'immagine calcolati a ogni disegno dalla larghezza delle scritte delle due scale
+        private double _x0 = AxisL, _x1 = -1;
+
         private void RenderCore(DrawingContext context)
         {
-            double x0 = AxisL, w = Math.Max(10, Bounds.Width - AxisL - AxisR), x1 = x0 + w, h = Bounds.Height;
+            double h = Bounds.Height;
+
+            // scale: a destra lo scostamento dal pitch (000 sul pitch), a sinistra la QRG reale di sintonia
+            var axisBrush = Application.Current?.FindResource("B.Muted") as IBrush ?? Brushes.Gray;
+            var pitchBrush = new SolidColorBrush(Color.FromRgb(34, 164, 71));
+            var tf = new Typeface("Consolas, Menlo, DejaVu Sans Mono, monospace");
+            double step = 500;
+            foreach (double st in new double[] { 50, 100, 200, 250, 500 })
+                if (st / Spectrum.MaxHz * h >= 18) { step = st; break; }
+            int kMin = (int)Math.Ceiling((0 - PitchHz) / step), kMax = (int)Math.Floor((Spectrum.MaxHz - PitchHz) / step);
+            var ticks = new List<(double y, FormattedText left, FormattedText right)>();
+            double wl = 0, wr = 0;
+            for (int k = kMin; k <= kMax; k++)
+            {
+                double f = PitchHz + k * step;
+                var brush = k == 0 ? pitchBrush : axisBrush;
+                var right = new FormattedText(FormatOffset(k * step), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, tf, 11, brush);
+                string leftTxt = DialHz > 0 ? FormatQrg(QrgAt(f)) : f.ToString("0", CultureInfo.InvariantCulture) + " Hz";
+                var left = new FormattedText(leftTxt, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, tf, 11, brush);
+                ticks.Add((Y(f, h), left, right));
+                wl = Math.Max(wl, left.Width);
+                wr = Math.Max(wr, right.Width);
+            }
+            // le scritte entrano sempre per intero (anche a 144 MHz e con caratteri più larghi)
+            double x0 = Math.Max(AxisL, Math.Ceiling(wl) + 14);
+            double x1 = Bounds.Width - Math.Max(AxisR, Math.Ceiling(wr) + 20);
+            if (x1 - x0 < 20) x1 = x0 + 20;
+            double w = x1 - x0;
+            _x0 = x0; _x1 = x1;
+
             _bmp ??= new WriteableBitmap(new PixelSize(Cols, Rows), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
             using (var fb = _bmp.Lock())
             {
@@ -144,36 +176,20 @@ namespace IpTrxCtrl.UI
             }
             context.DrawImage(_bmp, new Rect(0, 0, Cols, Rows), new Rect(x0, 0, w, h));
 
-            // fascia del pitch e linee
-            double y1000 = Y(1000, h), y200 = Y(200, h);
+            // fascia del pitch (senza linea sul pitch: lo indicano la freccia e lo 000 a destra) e decodificatori in più
+            double y1000 = Y(1000, h), y200 = Y(200, h), yp = Y(PitchHz, h);
             context.FillRectangle(new SolidColorBrush(Color.FromArgb(26, 124, 242, 154)), new Rect(x0, y1000, w, y200 - y1000));
-            var green = new Pen(new SolidColorBrush(Color.FromRgb(124, 242, 154)), 1, new DashStyle(new double[] { 6, 4 }, 0));
-            double yp = Y(PitchHz, h);
-            context.DrawLine(green, new Point(x0, yp), new Point(x1, yp));
             foreach (var (hz, brush) in Markers)
             {
                 double ym = Y(hz, h);
                 context.DrawLine(new Pen(brush, 1, new DashStyle(new double[] { 6, 4 }, 0)), new Point(x0, ym), new Point(x1, ym));
             }
 
-            // assi: a destra lo scostamento dal pitch (000 sul pitch), a sinistra la QRG reale di sintonia
-            var axisBrush = Application.Current?.FindResource("B.Muted") as IBrush ?? Brushes.Gray;
-            var pitchBrush = new SolidColorBrush(Color.FromRgb(34, 164, 71));
-            var tf = new Typeface("Consolas, Menlo, DejaVu Sans Mono, monospace");
-            double step = 500;
-            foreach (double st in new double[] { 50, 100, 200, 250, 500 })
-                if (st / Spectrum.MaxHz * h >= 18) { step = st; break; }
-            int kMin = (int)Math.Ceiling((0 - PitchHz) / step), kMax = (int)Math.Floor((Spectrum.MaxHz - PitchHz) / step);
             var tick = new Pen(axisBrush, 1);
-            for (int k = kMin; k <= kMax; k++)
+            foreach (var (yt, left, right) in ticks)
             {
-                double f = PitchHz + k * step, yt = Y(f, h);
-                var brush = k == 0 ? pitchBrush : axisBrush;
-                var right = new FormattedText(FormatOffset(k * step), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, tf, 11, brush);
-                context.DrawText(right, new Point(x1 + 14, Math.Clamp(yt - right.Height / 2, 0, h - right.Height)));
-                string leftTxt = DialHz > 0 ? FormatQrg(QrgAt(f)) : f.ToString("0", CultureInfo.InvariantCulture) + " Hz";
-                var left = new FormattedText(leftTxt, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, tf, 11, brush);
-                context.DrawText(left, new Point(x0 - 6 - left.Width, Math.Clamp(yt - left.Height / 2, 0, h - left.Height)));
+                context.DrawText(right, new Point(x1 + 16, Math.Clamp(yt - right.Height / 2, 0, h - right.Height)));
+                context.DrawText(left, new Point(x0 - 8 - left.Width, Math.Clamp(yt - left.Height / 2, 0, h - left.Height)));
                 context.DrawLine(tick, new Point(x0 - 4, yt), new Point(x0, yt));
             }
             var arrow = new StreamGeometry();
@@ -200,7 +216,7 @@ namespace IpTrxCtrl.UI
             }
         }
 
-        private bool InImage(Point p) => p.X >= AxisL && p.X <= Bounds.Width - AxisR;
+        private bool InImage(Point p) => p.X >= _x0 && p.X <= (_x1 > 0 ? _x1 : Bounds.Width - AxisR);
 
         protected override void OnPointerMoved(PointerEventArgs e)
         {

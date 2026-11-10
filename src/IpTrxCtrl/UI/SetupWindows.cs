@@ -615,7 +615,7 @@ VERSIONI COMPATIBILI
 Server e client devono avere versioni dello stesso «protocollo». La versione di questo PC è nella finestra «Informazioni e licenze».
   Versioni          Protocollo   Compatibili con
   0.1.0 – 0.1.3     1            solo 0.1.x
-  0.2.0 – 0.2.5     2            tutte le 0.2.x
+  0.2.0 – 0.2.6     2            tutte le 0.2.x
 Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   scelta delle schede audio del server dal client ......... 0.2.1 o successiva
   server senza UPnP e collegamento sulla rete locale ...... 0.2.2 o successiva
