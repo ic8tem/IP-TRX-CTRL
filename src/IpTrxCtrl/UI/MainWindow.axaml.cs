@@ -35,6 +35,8 @@ namespace IpTrxCtrl.UI
         private bool _loading = true;
         private bool _manualPtt;
         private int _blinkTick;
+        private bool _swrAlarm, _swrAlarmShown, _swrBlockSeen;
+        private Window? _swrWindow;
         private bool _cwLayout;
         private volatile bool _cwActive;
 
@@ -89,6 +91,8 @@ namespace IpTrxCtrl.UI
             _node.Upnp.Changed += () => Dispatcher.UIThread.Post(OnUpnpChanged);
             _node.VersionWarning += (text, ok) => Dispatcher.UIThread.Post(() => ShowVersionWarning(text, ok));
             ChipUpnp.PointerPressed += (_, _) => ShowUpnpPopup(true);
+            PbSwr.PointerPressed += (_, _) => { if (_tel.TxBlocked) ShowSwrBlocked(); };
+            TxtSwr.PointerPressed += (_, _) => { if (_tel.TxBlocked) ShowSwrBlocked(); };
             _node.PortsUnreachable += text => Dispatcher.UIThread.Post(() => ShowPortsUnreachable(text));
             _node.LocalPttChanged += on => Dispatcher.UIThread.Post(() => ShowPttState(on));
             _node.Audio.Keyer.Changed += () => Dispatcher.UIThread.Post(RefreshKeyerStatus);
@@ -787,6 +791,18 @@ namespace IpTrxCtrl.UI
             if (up == UpnpState.Ok) { LedUpnp.Fill = Brushes.LimeGreen; LedUpnp.Opacity = (_blinkTick / 5) % 2 == 0 ? 1.0 : 0.25; }
             else if (up == UpnpState.Missing) { LedUpnp.Fill = this.FindResource("B.Tx") as IBrush; LedUpnp.Opacity = 1.0; }
             else { LedUpnp.Fill = this.FindResource("B.Track") as IBrush; LedUpnp.Opacity = (_blinkTick / 3) % 2 == 0 ? 1.0 : 0.4; }
+            // barra del ROS lampeggiante sopra la soglia di avviso (protezione ROS del server)
+            if (_swrAlarm)
+            {
+                PbSwr.Foreground = this.FindResource((_blinkTick / 3) % 2 == 0 ? "B.Tx" : "B.TxDim") as IBrush;
+                if (!_swrAlarmShown) { TxtSwr.Foreground = this.FindResource("B.Tx") as IBrush; _swrAlarmShown = true; }
+            }
+            else if (_swrAlarmShown)
+            {
+                PbSwr.ClearValue(ProgressBar.ForegroundProperty);
+                TxtSwr.ClearValue(TextBlock.ForegroundProperty);
+                _swrAlarmShown = false;
+            }
             TxtLed.Text = tx ? "TX" : "RX";
             TxtLed.Foreground = this.FindResource(tx ? "B.Tx" : "B.Muted") as IBrush;
 
@@ -870,6 +886,7 @@ namespace IpTrxCtrl.UI
                 else { PbRf.Value = 0; TxtRf.Text = "—"; }
                 if (!float.IsNaN(t.Swr)) { PbSwr.Value = Math.Clamp((t.Swr - 1) / 2 * 100, 0, 100); TxtSwr.Text = $"{t.Swr:F1}"; }
                 else { PbSwr.Value = 0; TxtSwr.Text = "—"; }
+                UpdateSwrProtection(t);
                 if (!float.IsNaN(t.TxGain)) { PbGain.Value = t.TxGain * 100; TxtGain.Text = $"{t.TxGain * 100:F0} %"; }
                 else { PbGain.Value = 0; TxtGain.Text = "—"; }
                 TxtMute.Text = "Mute / inibizione: " + (t.Mute < 0 ? "—" : t.Mute == 1 ? "sì" : "no");
@@ -1207,6 +1224,72 @@ namespace IpTrxCtrl.UI
             };
             ok.Click += (_, _) => w.Close();
             try { await w.ShowDialog(this); } finally { _upnpPopupOpen = false; }
+        }
+
+        // ================================================================= protezione ROS
+
+        /// <summary>Avviso (barra lampeggiante) e finestra di blocco secondo lo stato mandato dal server.</summary>
+        private void UpdateSwrProtection(RigTelemetry t)
+        {
+            _swrAlarm = t.TxBlocked || (t.SwrProtect && !float.IsNaN(t.Swr) && t.Swr >= t.SwrWarnAt);
+            if (t.TxBlocked && !_swrBlockSeen)
+            {
+                _swrBlockSeen = true;
+                TxtNotice.Text = $"Trasmissione bloccata: ROS {t.TxBlockedSwr:F1}. Clic sulla barra del ROS per sbloccare.";
+                TxtNotice.IsVisible = true;
+                ShowSwrBlocked();
+            }
+            else if (!t.TxBlocked && _swrBlockSeen)
+            {
+                _swrBlockSeen = false;
+                _swrWindow?.Close();
+                TxtNotice.Text = "Trasmissione sbloccata.";
+            }
+        }
+
+        /// <summary>Trasmissione bloccata per ROS alto: spiega cosa è successo e permette di sbloccare.</summary>
+        private async void ShowSwrBlocked()
+        {
+            if (_swrWindow != null) { _swrWindow.Activate(); return; }
+            var t = _tel;
+            string swr = float.IsNaN(t.TxBlockedSwr) ? "—" : t.TxBlockedSwr.ToString("F1", CultureInfo.InvariantCulture);
+            string trip = t.SwrTripAt.ToString("F1", CultureInfo.InvariantCulture);
+            var unlock = new Button { Content = "Sblocca la trasmissione", MinWidth = 170 };
+            unlock.Classes.Add("accent");
+            var keep = new Button { Content = "Lascia bloccata", MinWidth = 130 };
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Children = { keep, unlock } };
+            string who = IsClient ? "Il server ha tolto il PTT" : "Il programma ha tolto il PTT";
+            var w = new Window
+            {
+                Title = "IP-TRX-CTRL · protezione ROS",
+                Width = 560,
+                SizeToContent = SizeToContent.Height,
+                CanResize = false,
+                Topmost = true,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Content = new StackPanel
+                {
+                    Margin = new Thickness(26),
+                    Spacing = 12,
+                    Children =
+                    {
+                        new TextBlock { Text = $"Trasmissione bloccata: ROS {swr}", FontSize = 18, FontWeight = FontWeight.Bold, TextWrapping = TextWrapping.Wrap, Foreground = this.FindResource("B.Tx") as IBrush },
+                        new SelectableTextBlock
+                        {
+                            Text = $"Il ROS ha raggiunto {swr} (soglia di blocco {trip}). {who} e fermato messaggi WAV e CW: la radio non trasmette finché non sblocchi.\n\n"
+                                 + "Prima di sbloccare controlla antenna, cavo e connettori, l'accordatore e che la frequenza sia nella banda dell'antenna.",
+                            FontSize = 14, TextWrapping = TextWrapping.Wrap
+                        },
+                        new TextBlock { Text = "Soglie e attivazione: Impostazioni › Radio (server) › Protezione ROS. Ogni blocco è scritto in sessioni.log.", FontSize = 13, TextWrapping = TextWrapping.Wrap, Foreground = this.FindResource("B.Muted") as IBrush },
+                        buttons
+                    }
+                }
+            };
+            unlock.Click += (_, _) => { _node.UnlockSwr(); w.Close(); };
+            keep.Click += (_, _) => w.Close();
+            w.Closed += (_, _) => _swrWindow = null;
+            _swrWindow = w;
+            if (IsVisible) await w.ShowDialog(this); else w.Show();
         }
 
         private string _versionShown = "";

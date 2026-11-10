@@ -43,11 +43,20 @@ namespace IpTrxCtrl.Rig
         private bool _pttActual;
         private readonly SemaphoreSlim _pttLock = new(1, 1);
 
+        // protezione ROS: blocco della trasmissione (resta attivo finché l'operatore non sblocca)
+        private volatile bool _txBlocked;
+        private float _blockedSwr = float.NaN;
+        private int _highSwrCount;
+        private bool _swrMissingLogged;
+
         public RigTelemetry Telemetry { get; private set; } = new();
         public string Status { get; private set; } = "Radio non configurata";
         public event Action? Updated;
 
         public RigControl(AppSettings s) { _s = s; }
+
+        /// <summary>Trasmissione bloccata dalla protezione ROS.</summary>
+        public bool TxBlocked => _txBlocked;
 
         public bool IsConfigured => _s.UseExternalRigctld || (_s.RigModel > 0 && !string.IsNullOrEmpty(_s.RigCom));
 
@@ -135,9 +144,9 @@ namespace IpTrxCtrl.Rig
                     _cwLines = SerialLines.Acquire(_plan.CwPort);
                     var lines = _cwLines;
                     var line = _plan.CwLine;
-                    _keyer = new CwKeyer(down => lines.Set(line, down), on => SetCwPtt(on), () => _s.PttDelayMs);
+                    _keyer = new CwKeyer(down => lines.Set(line, down && !_txBlocked), on => SetCwPtt(on), () => _s.PttDelayMs);
                     _keyer.Log += m => SessionLog.Write(m);
-                    _manual = new ManualCwReplayer(down => lines.Set(line, down), on => SetCwPtt(on), _s.CwKeyDelayMs);
+                    _manual = new ManualCwReplayer(down => lines.Set(line, down && !_txBlocked), on => SetCwPtt(on), _s.CwKeyDelayMs);
                     SessionLog.Write($"CW su {KeyingPlan.Name(line)} della porta {_plan.CwPort}");
                 }
             }
@@ -293,10 +302,12 @@ namespace IpTrxCtrl.Rig
 
             t.Transmitting = (await GetAsync("t", ct)) == "1";
             t.StrengthDb = ParseF(await GetAsync("l STRENGTH", ct));
+            bool txNow = t.Transmitting || _pttActual;   // anche se la radio non risponde al comando «t»
 
-            if (t.Transmitting || slow)
+            if (txNow || slow)
             {
                 t.Swr = ParseF(await GetAsync("l SWR", ct));
+                if (txNow) CheckSwr(t.Swr); else _highSwrCount = 0;
                 if (_wattsMeter != false)
                 {
                     float w = ParseF(await GetAsync("l RFPOWER_METER_WATTS", ct));
@@ -331,8 +342,86 @@ namespace IpTrxCtrl.Rig
             t.PttInfo = PttInfo;
             t.PttDelayMs = _s.PttDelayMs;
             t.Status = _tci != null && _s.PttMethod == PttMethod.Tci ? _tci.Status : Status;
+            FillSwrFields(t);
             Telemetry = t;
             Updated?.Invoke();
+        }
+
+        // ------------------------------------------------------------------ protezione ROS
+
+        /// <summary>
+        /// ROS letto in trasmissione. Da SwrTrip in su per due letture di fila (circa un secondo) la trasmissione
+        /// si blocca: due letture evitano blocchi per un valore sbagliato all'inizio della trasmissione.
+        /// </summary>
+        private void CheckSwr(float swr)
+        {
+            if (!_s.SwrProtection || _txBlocked) { _highSwrCount = 0; return; }
+            if (float.IsNaN(swr))
+            {
+                if (!_swrMissingLogged) { _swrMissingLogged = true; SessionLog.Write("ROS: la radio non fornisce il valore (l SWR): protezione ROS non operativa con questa radio"); }
+                _highSwrCount = 0;
+                return;
+            }
+            if (swr >= _s.SwrTrip)
+            {
+                if (++_highSwrCount >= 2) BlockTx(swr);
+            }
+            else _highSwrCount = 0;
+        }
+
+        private void BlockTx(float swr)
+        {
+            _txBlocked = true;
+            _blockedSwr = swr;
+            _highSwrCount = 0;
+            SessionLog.Write($"ROS {swr.ToString("F1", CultureInfo.InvariantCulture)}: trasmissione BLOCCATA (soglia {Inv(_s.SwrTrip)})");
+            SetStatus($"Trasmissione bloccata: ROS {swr.ToString("F1", CultureInfo.InvariantCulture)}");
+            _ = Task.Run(StopTxAsync);
+        }
+
+        /// <summary>Toglie il PTT, ferma il keyer CW e alza il tasto.</summary>
+        private async Task StopTxAsync()
+        {
+            try
+            {
+                _keyer?.Stop();
+                try { _cwLines?.Set(_plan.CwLine, false); } catch { }
+                await ApplyPttAsync();                 // con il blocco attivo il PTT va comunque a riposo
+                if (_keyer == null) await StopMorseAsync();
+            }
+            catch (Exception ex) { SessionLog.Write("ROS: arresto della trasmissione non riuscito: " + ex.Message); }
+            PushTelemetry();
+        }
+
+        /// <summary>Sblocco chiesto dall'operatore (popup) o protezione disattivata.</summary>
+        public void UnlockTx(string who)
+        {
+            if (!_txBlocked) return;
+            _txBlocked = false;
+            _blockedSwr = float.NaN;
+            _highSwrCount = 0;
+            SessionLog.Write("ROS: trasmissione sbloccata " + who);
+            SetStatus("Trasmissione sbloccata: controlla antenna e cavi prima di trasmettere");
+            PushTelemetry();
+        }
+
+        /// <summary>Manda subito lo stato della protezione (dopo blocco, sblocco o cambio delle impostazioni).</summary>
+        public void PushTelemetry()
+        {
+            var t = Telemetry.Clone();
+            FillSwrFields(t);
+            t.Status = Status;
+            Telemetry = t;
+            Updated?.Invoke();
+        }
+
+        private void FillSwrFields(RigTelemetry t)
+        {
+            t.SwrProtect = _s.SwrProtection;
+            t.SwrWarnAt = (float)_s.SwrWarn;
+            t.SwrTripAt = (float)_s.SwrTrip;
+            t.TxBlocked = _txBlocked;
+            t.TxBlockedSwr = _blockedSwr;
         }
 
         /// <summary>Potenza impostata in watt tramite power2mW; se la radio non converte resta in percentuale.</summary>
@@ -461,7 +550,7 @@ namespace IpTrxCtrl.Rig
             await _pttLock.WaitAsync();
             try
             {
-                bool on = _pttWanted || _cwPtt;
+                bool on = !_txBlocked && (_pttWanted || _cwPtt);
                 if (on == _pttActual) return;
                 _pttActual = on;
                 switch (_s.PttMethod)
@@ -486,6 +575,7 @@ namespace IpTrxCtrl.Rig
         /// <summary>Testo CW dal client: tasto seriale (DTR/RTS) se impostato, altrimenti keyer della radio via CAT.</summary>
         public async Task SendCwAsync(string text, int wpm)
         {
+            if (_txBlocked) { SetStatus("Trasmissione bloccata per ROS alto: testo CW non inviato"); return; }
             if (_keyer != null) { _keyer.Send(text, wpm); return; }
             if (wpm >= 5) await SetKeySpeedAsync(wpm);
             await SendMorseAsync(text);
@@ -494,6 +584,7 @@ namespace IpTrxCtrl.Rig
         /// <summary>Tasto CW manuale del client (evento giù/su con il suo istante).</summary>
         public void CwKeyEvent(bool down, long clientMs)
         {
+            if (_txBlocked && down) return;
             if (_manual == null)
             {
                 if (down) SetStatus("Tasto CW manuale: sul server imposta l'invio CW su una linea DTR o RTS");

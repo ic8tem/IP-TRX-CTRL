@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -1130,6 +1131,13 @@ namespace IpTrxCtrl.Core
                             if (!IsServer)
                             {
                                 var tel = RigTelemetry.Decode(r);
+                                if (tel.TxBlocked && !LastTelemetry.TxBlocked)
+                                {
+                                    // il server ha bloccato la trasmissione per ROS alto: rilascia anche qui PTT e keyer
+                                    Audio.Keyer.Stop();
+                                    SetPttLocal(false);
+                                    SessionLog.Write($"ROS {tel.TxBlockedSwr.ToString("F1", CultureInfo.InvariantCulture)}: il server ha bloccato la trasmissione");
+                                }
                                 Stats.PeerTx = tel.Transmitting;
                                 LastTelemetry = tel;
                                 Audio.Keyer.DelayMs = tel.PttDelayMs;
@@ -1168,6 +1176,12 @@ namespace IpTrxCtrl.Core
                             break;
                         case Msg.SetServerDevices:
                             if (IsServer) { string din = r.Str(); string dout = r.Str(); _ = ChangeServerDevicesAsync(din, dout, true); }
+                            break;
+                        case Msg.SwrUnlock:
+                            if (IsServer) Rig.UnlockTx("dal client");
+                            break;
+                        case Msg.SetSwrProtection:
+                            if (IsServer) { bool on = r.Bool(); float warn = r.F32(); float trip = r.F32(); ApplySwrProtection(on, warn, trip, "dal client"); }
                             break;
                         case Msg.SetAutoUnmute:
                             if (IsServer) { _s.AutoUnmute = r.Bool(); _s.Save(); _ = SendDeviceStateAsync(); }
@@ -1269,6 +1283,7 @@ namespace IpTrxCtrl.Core
             else _expected = 1;
             _lastSeq = seq;
             Stats.LossPercent = _expected > 0 ? 100.0 * _lost / _expected : 0;
+            if (IsServer && Rig.TxBlocked) return;   // ROS alto: niente audio verso la radio (anche col PTT a VOX)
             Audio.Playback.Write(pcm, 0, pcm.Length);
         }
 
@@ -1538,6 +1553,44 @@ namespace IpTrxCtrl.Core
         public void SetRemoteDeviceMute(bool input, bool mute) => Send(new MsgWriter(Msg.SetDeviceMute).U8((byte)(input ? 0 : 1)).Bool(mute).Build());
         public void SetRemoteDeviceVolume(bool input, float v) => Send(new MsgWriter(Msg.SetDeviceVolume).U8((byte)(input ? 0 : 1)).F32(v).Build());
         public void SetRemoteAutoUnmute(bool on) => Send(new MsgWriter(Msg.SetAutoUnmute).Bool(on).Build());
+
+        // ---- protezione ROS: decide il server; dal client si sblocca e si cambiano le impostazioni a distanza
+
+        /// <summary>Sblocca la trasmissione dopo un blocco per ROS alto.</summary>
+        public void UnlockSwr()
+        {
+            if (IsServer) Rig.UnlockTx("dal server");
+            else Send(new MsgWriter(Msg.SwrUnlock).Build());
+        }
+
+        /// <summary>Attiva o disattiva la protezione ROS e ne imposta le soglie (sul server, anche dal client).</summary>
+        public void SetSwrProtection(bool on, double warn, double trip)
+        {
+            if (IsServer) ApplySwrProtection(on, (float)warn, (float)trip, "dal server");
+            else Send(new MsgWriter(Msg.SetSwrProtection).Bool(on).F32((float)warn).F32((float)trip).Build());
+        }
+
+        private void ApplySwrProtection(bool on, float warn, float trip, string who)
+        {
+            var (w, t) = SwrLimits(warn, trip);
+            bool changed = on != _s.SwrProtection || Math.Abs(w - _s.SwrWarn) > 0.001 || Math.Abs(t - _s.SwrTrip) > 0.001;
+            _s.SwrProtection = on; _s.SwrWarn = w; _s.SwrTrip = t;
+            _s.Save();
+            if (changed)
+                SessionLog.Write($"ROS protezione {(on ? "attiva" : "DISATTIVATA")} {who}: avviso da {w.ToString("F1", CultureInfo.InvariantCulture)}, blocco da {t.ToString("F1", CultureInfo.InvariantCulture)}");
+            if (!on) Rig.UnlockTx("(protezione disattivata " + who + ")");
+            Rig.PushTelemetry();
+        }
+
+        /// <summary>Soglie ammesse: blocco tra 1,2 e 10; avviso tra 1,1 e il blocco.</summary>
+        public static (double warn, double trip) SwrLimits(double warn, double trip)
+        {
+            if (double.IsNaN(trip)) trip = 2.5;
+            if (double.IsNaN(warn)) warn = 1.9;
+            trip = Math.Clamp(Math.Round(trip, 1), 1.2, 10);
+            warn = Math.Clamp(Math.Round(warn, 1), 1.1, trip - 0.1);
+            return (warn, trip);
+        }
 
         public void SetPttLocal(bool on)
         {

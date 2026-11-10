@@ -18,6 +18,7 @@ Una 0.1.x e una 0.2.x **non** vanno usate insieme: aggiorna tutti e due i PC.
 | Server senza UPnP, collegamento sulla rete locale | 0.2.2 |
 | Scambio della versione e controllo automatico di compatibilità | 0.2.3 |
 | Il client comunica al server le porte che escono dalla sua rete (reti filtrate) | 0.2.4 |
+| Protezione ROS: barra lampeggiante, blocco della trasmissione e finestra sul client | 0.2.4 |
 
 ## Controllo automatico (dalla 0.2.3)
 

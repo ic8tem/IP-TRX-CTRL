@@ -7,7 +7,7 @@ La finestra del client è divisa in riquadri. Il programma si chiama **IP-TRX-CT
 - **VFO A** in grande, con frequenza e modo.
 - **VFO B** con i pulsanti **A/B** (scambio), **A=B** (copia) e **SPLIT**. Con lo split attivo si riceve su A e si trasmette su B. Vedi *Radio, split e potenza*.
 - Casella per impostare una nuova frequenza in Hz e il modo.
-- Indicatori: S-meter, potenza RF in uscita, SWR.
+- Indicatori: S-meter, potenza RF in uscita, SWR. Con la **protezione ROS** la barra del SWR lampeggia in rosso sopra la soglia di avviso; se la trasmissione è bloccata, un clic sulla barra riapre la finestra di sblocco (vedi *Radio, split e potenza*).
 - **Potenza TX**: cursore da 1 a 100 W, oppure da 1 a 100 % per le radio che non la esprimono in watt.
 - In modo CW, l'audio di ricezione (altoparlante, volume, boost, livello) si sposta qui su una sola riga, per lasciare spazio alla cascata.
 

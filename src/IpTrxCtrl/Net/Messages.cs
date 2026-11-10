@@ -28,6 +28,8 @@ namespace IpTrxCtrl.Net
         public const byte SetPassband = 0x2C;      // str modo | i32 Hz (filtro della radio)
         public const byte CwKey = 0x2D;            // u8 giù/su | i64 istante in ms (tasto manuale del client)
         public const byte SetServerDevices = 0x2E; // str ingresso | str uscita: il client sceglie le schede audio del server
+        public const byte SwrUnlock = 0x2F;        // client -> server: sblocca la trasmissione bloccata per ROS alto
+        public const byte SetSwrProtection = 0x32; // client -> server: u8 attiva | f32 soglia avviso | f32 soglia blocco
         public const byte RigTunnelOpen = 0x60;    // i32 id: il client apre un collegamento rigctld
         public const byte RigTunnelData = 0x61;    // i32 id | dati
         public const byte RigTunnelClose = 0x62;   // i32 id
@@ -107,6 +109,13 @@ namespace IpTrxCtrl.Net
         public int PttDelayMs = 100;
         public string Status = "";
         public int PassbandHz;                  // 0 = sconosciuto
+        // protezione ROS del server (dalla 0.2.4; un server più vecchio non manda questi campi)
+        public bool SwrKnown = true;            // false: server più vecchio, senza protezione ROS (non trasmesso)
+        public bool SwrProtect;                 // protezione attiva
+        public float SwrWarnAt = 1.9f;          // avviso: barra lampeggiante
+        public float SwrTripAt = 2.5f;          // blocco della trasmissione
+        public bool TxBlocked;                  // trasmissione bloccata per ROS alto
+        public float TxBlockedSwr = float.NaN;  // ROS che ha fatto scattare il blocco
 
         public bool PowerInWatts => !float.IsNaN(PowerSetW) && !float.IsNaN(PowerMaxW) && PowerMaxW > 0;
 
@@ -115,7 +124,8 @@ namespace IpTrxCtrl.Net
             .F32(StrengthDb).F32(PowerW).F32(PowerRel).F32(Swr).F32(TxGain)
             .I32(Mute).Bool(Transmitting).Bool(CatOk)
             .F32(PowerSetRel).F32(PowerSetW).F32(PowerMaxW)
-            .I32(CwPitch).I32(KeySpeed).Str(RigName).Str(PttInfo).I32(PttDelayMs).Str(Status).I32(PassbandHz).Build();
+            .I32(CwPitch).I32(KeySpeed).Str(RigName).Str(PttInfo).I32(PttDelayMs).Str(Status).I32(PassbandHz)
+            .Bool(SwrProtect).F32(SwrWarnAt).F32(SwrTripAt).Bool(TxBlocked).F32(TxBlockedSwr).Build();
 
         public static RigTelemetry Decode(MsgReader r) => new()
         {
@@ -124,7 +134,14 @@ namespace IpTrxCtrl.Net
             Mute = r.I32(), Transmitting = r.Bool(), CatOk = r.Bool(),
             PowerSetRel = r.F32(), PowerSetW = r.F32(), PowerMaxW = r.F32(),
             CwPitch = r.I32(), KeySpeed = r.I32(), RigName = r.Str(), PttInfo = r.Str(), PttDelayMs = r.I32(), Status = r.Str(),
-            PassbandHz = r.AtEnd ? 0 : r.I32()
+            PassbandHz = r.AtEnd ? 0 : r.I32(),
+            // campi aggiunti in coda: letti solo se il server li manda (gli inizializzatori sono valutati in ordine)
+            SwrKnown = !r.AtEnd,
+            SwrProtect = !r.AtEnd && r.Bool(),
+            SwrWarnAt = r.AtEnd ? 1.9f : r.F32(),
+            SwrTripAt = r.AtEnd ? 2.5f : r.F32(),
+            TxBlocked = !r.AtEnd && r.Bool(),
+            TxBlockedSwr = r.AtEnd ? float.NaN : r.F32()
         };
 
         public RigTelemetry Clone() => (RigTelemetry)MemberwiseClone();

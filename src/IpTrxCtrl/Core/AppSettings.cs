@@ -51,6 +51,10 @@ namespace IpTrxCtrl.Core
         public int ExternalRigctldPort { get; set; } = 4532;
         public string RigctldPath { get; set; } = "";
         public bool AutoUnmute { get; set; }
+        // protezione ROS (decide il server): attiva già all'installazione
+        public bool SwrProtection { get; set; } = true;
+        public double SwrWarn { get; set; } = 1.9;    // da qui la barra del ROS lampeggia
+        public double SwrTrip { get; set; } = 2.5;    // da qui la trasmissione si blocca
 
         // ---------------- Audio
         public string InputDeviceServer { get; set; } = "";

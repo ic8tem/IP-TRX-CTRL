@@ -201,6 +201,22 @@ namespace IpTrxCtrl.UI
             var ext = new CheckBox { Content = "Usa un rigctld esterno già avviato", IsChecked = s.UseExternalRigctld };
             var extHost = new TextBox { Text = s.ExternalRigctldHost };
             var extPort = new TextBox { Text = s.ExternalRigctldPort.ToString(CultureInfo.InvariantCulture) };
+            // ---- protezione ROS: decide il server; dal client si cambia a distanza quando è collegato
+            bool swrServer = s.Role == NodeRole.Server;
+            var tel = node.LastTelemetry;
+            bool swrRemoteOk = !swrServer && node.Connected && tel.CatOk && tel.SwrKnown;
+            bool swrOnNow = swrServer ? s.SwrProtection : tel.SwrProtect;
+            double swrWarnNow = swrServer ? s.SwrWarn : tel.SwrWarnAt, swrTripNow = swrServer ? s.SwrTrip : tel.SwrTripAt;
+            var swrOn = new CheckBox { Content = "Protezione ROS (consigliata, attiva dall'installazione)", IsChecked = swrOnNow };
+            var swrWarn = new TextBox { Text = swrWarnNow.ToString("0.0", CultureInfo.InvariantCulture), Width = 90 };
+            var swrTrip = new TextBox { Text = swrTripNow.ToString("0.0", CultureInfo.InvariantCulture), Width = 90 };
+            var swrNote = Ui.Sub(swrServer
+                ? "Sopra la soglia di avviso la barra del ROS lampeggia; sopra la soglia di blocco, per due letture di fila, il PTT si toglie, i messaggi e il CW si fermano e la trasmissione resta bloccata finché l'operatore non la sblocca dalla finestra che compare sul client (e qui)."
+                : swrRemoteOk
+                    ? "Le impostazioni valgono sul server (è lui che misura il ROS e blocca la trasmissione): vengono mandate al server al salvataggio."
+                    : "Le impostazioni valgono sul server. Per cambiarle da qui collega il client a un server 0.2.4 o successivo con la radio in funzione.", 13);
+            bool swrEditable = swrServer || swrRemoteOk;
+            swrOn.IsEnabled = swrEditable; swrWarn.IsEnabled = swrEditable; swrTrip.IsEnabled = swrEditable;
             var prefill = new Slider { Minimum = 40, Maximum = 600, Value = s.PrefillMs };
             var prefillTxt = Ui.Sub($"Jitter buffer (pre-riempimento): {s.PrefillMs} ms", 13);
             prefill.ValueChanged += (_, e) => prefillTxt.Text = $"Jitter buffer (pre-riempimento): {(int)e.NewValue} ms";
@@ -268,6 +284,16 @@ namespace IpTrxCtrl.UI
             save.Click += async (_, _) =>
             {
                 if (string.IsNullOrWhiteSpace(call.Text)) { await Dialogs.Info(this, "Inserisci il nominativo."); return; }
+                if (swrEditable)
+                {
+                    static double Num(string? txt) =>
+                        double.TryParse((txt ?? "").Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double v) ? v : double.NaN;
+                    var (swrW, swrT) = Node.SwrLimits(Num(swrWarn.Text), Num(swrTrip.Text));
+                    bool swrNew = swrOn.IsChecked == true;
+                    if (!swrNew && swrOnNow && !await Dialogs.YesNo(this, "Disattivi la protezione ROS? Con il ROS alto la radio continuerà a trasmettere e lo stadio finale potrebbe danneggiarsi.")) return;
+                    if (swrNew != swrOnNow || Math.Abs(swrW - swrWarnNow) > 0.001 || Math.Abs(swrT - swrTripNow) > 0.001)
+                        node.SetSwrProtection(swrNew, swrW, swrT);
+                }
                 int oldModel = s.RigModel, oldBaud = s.RigBaud, oldPort = s.ExternalRigctldPort;
                 string oldCom = s.RigCom, oldHost = s.ExternalRigctldHost, oldPath = s.RigctldPath;
                 bool oldExt = s.UseExternalRigctld;
@@ -325,7 +351,10 @@ namespace IpTrxCtrl.UI
                     Ui.Panel(Ui.Col(10, Ui.H2("RADIO (SERVER)"), radio.Build(),
                         Ui.Col(0, Ui.Lbl("Percorso di rigctld (vuoto = automatico)"), hamlibRow),
                         Ui.Col(0, Ui.Lbl("Livello Hamlib per il guadagno TX (es. MICGAIN)"), gain),
-                        ext, Ui.Col(0, Ui.Lbl("rigctld esterno: indirizzo e porta"), extRow))),
+                        ext, Ui.Col(0, Ui.Lbl("rigctld esterno: indirizzo e porta"), extRow),
+                        swrOn,
+                        Ui.Row(16, Ui.Col(0, Ui.Lbl("Avviso da ROS"), swrWarn), Ui.Col(0, Ui.Lbl("Blocco da ROS"), swrTrip)),
+                        swrNote)),
                     Ui.Panel(Ui.Col(10, Ui.H2("PEDALE PTT E TASTO CW (CLIENT)"),
                         Ui.Sub("Porta seriale del client letta come ingresso: un pedale tra RTS e CTS, un tasto verticale tra DTR e DSR. Va bene anche la porta virtuale di un altro programma (su Windows una coppia com0com).", 13),
                         Ui.Col(0, Ui.Lbl("Porta seriale"), inCom),
@@ -520,9 +549,19 @@ Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   server senza UPnP e collegamento sulla rete locale ...... 0.2.2 o successiva
   scambio della versione e controllo automatico ........... 0.2.3 o successiva
   porte in uscita del client comunicate al server ......... 0.2.4 o successiva
+  protezione ROS (avviso e blocco della trasmissione) ..... 0.2.4 o successiva
 Dalla 0.2.3 i due PC si scambiano la versione (sul broker MQTT durante l'abbinamento e all'inizio di ogni
 collegamento). Se il protocollo è diverso l'abbinamento si ferma e compare una finestra; se l'altro PC è
 più vecchio compare un avviso. La versione dell'altro PC si vede nella riga della sua rete.
+
+PROTEZIONE ROS
+Il server legge il ROS (SWR) della radio mentre trasmette. Con ROS da 1.9 in su la barra del ROS lampeggia in
+rosso (avviso). Con ROS da 2.5 in su per due letture di fila (circa un secondo) il server toglie il PTT, ferma
+messaggi WAV, CW e audio verso la radio e blocca la trasmissione; sul client (e sul server) compare una finestra.
+La trasmissione resta bloccata finché non premi «Sblocca la trasmissione»: se hai chiuso la finestra, clic sulla
+barra del ROS per riaprirla. Controlla antenna, cavi, accordatore e banda prima di sbloccare.
+La protezione è attiva dall'installazione; si disattiva o si cambiano le soglie in Impostazioni › Radio (server),
+anche dal client quando è collegato. Funziona se la radio fornisce il ROS a Hamlib (livello SWR).
 
 UPNP E LED
 All'avvio (server e client) una finestra dice se il router ha UPnP attivo e, se manca, la causa probabile e cosa

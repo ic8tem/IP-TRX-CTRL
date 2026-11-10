@@ -13,7 +13,7 @@ I ruoli si scelgono al primo avvio e si possono invertire in qualsiasi momento.
 
 - Audio bidirezionale sempre a **8 kHz, 16 bit mono**, cifrato AES-256.
 - Porte, chiavi e riconnessioni gestite in automatico; il server viene ritrovato anche quando cambia indirizzo IP, tramite un broker MQTT pubblico.
-- Controllo CAT della radio: frequenza, modo, VFO A/B con split, potenza TX, letture di S-meter, potenza e SWR.
+- Controllo CAT della radio: frequenza, modo, VFO A/B con split, potenza TX, letture di S-meter, potenza e SWR, protezione ROS con blocco della trasmissione.
 - **Keyer** integrato sul client (deriva dal programma WavPTT): in SSB otto messaggi WAV su F1…F8, in CW otto macro di testo trasmesse dalla radio.
 - In modo CW: cascata 0–3000 Hz, decodificatore sul pitch e finestre di decodifica aggiuntive per gli altri segnali.
 - Programmi digitali sul client (WSJT-X, JTDX, fldigi…) tramite un rigctld locale e cavi audio virtuali: vedi [Programmi digitali, pedale PTT e tasto CW](Programmi-digitali-e-pedale.md).
