@@ -20,7 +20,7 @@ All'avvio il server:
 
 1. cerca il router con UPnP;
 2. apre una porta casuale per il **controllo** (TCP) e una per l'**audio** (TCP, e la stessa porta in UDP);
-3. si mette in ascolto e chiede a un server esterno (ifconfig.co) di collegarsi a quella porta: se dall'esterno non si entra, chiude la porta e ne prova un'altra (fino a 6 volte per porta);
+3. si mette in ascolto e chiede a **due servizi esterni indipendenti** di collegarsi a quella porta: **ifconfig.co** e **portchecker.io** (entrambi open source). Basta che uno dei due entri perché la porta sia buona; se nessuno dei due entra il server chiude la porta e ne prova un'altra (fino a 6 volte per porta). Se nessuno dei due servizi risponde la porta viene tenuta, e il registro lo dice;
 4. le **prime due porte utili** vengono pubblicate, cifrate, sul broker MQTT insieme all'indirizzo IP pubblico.
 
 **Router senza UPnP.** Il server usa comunque due porte locali, le verifica dall'esterno e le pubblica: funzionano se sul router c'è una DMZ o un inoltro manuale verso il PC del server, e in ogni caso dai PC della **stessa rete locale**. Se nemmeno così il client entra, il server resta in attesa delle porte proposte dal client (collegamento inverso).

@@ -86,5 +86,5 @@ https://com0com.sourceforge.net
 Non incluso: facoltativo per collegare la porta virtuale di un altro programma.
 
 Servizi di rete usati: broker MQTT pubblici (indirizzi cifrati), server STUN
-pubblici (indirizzo UDP pubblico), ifconfig.co e api.ipify.org (verifica delle
+pubblici (indirizzo UDP pubblico), ifconfig.co, portchecker.io e api.ipify.org (verifica delle
 porte e dell'indirizzo IP pubblico).
