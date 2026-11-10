@@ -299,7 +299,7 @@ namespace IpTrxCtrl.Core
                 if (clientSide) _ = Task.Run(() => ClientAcceptLoopAsync(l, kind, ct));
                 else _ = Task.Run(() => AcceptLoopAsync(l, kind, ct));
                 if (kind == ChannelKind.Audio) await pm.OpenUdpAsync(p, desc + " (UDP)");
-                bool? reach = await PortProbe.TcpReachableAsync(p, pm.ExternalIp, PortLog, ct);
+                bool? reach = await PortProbe.TcpReachableAsync(p, PortLog, ct);
                 if (reach != false) return (p, l);
                 // il server tiene comunque l'ultima porta: serve ai PC della stessa rete locale
                 if (!clientSide && i == tries)
