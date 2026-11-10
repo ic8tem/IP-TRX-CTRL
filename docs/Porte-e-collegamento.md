@@ -50,6 +50,18 @@ PORTE giro 3/20: il client propone 151.x.x.x porte 52310/38877 sul broker MQTT (
 PORTE collegamento inverso riuscito: il server si è collegato alle porte del client 151.x.x.x:52310
 ```
 
+## Reti che filtrano le porte in uscita (dalla 0.2.4)
+
+Alcune reti (aziende, alberghi, Wi-Fi pubblici, certe reti mobili) lasciano **uscire** solo poche porte, di solito 443 e 80. Da lì il client non raggiunge le porte casuali del server, anche se sono aperte.
+
+All'avvio il client prova quali porte escono dalla sua rete collegandosi a **portquiz.net**, un servizio che risponde su tutte le porte TCP: 443, 80, 8443, 8080, 993, 587, 465, 1935 e due porte alte. La porta conta come buona solo se arriva davvero la pagina di portquiz.net (un portale o un proxy che intercetta non basta).
+
+- Se escono anche le porte alte, la rete non filtra e non cambia nulla.
+- Se la rete filtra, il client manda **subito** al server, cifrato sul broker MQTT, l'elenco delle porte che passano; lo ripete in ogni giro del ciclo delle porte.
+- Il server chiede al router con UPnP **proprio quelle porte come porte esterne** (per esempio 443 per il controllo e 80 per l'audio), inoltrate verso porte interne libere del PC, le verifica dall'esterno e le pubblica. Se il router ne rifiuta una (già usata da un altro PC o dal router stesso) prova la successiva; se non riesce ad aprirne due torna alle porte casuali.
+
+Servono **due** porte in uscita: se la rete del client ne lascia passare una sola, il collegamento da quella rete non è possibile e il registro lo dice. Serve UPnP sul router del server (o un inoltro manuale di quelle porte). Tutto è scritto in `sessioni.log` con il prefisso `PORTE`.
+
 ## Audio su UDP
 
 A collegamento fatto i due PC provano a passare l'audio su **UDP**, che soffre meno dei ritardi di TCP:

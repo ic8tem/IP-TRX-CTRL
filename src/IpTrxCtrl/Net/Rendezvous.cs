@@ -222,14 +222,30 @@ namespace IpTrxCtrl.Net
     /// </summary>
     public sealed record PortOffer(int Round, string Ip, int ControlPort, int AudioPort, int TriedServerPort, long Ticks)
     {
-        public byte[] ToBytes() => new MsgWriter(0).I32(Round).Str(Ip).I32(ControlPort).I32(AudioPort).I32(TriedServerPort).I64(Ticks).Build();
+        /// <summary>Dalla 0.2.4: la rete del client filtra le uscite e queste sono le porte che passano.</summary>
+        public bool Restricted { get; init; }
+        public List<int> OutboundPorts { get; init; } = new();
+
+        public byte[] ToBytes()
+        {
+            var w = new MsgWriter(0).I32(Round).Str(Ip).I32(ControlPort).I32(AudioPort).I32(TriedServerPort).I64(Ticks);
+            w.Bool(Restricted).I32(OutboundPorts.Count);
+            foreach (int p in OutboundPorts) w.I32(p);
+            return w.Build();
+        }
 
         public static PortOffer? FromBytes(byte[] b)
         {
             try
             {
                 var r = new MsgReader(b);
-                return new PortOffer(r.I32(), r.Str(), r.I32(), r.I32(), r.I32(), r.I64());
+                var o = new PortOffer(r.I32(), r.Str(), r.I32(), r.I32(), r.I32(), r.I64());
+                if (r.AtEnd) return o;
+                bool restricted = r.Bool();
+                int n = Math.Clamp(r.I32(), 0, 32);
+                var list = new List<int>();
+                for (int i = 0; i < n; i++) list.Add(r.I32());
+                return o with { Restricted = restricted, OutboundPorts = list };
             }
             catch { return null; }
         }

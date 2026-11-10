@@ -514,11 +514,12 @@ VERSIONI COMPATIBILI
 Server e client devono avere versioni dello stesso «protocollo». La versione di questo PC è nella finestra «Informazioni e licenze».
   Versioni          Protocollo   Compatibili con
   0.1.0 – 0.1.3     1            solo 0.1.x
-  0.2.0 – 0.2.3     2            tutte le 0.2.x
+  0.2.0 – 0.2.4     2            tutte le 0.2.x
 Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   scelta delle schede audio del server dal client ......... 0.2.1 o successiva
   server senza UPnP e collegamento sulla rete locale ...... 0.2.2 o successiva
   scambio della versione e controllo automatico ........... 0.2.3 o successiva
+  porte in uscita del client comunicate al server ......... 0.2.4 o successiva
 Dalla 0.2.3 i due PC si scambiano la versione (sul broker MQTT durante l'abbinamento e all'inizio di ogni
 collegamento). Se il protocollo è diverso l'abbinamento si ferma e compare una finestra; se l'altro PC è
 più vecchio compare un avviso. La versione dell'altro PC si vede nella riga della sua rete.
@@ -539,6 +540,9 @@ stessa rete locale). Se i due PC sono nella stessa casa il client prova anche l'
 Se le porte del server non sono raggiungibili da internet compare un avviso con le porte da inoltrare.
 A collegamento fatto l'audio prova anche UDP (STUN e perforazione del NAT); se UDP non passa resta su TCP.
 Il percorso in uso compare nella riga della rete dell'altro PC («audio UDP» o «audio TCP»).
+RETI FILTRATE (dalla 0.2.4): all'avvio il client prova quali porte escono dalla sua rete (443, 80, 8443, 8080…).
+Se la rete le filtra (aziende, alberghi, Wi-Fi pubblici) manda l'elenco al server sul broker MQTT e il server
+chiede al router proprio quelle come porte esterne, inoltrate verso porte libere del PC.
 
 ERRORI E REGISTRI
 Impostazioni › «Apri cartella dati»: errori.log (errori imprevisti) e sessioni.log (collegamenti e abbinamento).

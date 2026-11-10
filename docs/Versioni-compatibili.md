@@ -5,7 +5,7 @@ Server e client devono avere versioni dello stesso **protocollo**. Il protocollo
 | Versioni | Protocollo | Compatibili con |
 |---|---|---|
 | 0.1.0 – 0.1.3 | 1 | solo le 0.1.x |
-| 0.2.0 – 0.2.3 | 2 | tutte le 0.2.x |
+| 0.2.0 – 0.2.4 | 2 | tutte le 0.2.x |
 
 Una 0.1.x e una 0.2.x **non** vanno usate insieme: aggiorna tutti e due i PC.
 
@@ -17,6 +17,7 @@ Una 0.1.x e una 0.2.x **non** vanno usate insieme: aggiorna tutti e due i PC.
 | Scelta delle schede audio del server dal client | 0.2.1 |
 | Server senza UPnP, collegamento sulla rete locale | 0.2.2 |
 | Scambio della versione e controllo automatico di compatibilità | 0.2.3 |
+| Il client comunica al server le porte che escono dalla sua rete (reti filtrate) | 0.2.4 |
 
 ## Controllo automatico (dalla 0.2.3)
 

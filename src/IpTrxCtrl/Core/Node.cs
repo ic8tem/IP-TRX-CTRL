@@ -81,7 +81,10 @@ namespace IpTrxCtrl.Core
         // server
         private PortManager? _ports;
         private TcpListener? _ctlListener, _audListener;
-        private int _ctlPort, _audPort;
+        private int _ctlPort, _audPort;   // porte ESTERNE pubblicate (sul router)
+        private int _audLocal;            // porta interna dell'audio sul PC (uguale a _audPort se non è inoltrata)
+        private List<int>? _preferredPorts; // porte in uscita che il client riesce a usare (dalla sua proposta)
+        private OutboundProbe.Result? _outbound; // client: porte che escono dalla sua rete
         private CancellationTokenSource? _serverCts;
         private byte[]? _pairingSecret;
         private CancellationTokenSource? _pairListenCts;
@@ -323,6 +326,7 @@ namespace IpTrxCtrl.Core
         {
             if (_ports == null) return false;
             _keptUnreachable = false;
+            if (_preferredPorts is { Count: >= 2 } pref && _ports.UpnpAvailable && await OpenPreferredPortsAsync(pref, ct)) return true;
             var c = await OpenVerifiedPortAsync(_ports, "IP-TRX-CTRL controllo", ChannelKind.Control, false, ct);
             var a = c.port > 0 ? await OpenVerifiedPortAsync(_ports, "IP-TRX-CTRL audio", ChannelKind.Audio, false, ct) : (0, null);
             if (c.port == 0 || a.port == 0)
@@ -332,7 +336,7 @@ namespace IpTrxCtrl.Core
                 return false;
             }
             _ctlPort = c.port; _ctlListener = c.listener;
-            _audPort = a.port; _audListener = a.listener;
+            _audPort = a.port; _audListener = a.listener; _audLocal = a.port;
             if (_keptUnreachable)
             {
                 string lan = LanIp();
@@ -351,6 +355,53 @@ namespace IpTrxCtrl.Core
             return true;
         }
 
+        /// <summary>
+        /// Server: apre come porte ESTERNE quelle che il client riesce a usare in uscita (per esempio 443 e 80),
+        /// inoltrate verso porte interne libere del PC. Prova la lista in ordine finché due vanno.
+        /// </summary>
+        private async Task<bool> OpenPreferredPortsAsync(List<int> pref, CancellationToken ct)
+        {
+            PortLog($"PORTE il client esce solo da alcune porte ({string.Join(", ", pref)}): le chiedo al router come porte esterne");
+            int ctl = 0, aud = 0, ctlIn = 0, audIn = 0;
+            TcpListener? ctlL = null, audL = null;
+            foreach (int ext in pref)
+            {
+                if (ct.IsCancellationRequested || (ctl > 0 && aud > 0)) break;
+                bool forAudio = ctl > 0;
+                string desc = forAudio ? "IP-TRX-CTRL audio" : "IP-TRX-CTRL controllo";
+                int inner = _ports!.PickLocalPort();
+                if (inner == 0) break;
+                if (!await _ports.OpenFixedAsync(Open.Nat.Protocol.Tcp, ext, inner, desc)) continue;
+                TcpListener l;
+                try { l = new TcpListener(IPAddress.Any, inner); l.Start(); }
+                catch { await _ports.ClosePortAsync(ext); continue; }
+                var kind = forAudio ? ChannelKind.Audio : ChannelKind.Control;
+                _ = Task.Run(() => AcceptLoopAsync(l, kind, ct));
+                if (forAudio) await _ports.OpenFixedAsync(Open.Nat.Protocol.Udp, ext, inner, desc + " (UDP)");
+                bool? reach = await PortProbe.TcpReachableAsync(ext, PortLog, ct);
+                if (reach == false)
+                {
+                    PortLog($"PORTE porta esterna {ext} non raggiungibile da internet: provo la successiva");
+                    try { l.Stop(); } catch { }
+                    await _ports.ClosePortAsync(ext);
+                    continue;
+                }
+                if (forAudio) { aud = ext; audIn = inner; audL = l; }
+                else { ctl = ext; ctlIn = inner; ctlL = l; }
+            }
+            if (ctl == 0 || aud == 0)
+            {
+                PortLog("PORTE con le porte del client non sono riuscito ad aprirne due: torno alle porte casuali");
+                try { ctlL?.Stop(); } catch { }
+                if (ctl > 0) await _ports!.ClosePortAsync(ctl);
+                return false;
+            }
+            _ctlPort = ctl; _ctlListener = ctlL;
+            _audPort = aud; _audListener = audL; _audLocal = audIn;
+            PortLog($"PORTE porte scelte per il client: controllo {ctl} (PC {ctlIn}), audio {aud} (PC {audIn}) · le comunico al broker MQTT");
+            return true;
+        }
+
         /// <summary>Server: il client non raggiunge le porte attuali; le chiude e ne apre altre.</summary>
         private async Task RotateServerPortsAsync(CancellationToken ct)
         {
@@ -360,7 +411,7 @@ namespace IpTrxCtrl.Core
             try { _audListener?.Stop(); } catch { }
             if (_ctlPort > 0) await _ports.ClosePortAsync(_ctlPort);
             if (_audPort > 0) await _ports.ClosePortAsync(_audPort);
-            _ctlPort = 0; _audPort = 0; _ctlListener = null; _audListener = null;
+            _ctlPort = 0; _audPort = 0; _audLocal = 0; _ctlListener = null; _audListener = null;
             if (await OpenServerPortsAsync(ct))
             {
                 UpdateServerEndpoint();
@@ -389,7 +440,21 @@ namespace IpTrxCtrl.Core
                 try { o = await _rdv.LookupOfferAsync(ct); } catch { continue; }
                 if (o == null || o.Ticks <= lastTicks) continue;
                 lastTicks = o.Ticks;
-                SessionLog.Write($"PORTE giro {o.Round}/{MaxPortRounds}: il client propone {o.Ip} porte {o.ControlPort}/{o.AudioPort} (non ha raggiunto la porta {o.TriedServerPort} del server)");
+                SessionLog.Write($"PORTE giro {o.Round}/{MaxPortRounds}: il client propone {o.Ip} porte {o.ControlPort}/{o.AudioPort} (non ha raggiunto la porta {o.TriedServerPort} del server)"
+                    + (o.Restricted ? $" · la sua rete fa uscire solo le porte {string.Join(", ", o.OutboundPorts)}" : ""));
+                if (o.Restricted && o.OutboundPorts.Count >= 2)
+                {
+                    _preferredPorts = o.OutboundPorts;
+                    bool already = o.OutboundPorts.Contains(_ctlPort) && o.OutboundPorts.Contains(_audPort);
+                    if (!already && _ports.UpnpAvailable)
+                    {
+                        await RotateServerPortsAsync(ct);
+                        continue;
+                    }
+                    if (already && o.ControlPort == 0 && o.Round == 0) continue;   // le porte giuste sono già aperte
+                }
+                else if (o.Restricted)
+                    SessionLog.Write("PORTE la rete del client fa uscire meno di due porte utili: il collegamento da quella rete non è possibile");
                 if (o.ControlPort > 0 && IPAddress.TryParse(o.Ip, out var ip)
                     && await ConnectReverseAsync(ip, o.ControlPort, o.AudioPort, ct)) continue;
                 if (o.TriedServerPort == 0 || o.TriedServerPort == _ctlPort || _ctlPort == 0)
@@ -463,7 +528,7 @@ namespace IpTrxCtrl.Core
             if (closeChannels) CloseChannels();
             if (_ports != null) await _ports.CloseAllAsync();
             _ports = null;
-            _ctlPort = 0; _audPort = 0;
+            _ctlPort = 0; _audPort = 0; _audLocal = 0;
             _remotePtt = false;
             Stats.ServerEndpoint = "";
         }
@@ -653,7 +718,7 @@ namespace IpTrxCtrl.Core
                 PortsFailed?.Invoke(reason);
                 return;
             }
-            _audPort = p;
+            _audPort = p; _audLocal = p;
             _audListener = new TcpListener(IPAddress.Any, p);
             _audListener.Start();
             _ = Task.Run(() => AcceptLoopAsync(_audListener, ChannelKind.Audio, ct));
@@ -776,6 +841,22 @@ namespace IpTrxCtrl.Core
                     SetStatus("In attesa dell'abbinamento", false);
                     try { await Task.Delay(1000, ct); } catch { break; }
                     continue;
+                }
+
+                // una volta per avvio: da quali porte esce la rete del client? Se è filtrata lo dice subito al server
+                if (_outbound == null)
+                {
+                    _outbound = await OutboundProbe.RunAsync(SessionLog.Write, ct);
+                    if (_outbound.Known && _outbound.Restricted && _rdv != null)
+                    {
+                        var myIp = await PortManager.GetPublicIpAsync(ct);
+                        var early = new PortOffer(0, myIp?.ToString() ?? "", 0, 0, 0, DateTime.UtcNow.Ticks)
+                        { Restricted = true, OutboundPorts = _outbound.Allowed };
+                        bool sentEarly = await _rdv.PublishOfferAsync(early, ct);
+                        SessionLog.Write($"PORTE comunico al server sul broker MQTT le porte che escono da questa rete: {string.Join(", ", _outbound.Allowed)} {(sentEarly ? "(consegnato)" : "(nessun broker raggiungibile)")}");
+                        SetStatus("Rete filtrata: chiedo al server porte " + string.Join(", ", _outbound.Allowed), false);
+                        try { await Task.Delay(TimeSpan.FromSeconds(25), ct); } catch { break; }   // tempo al server per aprirle
+                    }
                 }
 
                 ServerAddress? target;
@@ -926,7 +1007,12 @@ namespace IpTrxCtrl.Core
                 else SessionLog.Write("PORTE il router del client non risponde con UPnP: il client non può proporre porte");
 
                 var ip = _cports.ExternalIp ?? await PortManager.GetPublicIpAsync(ct);
-                var offer = new PortOffer(round, ip?.ToString() ?? "", _cCtlPort, _cAudPort, triedServerPort, DateTime.UtcNow.Ticks);
+                _outbound ??= await OutboundProbe.RunAsync(SessionLog.Write, ct);
+                var offer = new PortOffer(round, ip?.ToString() ?? "", _cCtlPort, _cAudPort, triedServerPort, DateTime.UtcNow.Ticks)
+                {
+                    Restricted = _outbound.Known && _outbound.Restricted,
+                    OutboundPorts = _outbound.Allowed
+                };
                 bool sent = await _rdv!.PublishOfferAsync(offer, ct);
                 SessionLog.Write($"PORTE giro {round}/{MaxPortRounds}: il client propone {offer.Ip} porte {_cCtlPort}/{_cAudPort} sul broker MQTT {(sent ? "(consegnato)" : "(nessun broker raggiungibile)")}");
 
@@ -1221,7 +1307,8 @@ namespace IpTrxCtrl.Core
         private async Task<UdpLink?> EnsureUdpAsync(CancellationToken ct)
         {
             if (_udp != null || _master == null) return _udp;
-            int localPort = IsServer ? _audPort : _cAudPort;
+            int localPort = IsServer ? _audLocal : _cAudPort;
+            int extPort = IsServer ? _audPort : _cAudPort;
             UdpLink link;
             try { link = new UdpLink(_master, localPort); }
             catch { link = new UdpLink(_master, 0); localPort = 0; }
@@ -1233,7 +1320,7 @@ namespace IpTrxCtrl.Core
             var nat = await Stun.DiscoverAsync(link, Stun.DefaultServers, SessionLog.Write, ct);
             if (nat.Public != null) cands.Add(nat.Public.ToString());
             var pm = IsServer ? _ports : _cports;
-            if (localPort > 0 && pm?.ExternalIp != null) cands.Add(new IPEndPoint(pm.ExternalIp, localPort).ToString());
+            if (localPort > 0 && extPort > 0 && pm?.ExternalIp != null) cands.Add(new IPEndPoint(pm.ExternalIp, extPort).ToString());
             string lan = LanIp();
             if (lan != "—") cands.Add($"{lan}:{link.LocalPort}");
             cands = cands.Distinct().ToList();

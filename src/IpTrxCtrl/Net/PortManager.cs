@@ -111,6 +111,28 @@ namespace IpTrxCtrl.Net
         }
 
         /// <summary>Senza UPnP: usa comunque una porta locale libera (servirà un inoltro manuale o una rete aperta).</summary>
+        /// <summary>
+        /// Apre sul router una porta esterna SCELTA (per esempio 443) inoltrata verso una porta interna del PC.
+        /// false se il router la rifiuta (già usata da un altro PC o dal router stesso).
+        /// </summary>
+        public async Task<bool> OpenFixedAsync(Protocol proto, int publicPort, int privatePort, string description)
+        {
+            if (_device == null) return false;
+            try
+            {
+                var map = new Mapping(proto, privatePort, publicPort, 0, description);
+                await _device.CreatePortMapAsync(map);
+                lock (_mappings) _mappings.Add(map);
+                L($"{description}: porta esterna {proto} {publicPort} aperta sul router verso la porta {privatePort} del PC");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                L($"{description}: porta esterna {proto} {publicPort} rifiutata dal router ({ex.Message})");
+                return false;
+            }
+        }
+
         public int PickLocalPort()
         {
             for (int i = 0; i < 200; i++)

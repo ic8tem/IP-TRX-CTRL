@@ -37,7 +37,7 @@ Server e client devono avere versioni dello stesso protocollo:
 | Versioni | Protocollo | Compatibili con |
 |---|---|---|
 | 0.1.0 – 0.1.3 | 1 | solo le 0.1.x |
-| 0.2.0 – 0.2.3 | 2 | tutte le 0.2.x (alcune funzioni richiedono una versione minima su entrambi i PC) |
+| 0.2.0 – 0.2.4 | 2 | tutte le 0.2.x (alcune funzioni richiedono una versione minima su entrambi i PC) |
 
 Dettagli e controllo automatico: [docs/Versioni-compatibili.md](docs/Versioni-compatibili.md).
 

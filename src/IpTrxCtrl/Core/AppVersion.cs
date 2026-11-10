@@ -50,7 +50,7 @@ namespace IpTrxCtrl.Core
             return (x, y, z).CompareTo((a, b, c)) >= 0;
         }
 
-        /// <summary>Testo di compatibilità con l'altro PC («" se è tutto a posto).</summary>
+        /// <summary>Testo di compatibilità con l'altro PC ("" se è tutto a posto).</summary>
         public static string Notes(int peerProto, string peerVersion, bool peerIsServer)
         {
             string other = peerIsServer ? "il server" : "il client";
