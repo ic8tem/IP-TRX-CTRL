@@ -14,6 +14,12 @@ All'avvio, sia sul server sia sul client, il programma cerca il router con **UPn
 
 In alto nella finestra principale il **LED «UPnP»** resta **verde lampeggiante** finché il router risponde (controllo ogni 60 secondi), è **rosso fisso** se UPnP manca e **grigio** durante la ricerca. Se UPnP era attivo e il router smette di rispondere compare di nuovo la finestra. Un clic sul LED la riapre in qualsiasi momento.
 
+## UPnP e NAT-PMP (dalla 0.2.8)
+
+Il programma cerca il router **prima con UPnP** (due tentativi da 8 secondi) e solo se UPnP non risponde con **NAT-PMP**. Prima della 0.2.8 valeva il primo protocollo che rispondeva: alcuni router rispondono a NAT-PMP ma poi rifiutano tutte le porte, e nel registro comparivano «Failed to create portmap» e «Arithmetic operation resulted in an overflow» (un limite della libreria Open.NAT con NAT-PMP sulle porte oltre 32767).
+
+Se il router rifiuta 5 porte di fila, il programma prova l'altro protocollo. Se rifiuta anche quello, usa una porta del PC: funziona in rete locale, con DMZ o inoltro manuale, e nell'abbinamento si va avanti con il ciclo delle porte e il collegamento inverso. Con NAT-PMP le porte scelte restano sotto 32768.
+
 ## Il server
 
 All'avvio il server:

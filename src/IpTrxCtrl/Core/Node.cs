@@ -310,8 +310,17 @@ namespace IpTrxCtrl.Core
             for (int i = 1; i <= tries && !ct.IsCancellationRequested; i++)
             {
                 int p = upnp ? await pm.OpenRandomPortAsync(desc, ct) : pm.PickLocalPort();
+                if (p == 0 && upnp)
+                {
+                    // il router non accetta nessuna porta: si va avanti con una porta del PC (rete locale,
+                    // DMZ, inoltro manuale) e, nell'abbinamento, con il ciclo delle porte e il collegamento inverso
+                    p = pm.PickLocalPort();
+                    upnp = false;
+                    tries = i;
+                    if (p > 0) PortLog($"PORTE {desc}: il router non apre porte, uso la porta del PC {p} (vale in rete locale, con DMZ o inoltro manuale; da fuori serve il collegamento inverso)");
+                }
+                else if (!upnp) PortLog($"PORTE {desc}: router senza UPnP, provo la porta locale {p} (funziona con DMZ, inoltro manuale sul router o sulla stessa rete locale)");
                 if (p == 0) return (0, null);
-                if (!upnp) PortLog($"PORTE {desc}: router senza UPnP, provo la porta locale {p} (funziona con DMZ, inoltro manuale sul router o sulla stessa rete locale)");
                 TcpListener l;
                 try { l = new TcpListener(IPAddress.Any, p); l.Start(); }
                 catch { await pm.ClosePortAsync(p); continue; }

@@ -5,7 +5,7 @@ Server e client devono avere versioni dello stesso **protocollo**. Il protocollo
 | Versioni | Protocollo | Compatibili con |
 |---|---|---|
 | 0.1.0 – 0.1.3 | 1 | solo le 0.1.x |
-| 0.2.0 – 0.2.7 | 2 | tutte le 0.2.x |
+| 0.2.0 – 0.2.8 | 2 | tutte le 0.2.x |
 
 Una 0.1.x e una 0.2.x **non** vanno usate insieme: aggiorna tutti e due i PC.
 

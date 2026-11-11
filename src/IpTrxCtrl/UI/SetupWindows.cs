@@ -651,7 +651,7 @@ VERSIONI COMPATIBILI
 Server e client devono avere versioni dello stesso «protocollo». La versione di questo PC è nella finestra «Informazioni e licenze».
   Versioni          Protocollo   Compatibili con
   0.1.0 – 0.1.3     1            solo 0.1.x
-  0.2.0 – 0.2.7     2            tutte le 0.2.x
+  0.2.0 – 0.2.8     2            tutte le 0.2.x
 Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   scelta delle schede audio del server dal client ......... 0.2.1 o successiva
   server senza UPnP e collegamento sulla rete locale ...... 0.2.2 o successiva
@@ -699,6 +699,9 @@ alterni una comune come 443, 80, 8080 o una a caso), la verifica e la propone al
 prova a collegarsi a lei (collegamento inverso), poi apre anche lui una porta nuova, la verifica e la comunica;
 il client la prova subito. Nessuna porta viene provata due volte. Una porta del server raggiungibile da internet
 diventa la sua porta di controllo. Tutto lo scambio compare riga per riga nella finestra di abbinamento.
+ROUTER (dalla 0.2.8): il router si cerca prima con UPnP e solo se non risponde con NAT-PMP. Se rifiuta le porte
+il programma prova l'altro protocollo; se le rifiuta comunque usa una porta del PC (rete locale, DMZ, inoltro
+manuale) e l'abbinamento continua con il ciclo delle porte e il collegamento inverso.
 FIREWALL DI WINDOWS: l'installatore consente il programma su tutte le reti; con le versioni portatili usa
 Impostazioni › Rete e audio › «Consenti nel firewall di Windows» (serve soprattutto sul server).
 

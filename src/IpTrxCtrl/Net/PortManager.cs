@@ -31,6 +31,38 @@ namespace IpTrxCtrl.Net
         /// <summary>Porte comuni che spesso passano i filtri delle reti (provate a giri alterni nell'abbinamento).</summary>
         public static readonly int[] CommonPorts = { 443, 80, 8080, 8443, 3478, 5222, 1194, 9000, 10443, 2222 };
         public bool UpnpAvailable => _device != null;
+        /// <summary>Il router è stato trovato con NAT-PMP invece che con UPnP.</summary>
+        public bool IsPmp => _isPmp;
+        public string MapperName => _isPmp ? "NAT-PMP" : "UPnP";
+        private bool _isPmp, _switched;
+        // Open.NAT con NAT-PMP scrive le porte su 16 bit con segno: oltre 32767 va in errore («overflow»)
+        private int MaxPortEff => _isPmp ? 32767 : MaxPort;
+
+        private static async Task<NatDevice?> TryDiscoverAsync(PortMapper mapper, int seconds, CancellationToken ct)
+        {
+            try
+            {
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(TimeSpan.FromSeconds(seconds));
+                return await new NatDiscoverer().DiscoverDeviceAsync(mapper, cts);
+            }
+            catch { return null; }
+        }
+
+        /// <summary>Il router rifiuta le porte con il protocollo in uso: prova una volta l'altro (UPnP / NAT-PMP).</summary>
+        private async Task<bool> SwitchMapperAsync(CancellationToken ct)
+        {
+            if (_switched || ct.IsCancellationRequested) return false;
+            _switched = true;
+            string other = _isPmp ? "UPnP" : "NAT-PMP";
+            L($"il router rifiuta le porte con {MapperName}: provo con {other}");
+            var d = await TryDiscoverAsync(_isPmp ? PortMapper.Upnp : PortMapper.Pmp, _isPmp ? 10 : 5, ct);
+            if (d == null) { L($"{other}: il router non risponde"); return false; }
+            _device = d;
+            _isPmp = !_isPmp;
+            L($"router trovato anche con {MapperName}: riprovo le porte");
+            return true;
+        }
         public string LastError { get; private set; } = "";
 
         /// <summary>Ogni passaggio sulle porte viene scritto qui (registro delle sessioni).</summary>
@@ -39,27 +71,28 @@ namespace IpTrxCtrl.Net
 
         public async Task<bool> DiscoverAsync(CancellationToken ct)
         {
-            L("ricerca del router UPnP / NAT-PMP (3 tentativi da 10 s)…");
+            // prima UPnP (il più diffuso e quello che funziona meglio); NAT-PMP solo se UPnP non risponde.
+            // Prima della 0.2.8 vinceva il primo che rispondeva, e alcuni router rispondono a NAT-PMP senza aprire porte.
+            L("ricerca del router: prima UPnP (2 tentativi da 8 s), poi NAT-PMP…");
             try
             {
-                for (int i = 1; ; i++)
+                _device = null; _isPmp = false; _switched = false;
+                for (int i = 1; i <= 2 && _device == null && !ct.IsCancellationRequested; i++)
                 {
-                    try
-                    {
-                        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                        cts.CancelAfter(TimeSpan.FromSeconds(10));
-                        _device = await new NatDiscoverer().DiscoverDeviceAsync(PortMapper.Upnp | PortMapper.Pmp, cts);
-                        break;
-                    }
-                    catch (Exception) when (i < 3 && !ct.IsCancellationRequested)
-                    {
-                        L($"tentativo {i}/3: router non trovato, riprovo");
-                    }
+                    _device = await TryDiscoverAsync(PortMapper.Upnp, 8, ct);
+                    if (_device == null && i < 2) L($"UPnP: tentativo {i}/2 senza risposta, riprovo");
                 }
+                if (_device == null && !ct.IsCancellationRequested)
+                {
+                    L("UPnP non risponde: provo NAT-PMP");
+                    _device = await TryDiscoverAsync(PortMapper.Pmp, 5, ct);
+                    _isPmp = _device != null;
+                }
+                if (_device == null) throw new Exception("nessun router risponde con UPnP né con NAT-PMP");
                 ExternalIp = await _device.GetExternalIPAsync();
                 RouterIp = ExternalIp;
                 CgnatSuspected = IsPrivateOrCgnat(ExternalIp);
-                L($"router UPnP trovato · IP esterno dichiarato dal router: {ExternalIp}");
+                L($"router trovato con {MapperName} · IP esterno dichiarato dal router: {ExternalIp}");
 
                 // Controllo aggiuntivo: l'IP che vede internet deve coincidere con quello del router
                 IPAddress? pub = await GetPublicIpAsync(ct);
@@ -93,16 +126,17 @@ namespace IpTrxCtrl.Net
             }
             catch { }
 
+            int fails = 0;
             for (int i = 0; i < MaxAttempts && !ct.IsCancellationRequested; i++)
             {
-                int port = _rnd.Next(MinPort, MaxPort);
+                int port = _rnd.Next(MinPort, MaxPortEff);
                 if (Excluded.Contains(port) || used.Contains(port) || !IsLocalPortFree(port)) continue;
                 try
                 {
                     var map = new Mapping(Protocol.Tcp, port, port, 0, description);
-                    await _device.CreatePortMapAsync(map);
+                    await _device!.CreatePortMapAsync(map);
                     lock (_mappings) _mappings.Add(map);
-                    L($"{description}: porta TCP {port} aperta sul router (tentativo {i + 1})");
+                    L($"{description}: porta TCP {port} aperta sul router con {MapperName} (tentativo {i + 1})");
                     return port;
                 }
                 catch (Exception ex)
@@ -110,6 +144,12 @@ namespace IpTrxCtrl.Net
                     LastError = $"Porta {port} rifiutata: {ex.Message}";
                     L($"{description}: porta {port} rifiutata dal router ({ex.Message})");
                     used.Add(port);
+                    if (++fails >= 5)
+                    {
+                        if (await SwitchMapperAsync(ct)) { fails = 0; continue; }
+                        L($"{description}: il router rifiuta tutte le porte");
+                        break;
+                    }
                 }
             }
             L($"{description}: nessuna porta aperta dopo {MaxAttempts} tentativi");
@@ -169,20 +209,36 @@ namespace IpTrxCtrl.Net
                 if (inner == 0) break;
                 if (await OpenFixedAsync(Protocol.Tcp, ext, inner, description)) return (ext, inner);
             }
+            int fails = 0;
             for (int i = 0; i < MaxAttempts && !ct.IsCancellationRequested; i++)
             {
-                int port = _rnd.Next(MinPort, MaxPort);
+                int port = _rnd.Next(MinPort, MaxPortEff);
                 if (Excluded.Contains(port) || used.Contains(port) || tried.Contains(port) || !IsLocalPortFree(port)) continue;
                 tried.Add(port);
                 try
                 {
                     var map = new Mapping(Protocol.Tcp, port, port, 0, description);
-                    await _device.CreatePortMapAsync(map);
+                    await _device!.CreatePortMapAsync(map);
                     lock (_mappings) _mappings.Add(map);
-                    L($"{description}: porta TCP {port} aperta sul router");
+                    L($"{description}: porta TCP {port} aperta sul router con {MapperName}");
                     return (port, port);
                 }
-                catch (Exception ex) { L($"{description}: porta {port} rifiutata dal router ({ex.Message})"); }
+                catch (Exception ex)
+                {
+                    L($"{description}: porta {port} rifiutata dal router ({ex.Message})");
+                    if (++fails >= 5)
+                    {
+                        if (await SwitchMapperAsync(ct)) { fails = 0; continue; }
+                        break;
+                    }
+                }
+            }
+            // il router non apre porte: una porta del PC (rete locale, DMZ, inoltro manuale)
+            for (int i = 0; i < 200 && !ct.IsCancellationRequested; i++)
+            {
+                int p = PickLocalPort();
+                if (p == 0) break;
+                if (tried.Add(p)) { L($"{description}: il router non apre porte, uso la porta del PC {p} (vale in rete locale, con DMZ o inoltro manuale)"); return (p, p); }
             }
             return (0, 0);
         }
@@ -191,7 +247,7 @@ namespace IpTrxCtrl.Net
         {
             for (int i = 0; i < 200; i++)
             {
-                int port = _rnd.Next(MinPort, MaxPort);
+                int port = _rnd.Next(MinPort, MaxPortEff);
                 if (!Excluded.Contains(port) && IsLocalPortFree(port)) return port;
             }
             return 0;
