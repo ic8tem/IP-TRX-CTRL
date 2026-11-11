@@ -42,6 +42,10 @@ Server e client devono avere versioni dello stesso protocollo:
 
 Dettagli e controllo automatico: [docs/Versioni-compatibili.md](docs/Versioni-compatibili.md).
 
+## Sostieni il progetto
+
+IP-TRX-CTRL è gratuito. Se ti è utile e vuoi sostenerne lo sviluppo: [ko-fi.com/ic8tem](https://ko-fi.com/ic8tem).
+
 ## Licenza
 
 IP-TRX-CTRL è software libero, Copyright (C) 2026 IC8TEM, distribuito secondo la **GNU General Public License versione 3 o successiva** (file [`LICENSE`](LICENSE)), senza alcuna garanzia. Le licenze dei componenti di terze parti sono in `THIRD-PARTY-NOTICES.txt`.
