@@ -26,13 +26,21 @@ Su Windows Hamlib viene estratto in `%LOCALAPPDATA%\IP-TRX-CTRL\hamlib\<versione
 
 ## Come segnalare un problema
 
-1. Apri la cartella dei dati.
-2. Allega `errori.log` e, per i problemi di collegamento o abbinamento, `sessioni.log`.
-3. Indica sistema operativo, versione del programma (finestra *Informazioni e licenze*), ruolo del PC (server o client) e modello della radio.
+Dalla 0.3.0: **Impostazioni › Abbinamento e registri › «Rapporto per un problema…»**.
 
-Le segnalazioni si aprono nella scheda **Issues** del repository.
+1. Scrivi (se vuoi) cosa è successo.
+2. **Salva il rapporto…**: un file di testo con versione, sistema, ruolo, radio, metodi PTT e CW, opzioni di sicurezza, panadapter, broker MQTT e le ultime parti di `errori.log` (200 kB) e `sessioni.log` (400 kB).
+3. **Apri la pagina delle segnalazioni**: si apre la pagina **Issues** del repository; allega il file.
 
-`sessioni.log` contiene indirizzi IP e nominativi: se lo pubblichi, togli quello che non vuoi rendere visibile. Non allegare mai `pairing.key`.
+Nel rapporto **gli indirizzi IP pubblici sono mascherati**: ognuno diventa `[IP-1]`, `[IP-2]`… (lo stesso indirizzo ha sempre lo stesso nome, così il registro resta leggibile). Restano visibili solo gli indirizzi di rete locale (192.168.x.x, 10.x.x.x, 172.16–31.x.x, 100.64–127.x.x del CGNAT, 127.x.x.x, 169.254.x.x), che da internet non portano a nessuno; gli IPv6 sono tutti mascherati. Il rapporto non contiene chiavi né codici di abbinamento. Prima di allegarlo puoi aprirlo e leggerlo.
+
+Senza il rapporto: apri la cartella dei dati e allega `errori.log` e `sessioni.log`, indicando sistema operativo, versione, ruolo e radio. `sessioni.log` contiene indirizzi IP e nominativi. Non allegare mai i file delle chiavi (`pairing-….key`).
+
+## Versione nuova
+
+Dalla 0.3.0 il programma, all'avvio, chiede a GitHub qual è l'ultima release pubblicata (`api.github.com/repos/ic8tem/IP-TRX-CTRL/releases/latest`, senza account). Se è più nuova compare una riga in alto con **Apri la pagina** (la pagina della release) e **Chiudi** (per quella versione non compare più). Ricorda di aggiornare **tutti e due i PC** (vedi *Versioni compatibili*).
+
+Il controllo si spegne in *Impostazioni › Finestra principale*. GitHub vede l'indirizzo IP di chi chiede, come per qualunque pagina web; non viene mandato nient'altro. Il servizio è quello pubblico delle API di GitHub (limite di 60 richieste all'ora per indirizzo senza account: il programma ne fa una per avvio).
 
 ## Problemi frequenti
 

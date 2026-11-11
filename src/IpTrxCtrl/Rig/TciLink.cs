@@ -67,6 +67,17 @@ namespace IpTrxCtrl.Rig
         public bool FilterKnown { get; private set; }
         public int CwSpeed { get; private set; }
         public int Mute { get; private set; } = -1;            // -1 sconosciuto, 0, 1
+        // comandi del ricevitore 0 (-1 = il programma non li ha mai comunicati)
+        public int Nr { get; private set; } = -1;
+        public int Nb { get; private set; } = -1;
+        public int Anf { get; private set; } = -1;
+        public int SqlEnable { get; private set; } = -1;
+        public float SqlLevelDb { get; private set; } = float.NaN;   // -140..0 dB
+        /// <summary>Centro del panorama del ricevitore 0 (DDS), 0 = sconosciuto.</summary>
+        public long DdsHz { get; private set; }
+        /// <summary>Flusso IQ del ricevitore 0: centro (Hz), frequenza di campionamento, campioni I/Q alternati, coppie.</summary>
+        public static event Action<long, int, float[], int>? IqData;
+        private static volatile int _iqWanted;   // frequenza di campionamento chiesta (0 = flusso IQ spento)
         private readonly List<string> _modulations = new();
         private bool _driveWithRx = true;
 
@@ -223,6 +234,25 @@ namespace IpTrxCtrl.Rig
                 case "mute":
                     if (a.Length >= 1) Mute = IsTrue(a[a.Length - 1]) ? 1 : 0;
                     break;
+                case "rx_nr_enable":
+                    if (a.Length >= 2 && Rx0(a[0])) Nr = IsTrue(a[1]) ? 1 : 0;
+                    break;
+                case "rx_nb_enable":
+                    if (a.Length >= 2 && Rx0(a[0])) Nb = IsTrue(a[1]) ? 1 : 0;
+                    break;
+                case "rx_anf_enable":
+                    if (a.Length >= 2 && Rx0(a[0])) Anf = IsTrue(a[1]) ? 1 : 0;
+                    break;
+                case "sql_enable":
+                    if (a.Length >= 2 && Rx0(a[0])) SqlEnable = IsTrue(a[1]) ? 1 : 0;
+                    else if (a.Length == 1) SqlEnable = IsTrue(a[0]) ? 1 : 0;
+                    break;
+                case "sql_level":
+                    if (a.Length >= 1 && TryFloat(a[a.Length - 1], out float sl)) SqlLevelDb = sl;
+                    break;
+                case "dds":
+                    if (a.Length >= 2 && Rx0(a[0]) && TryLong(a[1], out long dds)) DdsHz = dds;
+                    break;
                 case "rx_smeter":
                 case "rx_channel_sensors":
                     // rx_smeter:ricevitore,canale,dBm;
@@ -254,6 +284,44 @@ namespace IpTrxCtrl.Rig
             await SendAsync("rx_sensors_enable:true,200;");
             await SendAsync("tx_sensors_enable:true,200;");
             if (_audioEnabled) await StartAudioAsync();
+            if (_iqWanted > 0) await StartIqAsync(_iqWanted);
+        }
+
+        // ================================================================ panorama (flusso IQ)
+
+        /// <summary>Accende (frequenza di campionamento) o spegne (0) il flusso IQ per il panadapter.</summary>
+        public static void SetIq(int sampleRate)
+        {
+            _iqWanted = sampleRate;
+            var link = Current;
+            if (link == null || !link.Ready) return;
+            _ = sampleRate > 0 ? link.StartIqAsync(sampleRate) : link.SendAsync("iq_stop:0;");
+        }
+
+        private async Task StartIqAsync(int rate)
+        {
+            await SendAsync($"iq_samplerate:{I(rate)};");
+            await SendAsync("iq_start:0;");
+            SessionLog.Write($"TCI flusso IQ avviato ({rate} campioni/s) per il panadapter");
+        }
+
+        public Task<bool> SetNrAsync(bool on) { Nr = on ? 1 : 0; return SendAsync($"rx_nr_enable:0,{B(on)};"); }
+        public Task<bool> SetNbAsync(bool on) { Nb = on ? 1 : 0; return SendAsync($"rx_nb_enable:0,{B(on)};"); }
+        public Task<bool> SetAnfAsync(bool on) { Anf = on ? 1 : 0; return SendAsync($"rx_anf_enable:0,{B(on)};"); }
+
+        /// <summary>Squelch Hamlib 0..1: 0 = spento, altrimenti acceso con soglia da -140 dB a 0 dB.</summary>
+        public async Task<bool> SetSquelchAsync(double v)
+        {
+            v = Math.Clamp(v, 0, 1);
+            bool on = v > 0.005;
+            SqlEnable = on ? 1 : 0;
+            bool ok = await SendAsync($"sql_enable:0,{B(on)};");
+            if (on)
+            {
+                SqlLevelDb = (float)Math.Round(-140 + v * 140);
+                await SendAsync($"sql_level:{I((long)SqlLevelDb)};");
+            }
+            return ok;
         }
 
         private async Task StartAudioAsync()
@@ -406,7 +474,8 @@ namespace IpTrxCtrl.Rig
             if (receiver != 0) return;
             if (rate == 0) rate = 48000;
             if (channels != 1 && channels != 2) channels = 2;
-            if (type == 1) OnRxAudio(d, len, rate, format, (int)channels);
+            if (type == 0) OnIq(d, len, rate, format);
+            else if (type == 1) OnRxAudio(d, len, rate, format, (int)channels);
             else if (type == 3) _ = AnswerTxChronoAsync(rate, format, (int)channels, (int)length);
         }
 
@@ -420,6 +489,19 @@ namespace IpTrxCtrl.Rig
             for (int i = 0; i < frames; i++)
                 mono[i] = ReadSample(d, 64 + i * channels * bps, format);   // canale sinistro
             try { RxAudio?.Invoke(mono, frames, (int)rate); } catch { }
+        }
+
+        /// <summary>Flusso IQ: coppie I/Q (due canali) nel formato dell'intestazione.</summary>
+        private void OnIq(byte[] d, int len, uint rate, uint format)
+        {
+            if (_iqWanted <= 0 || IqData == null) return;
+            int bps = Bytes(format);
+            if (bps == 0) return;
+            int pairs = (len - 64) / (bps * 2);
+            if (pairs <= 0) return;
+            var iq = new float[pairs * 2];
+            for (int i = 0; i < pairs * 2; i++) iq[i] = ReadSample(d, 64 + i * bps, format);
+            try { IqData?.Invoke(DdsHz, (int)rate, iq, pairs); } catch { }
         }
 
         private static float ReadSample(byte[] d, int o, uint format) => format switch

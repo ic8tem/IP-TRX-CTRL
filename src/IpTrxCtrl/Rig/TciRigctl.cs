@@ -202,11 +202,28 @@ namespace IpTrxCtrl.Rig
                 case "l": return GetLevel(A(0));
                 case "L": return await SetLevelAsync(A(0), A(1));
                 case "u":
-                    if (A(0) == "MUTE" && L.Mute >= 0) return L.Mute + "\n";
-                    return Unavailable;
+                    switch (A(0))
+                    {
+                        case "MUTE" when L.Mute >= 0: return L.Mute + "\n";
+                        case "NR" when L.Nr >= 0: return L.Nr + "\n";
+                        case "NB" when L.Nb >= 0: return L.Nb + "\n";
+                        case "ANF" when L.Anf >= 0: return L.Anf + "\n";
+                        default: return Unavailable;
+                    }
                 case "U":
-                    if (A(0) == "MUTE") return await L.SetMuteAsync(A(1) == "1") ? Ok : "RPRT -5\n";
-                    return Unavailable;
+                {
+                    bool on = A(1) == "1";
+                    Task<bool>? op = A(0) switch
+                    {
+                        "MUTE" => L.SetMuteAsync(on),
+                        "NR" => L.SetNrAsync(on),
+                        "NB" => L.SetNbAsync(on),
+                        "ANF" => L.SetAnfAsync(on),
+                        _ => null
+                    };
+                    if (op == null) return Unavailable;
+                    return await op ? Ok : "RPRT -5\n";
+                }
                 case "b":
                 {
                     int sp = line.IndexOf(' ');
@@ -243,6 +260,10 @@ namespace IpTrxCtrl.Rig
                 case "RFPOWER_METER_WATTS": return Inv(Math.Round(L.PowerW, 1)) + "\n";
                 case "RFPOWER": return L.Drive >= 0 ? Inv(L.Drive / 100.0) + "\n" : Unavailable;
                 case "KEYSPD": return L.CwSpeed > 0 ? Inv(L.CwSpeed) + "\n" : Unavailable;
+                case "SQL":
+                    if (L.SqlEnable < 0) return Unavailable;
+                    if (L.SqlEnable == 0 || float.IsNaN(L.SqlLevelDb)) return "0\n";
+                    return Inv(Math.Round(Math.Clamp((L.SqlLevelDb + 140) / 140.0, 0, 1), 2)) + "\n";
                 default: return Unavailable;
             }
         }
@@ -255,6 +276,7 @@ namespace IpTrxCtrl.Rig
             {
                 case "RFPOWER": return await L.SetDriveAsync((int)Math.Round(v * 100)) ? Ok : "RPRT -5\n";
                 case "KEYSPD": return await L.SetCwSpeedAsync((int)Math.Round(v)) ? Ok : "RPRT -5\n";
+                case "SQL": return await L.SetSquelchAsync(v) ? Ok : "RPRT -5\n";
                 default: return Unavailable;
             }
         }

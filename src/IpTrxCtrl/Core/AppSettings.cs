@@ -23,7 +23,22 @@ namespace IpTrxCtrl.Core
         public string Text { get; set; } = "";
     }
 
-    /// <summary>Impostazioni salvate nella cartella dati dell'utente (IP-TRX-CTRL/settings.json).</summary>
+    /// <summary>Una memoria di frequenza (sul client, oppure sul server e comune a tutti i client).</summary>
+    public sealed class MemoryEntry
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public long FreqHz { get; set; }
+        public string Mode { get; set; } = "";
+    }
+
+    /// <summary>Ultima frequenza usata su una banda (pulsanti delle bande).</summary>
+    public sealed class BandSlot
+    {
+        public long FreqHz { get; set; }
+        public string Mode { get; set; } = "";
+    }
+
     /// <summary>Un server abbinato al client (dalla 0.3.0): la sua chiave sta nel deposito sicuro con questo Id.</summary>
     public sealed class ServerEntry
     {
@@ -47,6 +62,7 @@ namespace IpTrxCtrl.Core
         public string Name { get; set; } = "";
         public string Callsign { get; set; } = "";
         public string How { get; set; } = "";        // numero temporaneo, codice fisso, abbinamento precedente, scambio dei ruoli
+        public bool CanTransmit { get; set; } = true; // false = solo ascolto
         public DateTime PairedAt { get; set; }
         public DateTime LastUsed { get; set; }
 
@@ -86,6 +102,20 @@ namespace IpTrxCtrl.Core
         public bool SwrProtection { get; set; } = true;
         public double SwrWarn { get; set; } = 1.9;    // da qui la barra del ROS lampeggia
         public double SwrTrip { get; set; } = 2.5;    // da qui la trasmissione si blocca
+        // sicurezza in trasmissione (decide il server)
+        public bool TxTimeoutEnabled { get; set; } = true;
+        public int TxTimeoutSec { get; set; } = 180;  // tempo massimo di una trasmissione comandata dal programma
+        public bool QsyLockInTx { get; set; } = true; // niente cambi di frequenza o modo durante la trasmissione
+        public bool LocalPriority { get; set; } = true;
+        public int LocalPriorityMin { get; set; } = 3; // minuti di blocco della trasmissione remota dopo una trasmissione locale
+        public bool FixedCodeRxOnly { get; set; } = true; // i client abbinati con il codice fisso partono in solo ascolto
+        // memorie comuni a tutti i client (sul server)
+        public List<MemoryEntry> ServerMemories { get; set; } = new();
+        // panadapter della radio (server): TCI se il CAT passa dal TCI, altrimenti porta CI-V Icom dedicata
+        public bool PanEnabled { get; set; }
+        public string PanCom { get; set; } = "";
+        public int PanBaud { get; set; } = 115200;
+        public string PanCivAddr { get; set; } = "94";
 
         // ---------------- Audio
         public string InputDeviceServer { get; set; } = "";
@@ -135,6 +165,19 @@ namespace IpTrxCtrl.Core
         public int WfIntensity { get; set; } = 50;     // cursore intensità della cascata 0..100
         public bool CwWideFilter { get; set; } = true; // in CW apri il filtro della radio per vedere la cascata
         public int CwFilterHz { get; set; } = 3000;
+
+        // ---------------- Finestra principale: parti facoltative (Impostazioni › Finestra principale)
+        public bool ShowBands { get; set; } = true;          // pulsanti delle bande e passo di sintonia
+        public bool ShowRadioControls { get; set; } = true;  // NR, NB, Notch, ATT, preamplificatore, AGC, compressore, squelch
+        public bool ShowMemories { get; set; } = true;
+        public bool ShowPanadapter { get; set; } = true;     // se il server lo fornisce
+        public bool ShowAlc { get; set; } = true;            // strumento ALC accanto a ROS e Po
+        public int TuneStepHz { get; set; } = 100;
+        public Dictionary<string, BandSlot> BandLast { get; set; } = new();
+        public List<MemoryEntry> Memories { get; set; } = new();   // memorie di questo PC
+        public int PanIntensity { get; set; } = 50;
+        public bool CheckUpdates { get; set; } = true;
+        public string UpdateSeen { get; set; } = "";         // versione nuova già segnalata
 
         // ---------------- Porta seriale del client: PTT e tasto CW da hardware (o porta virtuale)
         public string InputCom { get; set; } = "";

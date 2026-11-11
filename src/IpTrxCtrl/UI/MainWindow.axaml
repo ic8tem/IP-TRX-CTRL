@@ -2,425 +2,502 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="clr-namespace:IpTrxCtrl.UI"
         x:Class="IpTrxCtrl.UI.MainWindow"
-        Title="IP-TRX-CTRL" Width="1240" Height="816" MinWidth="980" MinHeight="510"
+        Title="IP-TRX-CTRL" Width="1080" Height="760" MinWidth="900" MinHeight="520"
         WindowStartupLocation="CenterScreen"
         Icon="avares://IP-TRX-CTRL/Assets/icon.png">
+  <!-- 0.3.0: finestra più piccola (prima 1240 × 816). Tre colonne in alto (radio · strumenti e PTT · altro PC),
+       le parti meno usate in riquadri richiudibili e in schede in basso; le parti nuove si nascondono dalle Impostazioni. -->
+  <Window.Styles>
+    <Style Selector="Border.panel">
+      <Setter Property="Padding" Value="12" />
+    </Style>
+    <Style Selector="Button.small, ToggleButton.small">
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="Button.band">
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="MinWidth" Value="34" />
+      <Setter Property="Padding" Value="4,1" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Margin" Value="0,0,3,0" />
+    </Style>
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="MinHeight" Value="32" />
+      <Setter Property="Padding" Value="12,2" />
+    </Style>
+    <Style Selector="Expander">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="TextBlock.meter">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="{DynamicResource B.Muted}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+  </Window.Styles>
+
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-    <StackPanel Margin="16" Spacing="14">
+    <StackPanel Margin="10" Spacing="8">
 
       <!-- ===================== Intestazione ===================== -->
-      <Border Classes="panel" Padding="20,16">
+      <Border Classes="panel" Padding="14,8">
         <Grid ColumnDefinitions="*,Auto">
           <StackPanel VerticalAlignment="Center">
-            <TextBlock Text="IP-TRX-CTRL" FontSize="21" FontWeight="Bold" />
-            <TextBlock x:Name="TxtRoleLine" Classes="sub" Margin="0,4,0,0" />
+            <TextBlock Text="IP-TRX-CTRL" FontSize="17" FontWeight="Bold" />
+            <TextBlock x:Name="TxtRoleLine" Classes="sub" FontSize="12" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
           </StackPanel>
-          <WrapPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
-            <Border Classes="chip" Margin="0,0,8,0" VerticalAlignment="Center">
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <Border Classes="chip" Padding="10,4" VerticalAlignment="Center">
               <StackPanel Orientation="Horizontal" Spacing="6">
                 <Ellipse x:Name="DotConn" Width="10" Height="10" Fill="{DynamicResource B.Track}" VerticalAlignment="Center" />
-                <TextBlock x:Name="TxtConnChip" FontSize="13" FontWeight="SemiBold" Text="Avvio…" />
+                <TextBlock x:Name="TxtConnChip" FontSize="12" FontWeight="SemiBold" Text="Avvio…" MaxWidth="190" TextTrimming="CharacterEllipsis" />
               </StackPanel>
             </Border>
-            <Border x:Name="ChipUpnp" Classes="chip" Margin="0,0,8,0" VerticalAlignment="Center" Cursor="Hand" ToolTip.Tip="UPnP sul router: ricerca in corso">
+            <Border x:Name="ChipUpnp" Classes="chip" Padding="10,4" VerticalAlignment="Center" Cursor="Hand" ToolTip.Tip="UPnP sul router: ricerca in corso">
               <StackPanel Orientation="Horizontal" Spacing="6">
                 <Ellipse x:Name="LedUpnp" Width="10" Height="10" Fill="{DynamicResource B.Track}" VerticalAlignment="Center" />
-                <TextBlock FontSize="13" FontWeight="SemiBold" Text="UPnP" />
+                <TextBlock FontSize="12" FontWeight="SemiBold" Text="UPnP" />
               </StackPanel>
             </Border>
-            <Border Background="{DynamicResource B.Accent}" CornerRadius="14" Padding="12,6" Margin="0,0,8,0" VerticalAlignment="Center">
-              <TextBlock x:Name="TxtRoleBadge" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource B.AccentText}" Text="CLIENT" />
+            <Border Background="{DynamicResource B.Accent}" CornerRadius="12" Padding="10,4" VerticalAlignment="Center">
+              <TextBlock x:Name="TxtRoleBadge" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource B.AccentText}" Text="CLIENT" />
             </Border>
-            <TextBlock Text="Colori" Classes="sub" VerticalAlignment="Center" Margin="4,0,8,0" />
-            <ComboBox x:Name="CmbTheme" Width="120" Margin="0,0,8,0" VerticalAlignment="Center" />
-            <Button x:Name="BtnSettings" Content="Impostazioni" Margin="0,0,8,0" />
-            <Button x:Name="BtnSwap" Content="Inverti ruoli" Margin="0,0,8,0" />
-            <Button x:Name="BtnHelp" Content="Help" />
-          </WrapPanel>
+            <ComboBox x:Name="CmbTheme" Width="112" MinHeight="30" FontSize="12" VerticalAlignment="Center" ToolTip.Tip="Colori" />
+            <Button x:Name="BtnSettings" Classes="small" Content="Impostazioni" />
+            <Button x:Name="BtnSwap" Classes="small" Content="Inverti ruoli" />
+            <Button x:Name="BtnHelp" Classes="small" Content="Help" />
+          </StackPanel>
         </Grid>
       </Border>
 
-      <!-- ===================== Radio + Server ===================== -->
-      <Grid ColumnDefinitions="3*,18,2*">
-        <!-- colonna sinistra: radio e audio -->
-        <Grid RowDefinitions="Auto,14,*">
+      <!-- avviso di versione nuova -->
+      <Border x:Name="BarUpdate" Classes="inset" Padding="12,6" IsVisible="False">
+        <Grid ColumnDefinitions="*,Auto,Auto">
+          <TextBlock x:Name="TxtUpdate" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" />
+          <Button x:Name="BtnUpdateOpen" Grid.Column="1" Classes="small accent" Content="Apri la pagina" Margin="8,0" />
+          <Button x:Name="BtnUpdateClose" Grid.Column="2" Classes="small" Content="Chiudi" />
+        </Grid>
+      </Border>
+
+      <!-- ===================== Radio · strumenti e PTT · altro PC ===================== -->
+      <Grid ColumnDefinitions="11*,8,6*,8,6*">
+
         <!-- Radio -->
         <Border Classes="panel">
-          <StackPanel Spacing="10">
+          <StackPanel Spacing="7">
             <Grid ColumnDefinitions="*,Auto">
-              <TextBlock x:Name="TxtRadioTitle" Classes="h2" Text="RADIO REMOTA" />
-              <TextBlock x:Name="TxtCatStatus" Grid.Column="1" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource B.Ok}" />
+              <TextBlock x:Name="TxtRadioTitle" Classes="h2" Text="RADIO REMOTA" TextTrimming="CharacterEllipsis" />
+              <TextBlock x:Name="TxtCatStatus" Grid.Column="1" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource B.Ok}" MaxWidth="230" TextTrimming="CharacterEllipsis" Margin="8,0,0,0" />
             </Grid>
 
-            <Border Background="{DynamicResource B.QrgBg}" CornerRadius="8" Padding="16,12">
+            <Border Background="{DynamicResource B.QrgBg}" CornerRadius="8" Padding="12,6">
               <Grid ColumnDefinitions="Auto,*,Auto">
-                <TextBlock x:Name="TxtVfoALabel" Classes="mono" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource B.Qrg}" Opacity="0.8" VerticalAlignment="Center" Text="VFO A" Margin="0,0,12,0" />
-                <TextBlock x:Name="TxtQrg" Grid.Column="1" Classes="mono" FontSize="34" FontWeight="Bold" Foreground="{DynamicResource B.Qrg}" Text="--.---.---" />
-                <TextBlock x:Name="TxtMode" Grid.Column="2" Classes="mono" FontSize="16" Foreground="{DynamicResource B.Qrg}" VerticalAlignment="Bottom" Text="MHz · —" />
+                <TextBlock x:Name="TxtVfoALabel" Classes="mono" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource B.Qrg}" Opacity="0.8" VerticalAlignment="Center" Text="VFO A" Margin="0,0,10,0" />
+                <TextBlock x:Name="TxtQrg" Grid.Column="1" Classes="mono" FontSize="30" FontWeight="Bold" Foreground="{DynamicResource B.Qrg}" Text="--.---.---" />
+                <TextBlock x:Name="TxtMode" Grid.Column="2" Classes="mono" FontSize="14" Foreground="{DynamicResource B.Qrg}" VerticalAlignment="Bottom" Margin="0,0,0,4" Text="MHz · —" />
               </Grid>
             </Border>
 
-            <!-- VFO B e split -->
-            <Border Classes="inset">
-              <StackPanel Spacing="10">
-                <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
-                  <TextBlock x:Name="TxtVfoBLabel" Classes="mono" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource B.Muted}" VerticalAlignment="Center" Text="VFO B" Margin="0,0,10,0" />
-                  <TextBlock x:Name="TxtQrgB" Grid.Column="1" Classes="mono" FontSize="22" FontWeight="Bold" VerticalAlignment="Center" Text="--.---.---" />
-                  <TextBlock x:Name="TxtModeB" Grid.Column="2" Classes="mono" FontSize="13" Foreground="{DynamicResource B.Muted}" VerticalAlignment="Center" Margin="8,0,0,0" Text="MHz" />
-                  <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="BtnAB" Content="A/B" MinHeight="34" />
-                    <Button x:Name="BtnAeqB" Content="A=B" MinHeight="34" />
-                    <ToggleButton x:Name="BtnSplit" Content="SPLIT" Padding="14,6" />
-                  </StackPanel>
-                </Grid>
-                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*">
-                  <TextBlock Text="Offset split" Classes="sub" VerticalAlignment="Center" Margin="0,0,10,0" />
-                  <Button x:Name="BtnOffMinus" Grid.Column="1" Content="−" Width="40" MinHeight="34" Padding="0" />
-                  <TextBox x:Name="TxtOffset" Grid.Column="2" Width="120" Margin="6,0" HorizontalContentAlignment="Right" FontFamily="{DynamicResource MonoFont}" Text="+0,0 kHz" />
-                  <Button x:Name="BtnOffPlus" Grid.Column="3" Content="+" Width="40" MinHeight="34" Padding="0" />
-                  <StackPanel Grid.Column="4" Margin="12,0,0,0">
-                    <Slider x:Name="SldOffset" Minimum="-50" Maximum="50" Value="0" />
-                    <Grid ColumnDefinitions="*,*,*">
-                      <TextBlock Classes="mono" FontSize="11" Foreground="{DynamicResource B.Muted}" Text="−50" />
-                      <TextBlock Grid.Column="1" Classes="mono" FontSize="11" Foreground="{DynamicResource B.Muted}" Text="0" HorizontalAlignment="Center" />
-                      <TextBlock Grid.Column="2" Classes="mono" FontSize="11" Foreground="{DynamicResource B.Muted}" Text="+50 kHz" HorizontalAlignment="Right" />
-                    </Grid>
-                  </StackPanel>
-                </Grid>
-                <TextBlock x:Name="TxtSplitNote" Classes="sub" FontSize="12" />
+            <!-- nuova QRG, modo e passo di sintonia -->
+            <Grid ColumnDefinitions="*,6,92,6,Auto,10,Auto">
+              <TextBox x:Name="TxtNewQrg" FontFamily="{DynamicResource MonoFont}" MinHeight="32" Watermark="Nuova QRG (Hz)" />
+              <ComboBox x:Name="CmbMode" Grid.Column="2" MinHeight="32" FontSize="12" />
+              <Button x:Name="BtnSetQrg" Grid.Column="4" Classes="small accent" Content="Imposta" />
+              <StackPanel x:Name="PanelStep" Grid.Column="6" Orientation="Horizontal" Spacing="3">
+                <Button x:Name="BtnStepDown" Classes="small" Content="◀" Width="32" Padding="0" ToolTip.Tip="Giù di un passo (anche la rotella sul pulsante)" />
+                <ComboBox x:Name="CmbStep" Width="92" MinHeight="28" FontSize="12" ToolTip.Tip="Passo di sintonia" />
+                <Button x:Name="BtnStepUp" Classes="small" Content="▶" Width="32" Padding="0" ToolTip.Tip="Su di un passo" />
               </StackPanel>
-            </Border>
-
-            <Grid ColumnDefinitions="*,10,110,10,Auto">
-              <StackPanel>
-                <TextBlock Classes="lbl" Text="Nuova QRG (Hz)" />
-                <TextBox x:Name="TxtNewQrg" FontFamily="{DynamicResource MonoFont}" />
-              </StackPanel>
-              <StackPanel Grid.Column="2">
-                <TextBlock Classes="lbl" Text="Modo" />
-                <ComboBox x:Name="CmbMode" />
-              </StackPanel>
-              <Button x:Name="BtnSetQrg" Grid.Column="4" Classes="accent" Content="Imposta" VerticalAlignment="Bottom" />
             </Grid>
 
-            <Grid ColumnDefinitions="110,*,80" RowDefinitions="24,24,24,24">
-              <TextBlock Text="S-meter" Classes="sub" VerticalAlignment="Center" />
-              <ProgressBar x:Name="PbS" Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center" />
-              <TextBlock x:Name="TxtS" Grid.Column="2" Classes="mono" HorizontalAlignment="Right" VerticalAlignment="Center" Text="—" />
-              <TextBlock Grid.Row="1" Text="Potenza RF" Classes="sub" VerticalAlignment="Center" />
-              <ProgressBar x:Name="PbRf" Grid.Row="1" Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource B.Qrg}" />
-              <TextBlock x:Name="TxtRf" Grid.Row="1" Grid.Column="2" Classes="mono" HorizontalAlignment="Right" VerticalAlignment="Center" Text="—" />
-              <TextBlock Grid.Row="2" Text="SWR" Classes="sub" VerticalAlignment="Center" />
-              <ProgressBar x:Name="PbSwr" Grid.Row="2" Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center" />
-              <TextBlock x:Name="TxtSwr" Grid.Row="2" Grid.Column="2" Classes="mono" HorizontalAlignment="Right" VerticalAlignment="Center" Text="—" />
-              <TextBlock Grid.Row="3" Text="TX gain radio" Classes="sub" VerticalAlignment="Center" />
-              <ProgressBar x:Name="PbGain" Grid.Row="3" Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center" />
-              <TextBlock x:Name="TxtGain" Grid.Row="3" Grid.Column="2" Classes="mono" HorizontalAlignment="Right" VerticalAlignment="Center" Text="—" />
+            <!-- bande (facoltative) -->
+            <WrapPanel x:Name="WrapBands" />
+
+            <!-- VFO B, split e offset -->
+            <Border Classes="inset" Padding="8,6">
+              <Grid ColumnDefinitions="Auto,Auto,*,Auto,8,Auto">
+                <TextBlock x:Name="TxtVfoBLabel" Classes="mono" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource B.Muted}" VerticalAlignment="Center" Text="VFO B" Margin="0,0,8,0" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                  <TextBlock x:Name="TxtQrgB" Classes="mono" FontSize="17" FontWeight="Bold" VerticalAlignment="Center" Text="--.---.---" />
+                  <TextBlock x:Name="TxtModeB" Classes="mono" FontSize="11" Foreground="{DynamicResource B.Muted}" VerticalAlignment="Center" Text="MHz" />
+                </StackPanel>
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                  <Button x:Name="BtnAB" Classes="small" Content="A/B" />
+                  <Button x:Name="BtnAeqB" Classes="small" Content="A=B" />
+                  <ToggleButton x:Name="BtnSplit" Classes="small" Content="SPLIT" />
+                </StackPanel>
+                <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                  <Button x:Name="BtnOffMinus" Classes="small" Content="−" Width="28" Padding="0" />
+                  <TextBox x:Name="TxtOffset" Width="96" MinHeight="28" FontSize="12" HorizontalContentAlignment="Right" FontFamily="{DynamicResource MonoFont}" Text="+0,0 kHz" />
+                  <Button x:Name="BtnOffPlus" Classes="small" Content="+" Width="28" Padding="0" />
+                </StackPanel>
+              </Grid>
+            </Border>
+
+            <!-- potenza TX -->
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
+              <TextBlock Text="Potenza" FontWeight="Bold" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0" />
+              <TextBlock x:Name="TxtPowMin" Grid.Column="1" Classes="sub" FontSize="11" VerticalAlignment="Center" Text="1 W" />
+              <Slider x:Name="SldPower" Grid.Column="2" Minimum="1" Maximum="100" Value="50" Margin="8,0" VerticalAlignment="Center" />
+              <TextBlock x:Name="TxtPowMax" Grid.Column="3" Classes="sub" FontSize="11" VerticalAlignment="Center" Text="100 W" />
+              <TextBlock x:Name="TxtPower" Grid.Column="4" Classes="mono" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource B.Accent}" Width="62" TextAlignment="Right" VerticalAlignment="Center" Text="—" />
+              <Border Grid.Column="5" Classes="chip" Padding="8,3" Margin="8,0,0,0" VerticalAlignment="Center" MaxWidth="150">
+                <TextBlock x:Name="TxtPowerUnit" FontSize="11" Text="—" TextTrimming="CharacterEllipsis" />
+              </Border>
             </Grid>
 
-            <!-- Potenza TX -->
-            <Border Classes="inset">
-              <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
-                <TextBlock Text="Potenza TX" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0" />
-                <TextBlock x:Name="TxtPowMin" Grid.Column="1" Classes="sub" VerticalAlignment="Center" Text="1 W" />
-                <Slider x:Name="SldPower" Grid.Column="2" Minimum="1" Maximum="100" Value="50" Margin="10,0" VerticalAlignment="Center" />
-                <TextBlock x:Name="TxtPowMax" Grid.Column="3" Classes="sub" VerticalAlignment="Center" Text="100 W" />
-                <TextBlock x:Name="TxtPower" Grid.Column="4" Classes="mono" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource B.Accent}" Width="70" TextAlignment="Right" VerticalAlignment="Center" Text="—" />
-                <Border Grid.Column="5" Classes="chip" Margin="10,0,0,0" VerticalAlignment="Center">
-                  <TextBlock x:Name="TxtPowerUnit" FontSize="12" Text="—" />
-                </Border>
-              </Grid>
-            </Border>
+            <!-- comandi della radio (facoltativi) -->
+            <WrapPanel x:Name="PanelRadioCtl">
+              <ToggleButton x:Name="BtnNr" Classes="small" Content="NR" Margin="0,0,4,4" ToolTip.Tip="Riduzione del rumore (Hamlib NR)" />
+              <ToggleButton x:Name="BtnNb" Classes="small" Content="NB" Margin="0,0,4,4" ToolTip.Tip="Noise blanker (Hamlib NB)" />
+              <ToggleButton x:Name="BtnAnf" Classes="small" Content="NOTCH" Margin="0,0,4,4" ToolTip.Tip="Notch automatico (Hamlib ANF)" />
+              <ToggleButton x:Name="BtnComp" Classes="small" Content="COMP" Margin="0,0,10,4" ToolTip.Tip="Compressore del microfono della radio (Hamlib COMP)" />
+              <Button x:Name="BtnAtt" Classes="small" Content="ATT —" Margin="0,0,4,4" ToolTip.Tip="Attenuatore: ogni clic passa al valore successivo che la radio accetta, poi spento" />
+              <Button x:Name="BtnPre" Classes="small" Content="PRE —" Margin="0,0,4,4" ToolTip.Tip="Preamplificatore: ogni clic passa al valore successivo, poi spento" />
+              <Button x:Name="BtnAgc" Classes="small" Content="AGC —" Margin="0,0,10,4" ToolTip.Tip="AGC: veloce, medio, lento" />
+              <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,4">
+                <TextBlock Text="SQL" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
+                <Slider x:Name="SldSql" Width="100" Minimum="0" Maximum="100" VerticalAlignment="Center" />
+                <TextBlock x:Name="TxtSql" Classes="mono" FontSize="11" Width="34" VerticalAlignment="Center" Text="—" />
+              </StackPanel>
+            </WrapPanel>
 
-            <!-- RX audio su una riga (modo CW, client) -->
-            <Border x:Name="PanelRxCompact" Classes="inset" IsVisible="False">
-              <Grid ColumnDefinitions="Auto,170,Auto,90,Auto,60,Auto,*">
-                <TextBlock Text="RX audio" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0" />
-                <ComboBox x:Name="CmbOutCompact" Grid.Column="1" />
-                <TextBlock Grid.Column="2" Text="Volume" Classes="sub" FontSize="12" VerticalAlignment="Center" Margin="10,0,6,0" />
-                <Slider x:Name="SldRxCompact" Grid.Column="3" Minimum="0" Maximum="100" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="4" Text="Boost %" Classes="sub" FontSize="12" VerticalAlignment="Center" Margin="10,0,6,0" />
-                <TextBox x:Name="TxtRxBoostCompact" Grid.Column="5" HorizontalContentAlignment="Right" />
-                <TextBlock Grid.Column="6" Text="Livello" Classes="sub" FontSize="12" VerticalAlignment="Center" Margin="10,0,6,0" />
-                <ProgressBar x:Name="PbRxCompact" Grid.Column="7" Height="8" MinHeight="8" VerticalAlignment="Center" />
-              </Grid>
-            </Border>
+            <!-- memorie (facoltative): di questo PC e del server -->
+            <Grid x:Name="PanelMemories" ColumnDefinitions="Auto,*,6,Auto,4,Auto,4,Auto">
+              <TextBlock Text="Memorie" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0" />
+              <ComboBox x:Name="CmbMem" Grid.Column="1" MinHeight="30" FontSize="12" PlaceholderText="nessuna memoria" />
+              <Button x:Name="BtnMemGo" Grid.Column="3" Classes="small accent" Content="Vai" />
+              <Button x:Name="BtnMemSave" Grid.Column="5" Classes="small" Content="Salva…" ToolTip.Tip="Salva la frequenza e il modo attuali (in questo PC o sul server, comuni a tutti i client)" />
+              <Button x:Name="BtnMemDel" Grid.Column="7" Classes="small" Content="Elimina" />
+            </Grid>
 
             <WrapPanel>
-              <Border Classes="chip" Margin="0,0,8,0"><TextBlock x:Name="TxtMute" FontSize="12" Text="Mute / inibizione: —" /></Border>
-              <Border Classes="chip"><TextBlock x:Name="TxtRadioModel" FontSize="12" Text="Radio: —" /></Border>
+              <Border Classes="chip" Padding="8,3" Margin="0,0,6,0"><TextBlock x:Name="TxtMute" FontSize="11" Text="Mute / inibizione: —" /></Border>
+              <Border Classes="chip" Padding="8,3"><TextBlock x:Name="TxtRadioModel" FontSize="11" Text="Radio: —" /></Border>
             </WrapPanel>
           </StackPanel>
         </Border>
 
-          <!-- Audio (fonia): sotto la radio, occupa lo spazio che restava vuoto -->
-          <Border x:Name="PanelAudio" Grid.Row="2" Classes="panel">
-            <StackPanel Spacing="10">
-              <TextBlock Classes="h2" Text="AUDIO · 8 kHz, 16 bit mono · modalità condivisa" />
-              <Grid ColumnDefinitions="*,12,*">
-                <StackPanel>
-                  <TextBlock x:Name="TxtInLabel" Classes="lbl" Text="Microfono (verso la radio)" />
-                  <ComboBox x:Name="CmbIn" />
-                </StackPanel>
-                <StackPanel Grid.Column="2">
-                  <TextBlock x:Name="TxtOutLabel" Classes="lbl" Text="Altoparlante (dalla radio)" />
-                  <ComboBox x:Name="CmbOut" />
-                </StackPanel>
-              </Grid>
-              <Grid ColumnDefinitions="*,12,*">
-                <Border Classes="inset" Padding="10">
-                  <StackPanel Spacing="6">
-                    <TextBlock x:Name="TxtRxTitle" Text="RX · audio ricevuto" FontWeight="SemiBold" />
-                    <TextBlock x:Name="TxtRxVol" Classes="lbl" />
-                    <Slider x:Name="SldRx" Minimum="0" Maximum="100" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                      <TextBlock Text="Boost oltre soglia" Classes="sub" VerticalAlignment="Center" />
-                      <TextBox x:Name="TxtRxBoost" Width="70" HorizontalContentAlignment="Right" />
-                      <TextBlock Text="%" Classes="sub" VerticalAlignment="Center" />
-                    </StackPanel>
-                    <ProgressBar x:Name="PbRx" Height="8" MinHeight="8" />
-                  </StackPanel>
-                </Border>
-                <Border Grid.Column="2" Classes="inset" Padding="10">
-                  <StackPanel Spacing="6">
-                    <TextBlock x:Name="TxtTxTitle" Text="TX · audio inviato" FontWeight="SemiBold" />
-                    <TextBlock x:Name="TxtTxVol" Classes="lbl" />
-                    <Slider x:Name="SldTx" Minimum="0" Maximum="100" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                      <TextBlock Text="Boost oltre soglia" Classes="sub" VerticalAlignment="Center" />
-                      <TextBox x:Name="TxtTxBoost" Width="70" HorizontalContentAlignment="Right" />
-                      <TextBlock Text="%" Classes="sub" VerticalAlignment="Center" />
-                    </StackPanel>
-                    <ProgressBar x:Name="PbTx" Height="8" MinHeight="8" />
-                  </StackPanel>
-                </Border>
-              </Grid>
-            </StackPanel>
-          </Border>
-        </Grid>
-
-        <!-- Server / peer -->
+        <!-- Strumenti e PTT -->
         <Border Grid.Column="2" Classes="panel">
-          <StackPanel Spacing="8">
-            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
-              <TextBlock x:Name="TxtPeerTitle" Classes="h2" Text="SERVER (STAZIONE RADIO)" />
-              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                <Ellipse x:Name="LedTx" Width="16" Height="16" Fill="{DynamicResource B.Track}" VerticalAlignment="Center" />
-                <TextBlock x:Name="TxtLed" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource B.Muted}" VerticalAlignment="Center" Text="RX" />
+          <StackPanel Spacing="6">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="h2" Text="STRUMENTI" />
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                <Ellipse x:Name="LedTx" Width="14" Height="14" Fill="{DynamicResource B.Track}" VerticalAlignment="Center" />
+                <TextBlock x:Name="TxtLed" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource B.Muted}" VerticalAlignment="Center" Text="RX" />
               </StackPanel>
             </Grid>
-            <!-- client: server abbinati, uno collegato per volta -->
-            <Grid x:Name="PanelServerPick" ColumnDefinitions="*,8,Auto">
-              <ComboBox x:Name="CmbServer" HorizontalAlignment="Stretch" ToolTip.Tip="Server abbinati: scegliendone un altro, il collegamento in corso si chiude" />
-              <Button x:Name="BtnNewServer" Grid.Column="2" Content="Abbina nuovo…" ToolTip.Tip="Abbina un altro server con il suo numero di 10 cifre; quelli già abbinati restano nell'elenco" />
+            <Grid ColumnDefinitions="38,*,52" RowDefinitions="21,21,21,21,21">
+              <TextBlock Text="S" Classes="meter" />
+              <ProgressBar x:Name="PbS" Grid.Column="1" Margin="0,0,8,0" VerticalAlignment="Center" />
+              <TextBlock x:Name="TxtS" Grid.Column="2" Classes="mono" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center" Text="—" />
+              <TextBlock Grid.Row="1" Text="Po" Classes="meter" />
+              <ProgressBar x:Name="PbRf" Grid.Row="1" Grid.Column="1" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource B.Qrg}" />
+              <TextBlock x:Name="TxtRf" Grid.Row="1" Grid.Column="2" Classes="mono" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center" Text="—" />
+              <TextBlock Grid.Row="2" Text="ROS" Classes="meter" />
+              <ProgressBar x:Name="PbSwr" Grid.Row="2" Grid.Column="1" Margin="0,0,8,0" VerticalAlignment="Center" />
+              <TextBlock x:Name="TxtSwr" Grid.Row="2" Grid.Column="2" Classes="mono" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center" Text="—" />
+              <TextBlock x:Name="TxtAlcLabel" Grid.Row="3" Text="ALC" Classes="meter" />
+              <ProgressBar x:Name="PbAlc" Grid.Row="3" Grid.Column="1" Margin="0,0,8,0" VerticalAlignment="Center" />
+              <TextBlock x:Name="TxtAlc" Grid.Row="3" Grid.Column="2" Classes="mono" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center" Text="—" />
+              <TextBlock Grid.Row="4" Text="Gain" Classes="meter" ToolTip.Tip="Guadagno TX della radio" />
+              <ProgressBar x:Name="PbGain" Grid.Row="4" Grid.Column="1" Margin="0,0,8,0" VerticalAlignment="Center" />
+              <TextBlock x:Name="TxtGain" Grid.Row="4" Grid.Column="2" Classes="mono" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center" Text="—" />
             </Grid>
-            <Grid ColumnDefinitions="130,*" RowDefinitions="25,25,25,25,25,Auto,Auto">
-              <TextBlock Text="Nominativo" Classes="sub" VerticalAlignment="Center" />
-              <TextBlock x:Name="TxtPeerCall" Grid.Column="1" Classes="mono" FontWeight="SemiBold" VerticalAlignment="Center" Text="—" />
-              <TextBlock Grid.Row="1" Text="IP server" Classes="sub" VerticalAlignment="Center" />
-              <TextBlock x:Name="TxtServerIp" Grid.Row="1" Grid.Column="1" Classes="mono" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="—" />
-              <TextBlock Grid.Row="2" x:Name="TxtClientIpLabel" Text="Mio IP (client)" Classes="sub" VerticalAlignment="Center" />
-              <TextBlock x:Name="TxtClientIp" Grid.Row="2" Grid.Column="1" Classes="mono" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="—" />
-              <TextBlock Grid.Row="3" Text="Collegato da" Classes="sub" VerticalAlignment="Center" />
-              <TextBlock x:Name="TxtPeerSince" Grid.Row="3" Grid.Column="1" Classes="mono" VerticalAlignment="Center" Text="—" />
-              <TextBlock Grid.Row="4" Text="Latenza" Classes="sub" VerticalAlignment="Center" />
-              <TextBlock x:Name="TxtPeerLatency" Grid.Row="4" Grid.Column="1" Classes="mono" VerticalAlignment="Center" Text="—" />
-              <TextBlock Grid.Row="5" x:Name="TxtNetLocalLabel" Text="Rete client" Classes="sub" Margin="0,5,0,0" />
-              <TextBlock x:Name="TxtNetLocal" Grid.Row="5" Grid.Column="1" Classes="mono" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" Text="verifico IPv4 / IPv6…" />
-              <TextBlock Grid.Row="6" x:Name="TxtNetPeerLabel" Text="Rete server" Classes="sub" Margin="0,5,0,0" />
-              <TextBlock x:Name="TxtNetPeer" Grid.Row="6" Grid.Column="1" Classes="mono" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" Text="—" />
-            </Grid>
-            <TextBlock x:Name="TxtPeerLevelLabel" Classes="sub" Text="Livello audio ricevuto dal server" />
-            <ProgressBar x:Name="PbPeerLevel" />
-            <Rectangle Height="1" Fill="{DynamicResource B.Border}" Margin="0,6" />
-
-            <TextBlock Classes="h2" Text="PTT" />
-            <Border x:Name="BtnPtt" Height="84" CornerRadius="10" BorderThickness="2" Cursor="Hand"
+            <Rectangle Height="1" Fill="{DynamicResource B.Border}" Margin="0,2" />
+            <Border x:Name="BtnPtt" Height="58" CornerRadius="10" BorderThickness="2" Cursor="Hand"
                     Background="{DynamicResource B.Inset}" BorderBrush="{DynamicResource B.Border}">
-              <TextBlock x:Name="TxtPtt" Text="PTT (PREMI E TIENI)" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              <TextBlock x:Name="TxtPtt" Text="PTT (PREMI E TIENI)" FontSize="15" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
             </Border>
-            <CheckBox x:Name="ChkSpace" Content="Anche con la barra spaziatrice" />
+            <TextBlock x:Name="TxtTxInfo" Classes="sub" FontSize="11" TextWrapping="Wrap" IsVisible="False" />
+            <CheckBox x:Name="ChkSpace" Content="Anche con la barra spaziatrice" FontSize="12" />
+            <WrapPanel x:Name="PanelPttInfo">
+              <Border Classes="chip" Padding="8,3" Margin="0,0,6,4"><TextBlock x:Name="TxtPttInfo" FontSize="11" Text="—" TextWrapping="Wrap" /></Border>
+              <Border Classes="chip" Padding="8,3" Margin="0,0,0,4"><TextBlock x:Name="TxtPttDelayInfo" FontSize="11" Text="—" /></Border>
+            </WrapPanel>
+          </StackPanel>
+        </Border>
 
-            <!-- server: metodo PTT -->
-            <StackPanel x:Name="PanelPttMethod" Spacing="6">
-              <TextBlock Classes="lbl" Text="Metodo PTT verso la radio" />
-              <ComboBox x:Name="CmbPttMethod" />
-              <StackPanel x:Name="PanelPttCom">
-                <TextBlock Classes="lbl" Text="Porta seriale per RTS/DTR" />
-                <ComboBox x:Name="CmbPttCom" />
-              </StackPanel>
-              <Grid x:Name="PanelTci" ColumnDefinitions="*,8,90">
-                <StackPanel>
-                  <TextBlock Classes="lbl" Text="Server TCI" />
-                  <TextBox x:Name="TxtTciHost" />
-                </StackPanel>
-                <StackPanel Grid.Column="2">
-                  <TextBlock Classes="lbl" Text="Porta" />
-                  <TextBox x:Name="TxtTciPort" />
-                </StackPanel>
-              </Grid>
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <TextBlock Text="Ritardo PTT (ms)" Classes="sub" VerticalAlignment="Center" />
-                <TextBox x:Name="TxtPttDelay" Width="80" HorizontalContentAlignment="Right" />
-              </StackPanel>
-              <TextBlock Classes="lbl" Text="Invio CW (testo delle macro dal client)" Margin="0,8,0,6" />
-              <ComboBox x:Name="CmbCwMethod" />
-              <StackPanel x:Name="PanelCwCom">
-                <TextBlock Classes="lbl" Text="Porta seriale per il CW" Margin="0,6,0,6" />
-                <ComboBox x:Name="CmbCwCom" />
-              </StackPanel>
-              <TextBlock x:Name="TxtKeyingNote" Classes="sub" FontSize="12" />
-            </StackPanel>
-
-            <!-- client: metodo impostato sul server -->
-            <StackPanel x:Name="PanelPttInfo" Spacing="6">
-              <TextBlock Classes="lbl" Text="Metodo PTT impostato sul server" />
-              <WrapPanel>
-                <Border Classes="chip" Margin="0,0,8,0"><TextBlock x:Name="TxtPttInfo" FontSize="12" Text="—" /></Border>
-                <Border Classes="chip"><TextBlock x:Name="TxtPttDelayInfo" FontSize="12" Text="—" /></Border>
-              </WrapPanel>
-            </StackPanel>
-
-            <!-- Schede audio del server -->
-            <Rectangle Height="1" Fill="{DynamicResource B.Border}" Margin="0,6" />
-            <TextBlock Classes="h2" Text="SCHEDE AUDIO DEL SERVER" />
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
-              <TextBlock Text="Ingresso" Classes="sub" VerticalAlignment="Center" Margin="0,0,8,0" />
-              <ComboBox x:Name="CmbDevIn" Grid.Column="1" FontSize="12" MinHeight="32" HorizontalAlignment="Stretch" VerticalAlignment="Center" PlaceholderText="—" ToolTip.Tip="Scheda d'ingresso del server (audio della radio)" />
-              <Border Grid.Column="2" x:Name="ChipDevIn" Classes="chip" Margin="6,0"><TextBlock x:Name="TxtDevInState" FontSize="12" Text="—" /></Border>
-              <Button Grid.Column="3" x:Name="BtnDevIn" Content="Togli mute" MinHeight="32" Padding="10,4" FontSize="12" />
-              <TextBlock Grid.Row="1" Text="Uscita" Classes="sub" VerticalAlignment="Center" Margin="0,8,8,0" />
-              <ComboBox x:Name="CmbDevOut" Grid.Row="1" Grid.Column="1" FontSize="12" MinHeight="32" HorizontalAlignment="Stretch" VerticalAlignment="Center" Margin="0,8,0,0" PlaceholderText="—" ToolTip.Tip="Scheda d'uscita del server (audio verso la radio)" />
-              <Border Grid.Row="1" Grid.Column="2" x:Name="ChipDevOut" Classes="chip" Margin="6,8,6,0"><TextBlock x:Name="TxtDevOutState" FontSize="12" Text="—" /></Border>
-              <Button Grid.Row="1" Grid.Column="3" x:Name="BtnDevOut" Content="Togli mute" MinHeight="32" Padding="10,4" FontSize="12" Margin="0,8,0,0" />
+        <!-- Altro PC -->
+        <Border Grid.Column="4" Classes="panel">
+          <StackPanel Spacing="6">
+            <TextBlock x:Name="TxtPeerTitle" Classes="h2" Text="SERVER (STAZIONE RADIO)" TextTrimming="CharacterEllipsis" />
+            <!-- client: server abbinati, uno collegato per volta -->
+            <Grid x:Name="PanelServerPick" ColumnDefinitions="*,4,Auto">
+              <ComboBox x:Name="CmbServer" MinHeight="30" FontSize="12" ToolTip.Tip="Server abbinati: scegliendone un altro, il collegamento in corso si chiude" />
+              <Button x:Name="BtnNewServer" Grid.Column="2" Classes="small" Content="Abbina…" ToolTip.Tip="Abbina un altro server; quelli già abbinati restano nell'elenco" />
             </Grid>
-            <Grid ColumnDefinitions="Auto,*,Auto,*">
-              <TextBlock Text="Vol. ingr." Classes="sub" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0" />
-              <Slider x:Name="SldDevIn" Grid.Column="1" Minimum="0" Maximum="100" />
-              <TextBlock Grid.Column="2" Text="Vol. usc." Classes="sub" FontSize="12" VerticalAlignment="Center" Margin="10,0,6,0" />
-              <Slider x:Name="SldDevOut" Grid.Column="3" Minimum="0" Maximum="100" />
+            <Grid ColumnDefinitions="88,*" RowDefinitions="20,20,20,20,20">
+              <TextBlock Text="Nominativo" Classes="meter" />
+              <TextBlock x:Name="TxtPeerCall" Grid.Column="1" Classes="mono" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="—" />
+              <TextBlock Grid.Row="1" Text="IP server" Classes="meter" />
+              <TextBlock x:Name="TxtServerIp" Grid.Row="1" Grid.Column="1" Classes="mono" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="—" />
+              <TextBlock Grid.Row="2" x:Name="TxtClientIpLabel" Text="Mio IP" Classes="meter" />
+              <TextBlock x:Name="TxtClientIp" Grid.Row="2" Grid.Column="1" Classes="mono" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="—" />
+              <TextBlock Grid.Row="3" Text="Collegato da" Classes="meter" />
+              <TextBlock x:Name="TxtPeerSince" Grid.Row="3" Grid.Column="1" Classes="mono" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="—" />
+              <TextBlock Grid.Row="4" Text="Latenza" Classes="meter" />
+              <TextBlock x:Name="TxtPeerLatency" Grid.Row="4" Grid.Column="1" Classes="mono" FontSize="12" VerticalAlignment="Center" Text="—" />
             </Grid>
-            <CheckBox x:Name="ChkAutoUnmute" Content="Togli il mute da solo" />
-            <TextBlock x:Name="TxtDevNote" Classes="sub" FontSize="12" IsVisible="False" />
+            <TextBlock x:Name="TxtPeerLevelLabel" Classes="sub" FontSize="11" Text="Livello audio ricevuto dal server" />
+            <ProgressBar x:Name="PbPeerLevel" />
+            <Expander x:Name="ExpNet" Header="Reti dei due PC">
+              <StackPanel Spacing="4">
+                <TextBlock x:Name="TxtNetLocalLabel" Text="Rete client" Classes="meter" />
+                <TextBlock x:Name="TxtNetLocal" Classes="mono" FontSize="11" TextWrapping="Wrap" Text="verifico IPv4 / IPv6…" />
+                <TextBlock x:Name="TxtNetPeerLabel" Text="Rete server" Classes="meter" />
+                <TextBlock x:Name="TxtNetPeer" Classes="mono" FontSize="11" TextWrapping="Wrap" Text="—" />
+              </StackPanel>
+            </Expander>
+            <!-- server: metodo PTT e CW -->
+            <Expander x:Name="ExpPtt" Header="Metodo PTT e CW">
+              <StackPanel x:Name="PanelPttMethod" Spacing="4">
+                <TextBlock Classes="lbl" Text="PTT verso la radio" />
+                <ComboBox x:Name="CmbPttMethod" FontSize="12" />
+                <StackPanel x:Name="PanelPttCom">
+                  <TextBlock Classes="lbl" Text="Porta seriale per RTS/DTR" />
+                  <ComboBox x:Name="CmbPttCom" FontSize="12" />
+                </StackPanel>
+                <Grid x:Name="PanelTci" ColumnDefinitions="*,6,70">
+                  <StackPanel>
+                    <TextBlock Classes="lbl" Text="Server TCI" />
+                    <TextBox x:Name="TxtTciHost" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="2">
+                    <TextBlock Classes="lbl" Text="Porta" />
+                    <TextBox x:Name="TxtTciPort" />
+                  </StackPanel>
+                </Grid>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Text="Ritardo PTT (ms)" Classes="sub" FontSize="12" VerticalAlignment="Center" />
+                  <TextBox x:Name="TxtPttDelay" Width="70" HorizontalContentAlignment="Right" />
+                </StackPanel>
+                <TextBlock Classes="lbl" Text="Invio CW (testo delle macro dal client)" Margin="0,4,0,4" />
+                <ComboBox x:Name="CmbCwMethod" FontSize="12" />
+                <StackPanel x:Name="PanelCwCom">
+                  <TextBlock Classes="lbl" Text="Porta seriale per il CW" Margin="0,4,0,4" />
+                  <ComboBox x:Name="CmbCwCom" FontSize="12" />
+                </StackPanel>
+                <TextBlock x:Name="TxtKeyingNote" Classes="sub" FontSize="11" />
+              </StackPanel>
+            </Expander>
+            <!-- schede audio del server -->
+            <Expander x:Name="ExpDevices" Header="Schede audio del server">
+              <StackPanel Spacing="6">
+                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                  <TextBlock Text="Ingr." Classes="meter" Margin="0,0,6,0" />
+                  <ComboBox x:Name="CmbDevIn" Grid.Column="1" FontSize="11" MinHeight="30" PlaceholderText="—" ToolTip.Tip="Scheda d'ingresso del server (audio della radio)" />
+                  <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                    <Border x:Name="ChipDevIn" Classes="chip" Padding="8,3"><TextBlock x:Name="TxtDevInState" FontSize="11" Text="—" /></Border>
+                    <Button x:Name="BtnDevIn" Classes="small" Content="Togli mute" />
+                  </StackPanel>
+                  <TextBlock Grid.Row="2" Text="Usc." Classes="meter" Margin="0,8,6,0" />
+                  <ComboBox x:Name="CmbDevOut" Grid.Row="2" Grid.Column="1" FontSize="11" MinHeight="30" Margin="0,8,0,0" PlaceholderText="—" ToolTip.Tip="Scheda d'uscita del server (audio verso la radio)" />
+                  <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                    <Border x:Name="ChipDevOut" Classes="chip" Padding="8,3"><TextBlock x:Name="TxtDevOutState" FontSize="11" Text="—" /></Border>
+                    <Button x:Name="BtnDevOut" Classes="small" Content="Togli mute" />
+                  </StackPanel>
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*">
+                  <TextBlock Text="Vol. ingr." Classes="meter" Margin="0,0,6,0" />
+                  <Slider x:Name="SldDevIn" Grid.Column="1" Minimum="0" Maximum="100" />
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*">
+                  <TextBlock Text="Vol. usc." Classes="meter" Margin="0,0,6,0" />
+                  <Slider x:Name="SldDevOut" Grid.Column="1" Minimum="0" Maximum="100" />
+                </Grid>
+                <CheckBox x:Name="ChkAutoUnmute" Content="Togli il mute da solo" FontSize="12" />
+                <TextBlock x:Name="TxtDevNote" Classes="sub" FontSize="11" IsVisible="False" />
+              </StackPanel>
+            </Expander>
           </StackPanel>
         </Border>
       </Grid>
 
-      <!-- ===================== CW: cascata e decodificatore ===================== -->
-      <Border x:Name="PanelCw" Classes="panel" IsVisible="False">
-        <StackPanel Spacing="12">
-          <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Classes="h2" Text="CW · CASCATA E DECODIFICATORE" />
-            <TextBlock Grid.Column="1" Classes="sub" Text="Spettro 0–2000 Hz · pitch 200–1000 Hz" />
+      <!-- ===================== Panadapter della radio (facoltativo) ===================== -->
+      <Border x:Name="PanelPan" Classes="panel" Padding="10" IsVisible="False">
+        <StackPanel Spacing="6">
+          <Grid ColumnDefinitions="Auto,*,Auto,120">
+            <TextBlock Classes="h2" Text="PANADAPTER DELLA RADIO" VerticalAlignment="Center" />
+            <TextBlock x:Name="TxtPanStatus" Grid.Column="1" Classes="sub" FontSize="11" VerticalAlignment="Center" Margin="12,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+            <TextBlock Grid.Column="2" Classes="sub" FontSize="11" Text="Intensità" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <Slider x:Name="SldPanInt" Grid.Column="3" Minimum="0" Maximum="100" VerticalAlignment="Center" />
           </Grid>
-          <Grid ColumnDefinitions="Auto,*,Auto,Auto,180" Margin="0,0,0,4">
-            <CheckBox x:Name="ChkWideFilter" Content="Apri il filtro della radio in CW (per vedere tutta la cascata)" VerticalAlignment="Center" />
-            <TextBlock x:Name="TxtPassband" Grid.Column="1" Classes="sub" FontSize="12" VerticalAlignment="Center" Margin="12,0" Text="Filtro radio: —" />
-            <ComboBox x:Name="CmbCwFilter" Grid.Column="2" Width="110" Margin="0,0,14,0" />
-            <TextBlock Grid.Column="3" Classes="sub" FontSize="12" Text="Intensità cascata" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <Slider x:Name="SldWfIntensity" Grid.Column="4" Minimum="0" Maximum="100" VerticalAlignment="Center" />
-          </Grid>
-          <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,160">
-            <StackPanel>
-              <TextBlock Classes="lbl" Text="Pitch CW (Hz) · 200–1000" />
-              <TextBox x:Name="TxtPitch" Width="100" HorizontalContentAlignment="Right" FontFamily="{DynamicResource MonoFont}" FontSize="16" />
-            </StackPanel>
-            <Button x:Name="BtnReadPitch" Grid.Column="1" Content="Leggi dalla radio" VerticalAlignment="Bottom" Margin="12,0,0,0" />
-            <TextBlock x:Name="TxtRadioPitch" Grid.Column="2" Classes="sub" FontSize="12" VerticalAlignment="Bottom" Margin="12,0,0,10" Text="Radio: —" />
-            <StackPanel Grid.Column="4" Margin="0,0,10,0">
-              <TextBlock Classes="lbl" Text="Larghezza decodifica" />
-              <ComboBox x:Name="CmbCwWidth" Width="110" />
-            </StackPanel>
-            <StackPanel Grid.Column="5" Margin="0,0,10,0">
-              <TextBlock Classes="lbl" Text="Velocità RX" />
-              <ComboBox x:Name="CmbCwRxSpeed" Width="160" />
-            </StackPanel>
-            <StackPanel Grid.Column="6">
-              <TextBlock Classes="lbl" Text="Soglia" />
-              <Slider x:Name="SldThreshold" Minimum="0" Maximum="100" />
-            </StackPanel>
-          </Grid>
-          <Border CornerRadius="8" ClipToBounds="True" BorderBrush="{DynamicResource B.Border}" BorderThickness="1">
-            <ui:Waterfall x:Name="Wf" Height="255" />
+          <Border CornerRadius="6" ClipToBounds="True" BorderBrush="{DynamicResource B.Border}" BorderThickness="1">
+            <ui:PanadapterView x:Name="PanView" Height="160" />
           </Border>
-          <Border Background="{DynamicResource B.Field}" BorderBrush="{DynamicResource B.Border}" BorderThickness="1" CornerRadius="8" Padding="12,8">
-            <TextBlock x:Name="TxtDecoded" Classes="mono" FontSize="16" TextTrimming="None" TextWrapping="NoWrap" HorizontalAlignment="Right" Text=" " />
-          </Border>
-          <TextBlock Classes="sub" FontSize="12" Text="Clic su un segnale nel campo del pitch = pitch su quel segnale · clic su un segnale fuori dal pitch = si apre una finestra di decodifica in più (una per segnale)" />
+          <TextBlock Classes="sub" FontSize="11" Text="Clic = sintonia sul punto · rotella = un passo di sintonia · linea rossa = frequenza di ricezione, fascia chiara = filtro" />
         </StackPanel>
       </Border>
 
-      <!-- ===================== Keyer ===================== -->
-      <Border x:Name="PanelKeyer" Classes="panel">
-        <StackPanel Spacing="12">
-          <Grid ColumnDefinitions="*,Auto">
-            <TextBlock x:Name="TxtKeyerTitle" Classes="h2" Text="VOICE KEYER · 8 messaggi WAV" />
-            <TextBlock x:Name="TxtKeyerDest" Grid.Column="1" Classes="sub" Text="" />
-          </Grid>
-          <Grid ColumnDefinitions="*,120">
-            <UniformGrid x:Name="PanelFKeys" Columns="8" />
-            <Button x:Name="BtnMacros" Grid.Column="1" Content="File WAV…" Height="58" Margin="6,0,0,0" HorizontalAlignment="Stretch" />
-          </Grid>
-          <Grid x:Name="RowWav" ColumnDefinitions="Auto,*,170,190">
-            <TextBlock Text="VOLUME" Classes="sub" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0" />
-            <Slider x:Name="SldKeyerVol" Grid.Column="1" Minimum="0" Maximum="100" Margin="0,0,14,0" />
-            <ComboBox x:Name="CmbFilter" Grid.Column="2" Margin="0,0,10,0" />
-            <ComboBox x:Name="CmbComp" Grid.Column="3" />
-          </Grid>
-          <WrapPanel x:Name="RowCw" IsVisible="False">
-            <TextBlock Text="Velocità TX" Classes="sub" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <ComboBox x:Name="CmbCwTxSpeed" Width="200" Margin="0,0,16,0" />
-            <TextBlock Text="Mio nominativo" Classes="sub" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <TextBox x:Name="TxtMyCall" Width="120" IsReadOnly="True" Margin="0,0,16,0" />
-            <TextBlock Text="Nominativo corrispondente" Classes="sub" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <TextBox x:Name="TxtCwCall" Width="120" Margin="0,0,16,0" />
-            <TextBlock Text="Numero" Classes="sub" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <TextBox x:Name="TxtCwNr" Width="70" HorizontalContentAlignment="Right" />
-          </WrapPanel>
-          <Border Classes="inset" Padding="12,10">
-            <TextBlock x:Name="TxtKeyerStatus" FontSize="13" TextWrapping="Wrap" Text="Pronto" />
-          </Border>
-        </StackPanel>
-      </Border>
+      <!-- ===================== Schede: keyer · CW · audio · collegamento ===================== -->
+      <Border Classes="panel" Padding="8,4,8,8">
+        <TabControl x:Name="Tabs" Padding="0,6,0,0">
 
-      <!-- ===================== Collegamento ===================== -->
-      <Border Classes="panel">
-        <StackPanel Spacing="12">
-          <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Classes="h2" Text="COLLEGAMENTO" />
-            <TextBlock Grid.Column="1" Classes="sub" Text="Porte, chiavi e riconnessione gestite in automatico" />
-          </Grid>
-          <UniformGrid Columns="6">
-            <Border Classes="inset" Margin="0,0,8,0"><StackPanel><TextBlock Text="Stato" FontSize="11" Foreground="{DynamicResource B.Muted}" /><TextBlock x:Name="TxtState" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" /></StackPanel></Border>
-            <Border Classes="inset" Margin="0,0,8,0"><StackPanel><TextBlock Text="Latenza" FontSize="11" Foreground="{DynamicResource B.Muted}" /><TextBlock x:Name="TxtLatency" Classes="mono" FontSize="17" FontWeight="Bold" Text="—" /></StackPanel></Border>
-            <Border Classes="inset" Margin="0,0,8,0"><StackPanel><TextBlock Text="Jitter" FontSize="11" Foreground="{DynamicResource B.Muted}" /><TextBlock x:Name="TxtJitter" Classes="mono" FontSize="17" FontWeight="Bold" Text="—" /></StackPanel></Border>
-            <Border Classes="inset" Margin="0,0,8,0"><StackPanel><TextBlock Text="Pacchetti persi" FontSize="11" Foreground="{DynamicResource B.Muted}" /><TextBlock x:Name="TxtLoss" Classes="mono" FontSize="17" FontWeight="Bold" Text="—" /></StackPanel></Border>
-            <Border Classes="inset" Margin="0,0,8,0"><StackPanel><TextBlock Text="Buffer" FontSize="11" Foreground="{DynamicResource B.Muted}" /><TextBlock x:Name="TxtBuffer" Classes="mono" FontSize="17" FontWeight="Bold" Text="—" /></StackPanel></Border>
-            <Border Classes="inset"><StackPanel><TextBlock Text="Punto d'incontro MQTT" FontSize="11" Foreground="{DynamicResource B.Muted}" /><TextBlock x:Name="TxtMqtt" FontSize="15" FontWeight="SemiBold" Text="—" /></StackPanel></Border>
-          </UniformGrid>
-
-          <Border x:Name="PanelFallbackServer" Classes="inset" IsVisible="False">
-            <Grid ColumnDefinitions="*,Auto">
-              <StackPanel>
-                <TextBlock Text="Codice di riserva: il punto d'incontro non risponde, dettalo al client" FontSize="12" Foreground="{DynamicResource B.Muted}" />
-                <TextBlock x:Name="TxtFallbackCode" Classes="mono" FontSize="26" FontWeight="Bold" Foreground="{DynamicResource B.Accent}" />
-              </StackPanel>
-              <Button x:Name="BtnCopyFallback" Grid.Column="1" Content="Copia codice" VerticalAlignment="Center" />
-            </Grid>
-          </Border>
-          <Border x:Name="PanelFallbackClient" Classes="inset" IsVisible="False">
-            <StackPanel Spacing="8">
-              <TextBlock Text="Server non raggiungibile" FontSize="15" FontWeight="SemiBold" />
-              <TextBlock Classes="sub" Text="Il programma continua a riprovare da solo. Intanto puoi chiedere a chi sta al server il codice di riserva." />
+          <TabItem x:Name="TabKeyer" Header="Keyer">
+            <StackPanel x:Name="PanelKeyer" Spacing="8">
               <Grid ColumnDefinitions="*,Auto">
-                <TextBox x:Name="TxtFallbackInput" />
-                <Button x:Name="BtnFallbackConnect" Grid.Column="1" Classes="accent" Content="Connetti" Margin="10,0,0,0" />
+                <TextBlock x:Name="TxtKeyerTitle" Classes="h2" Text="VOICE KEYER · 8 messaggi WAV" />
+                <TextBlock x:Name="TxtKeyerDest" Grid.Column="1" Classes="sub" FontSize="11" Text="" />
+              </Grid>
+              <Grid ColumnDefinitions="*,104">
+                <UniformGrid x:Name="PanelFKeys" Columns="8" />
+                <Button x:Name="BtnMacros" Grid.Column="1" Content="File WAV…" Height="46" FontSize="12" Margin="4,0,0,0" HorizontalAlignment="Stretch" />
+              </Grid>
+              <Grid x:Name="RowWav" ColumnDefinitions="Auto,*,160,180">
+                <TextBlock Text="VOLUME" Classes="sub" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <Slider x:Name="SldKeyerVol" Grid.Column="1" Minimum="0" Maximum="100" Margin="0,0,10,0" />
+                <ComboBox x:Name="CmbFilter" Grid.Column="2" MinHeight="30" FontSize="12" Margin="0,0,8,0" />
+                <ComboBox x:Name="CmbComp" Grid.Column="3" MinHeight="30" FontSize="12" />
+              </Grid>
+              <WrapPanel x:Name="RowCw" IsVisible="False">
+                <TextBlock Text="Velocità TX" Classes="sub" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <ComboBox x:Name="CmbCwTxSpeed" Width="110" MinHeight="30" FontSize="12" Margin="0,0,12,0" />
+                <TextBlock Text="Mio nominativo" Classes="sub" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBox x:Name="TxtMyCall" Width="100" MinHeight="30" IsReadOnly="True" Margin="0,0,12,0" />
+                <TextBlock Text="Corrispondente" Classes="sub" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBox x:Name="TxtCwCall" Width="100" MinHeight="30" Margin="0,0,12,0" />
+                <TextBlock Text="Numero" Classes="sub" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBox x:Name="TxtCwNr" Width="64" MinHeight="30" HorizontalContentAlignment="Right" />
+              </WrapPanel>
+              <Border Classes="inset" Padding="10,6">
+                <TextBlock x:Name="TxtKeyerStatus" FontSize="12" TextWrapping="Wrap" Text="Pronto" />
+              </Border>
+            </StackPanel>
+          </TabItem>
+
+          <TabItem x:Name="TabCw" Header="CW · cascata e decodifica" IsVisible="False">
+            <StackPanel x:Name="PanelCw" Spacing="6">
+              <!-- RX audio su una riga (in CW) -->
+              <Grid x:Name="PanelRxCompact" ColumnDefinitions="Auto,160,Auto,90,Auto,52,Auto,*">
+                <TextBlock Text="RX audio" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <ComboBox x:Name="CmbOutCompact" Grid.Column="1" MinHeight="28" FontSize="11" />
+                <TextBlock Grid.Column="2" Text="Volume" Classes="sub" FontSize="11" VerticalAlignment="Center" Margin="8,0,4,0" />
+                <Slider x:Name="SldRxCompact" Grid.Column="3" Minimum="0" Maximum="100" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="4" Text="Boost %" Classes="sub" FontSize="11" VerticalAlignment="Center" Margin="8,0,4,0" />
+                <TextBox x:Name="TxtRxBoostCompact" Grid.Column="5" MinHeight="28" HorizontalContentAlignment="Right" />
+                <TextBlock Grid.Column="6" Text="Livello" Classes="sub" FontSize="11" VerticalAlignment="Center" Margin="8,0,4,0" />
+                <ProgressBar x:Name="PbRxCompact" Grid.Column="7" Height="8" MinHeight="8" VerticalAlignment="Center" />
+              </Grid>
+              <WrapPanel>
+                <TextBlock Classes="lbl" Text="Pitch (Hz)" VerticalAlignment="Center" Margin="0,0,4,0" />
+                <TextBox x:Name="TxtPitch" Width="70" MinHeight="28" HorizontalContentAlignment="Right" FontFamily="{DynamicResource MonoFont}" Margin="0,0,4,4" />
+                <Button x:Name="BtnReadPitch" Classes="small" Content="Leggi dalla radio" Margin="0,0,6,4" />
+                <TextBlock x:Name="TxtRadioPitch" Classes="sub" FontSize="11" VerticalAlignment="Center" Margin="0,0,12,4" Text="Radio: —" />
+                <TextBlock Classes="lbl" Text="Larghezza" VerticalAlignment="Center" Margin="0,0,4,0" />
+                <ComboBox x:Name="CmbCwWidth" Width="90" MinHeight="28" FontSize="11" Margin="0,0,8,4" />
+                <TextBlock Classes="lbl" Text="Velocità RX" VerticalAlignment="Center" Margin="0,0,4,0" />
+                <ComboBox x:Name="CmbCwRxSpeed" Width="100" MinHeight="28" FontSize="11" Margin="0,0,8,4" />
+                <TextBlock Classes="lbl" Text="Soglia" VerticalAlignment="Center" Margin="0,0,4,0" />
+                <Slider x:Name="SldThreshold" Width="90" Minimum="0" Maximum="100" Margin="0,0,0,4" />
+              </WrapPanel>
+              <WrapPanel>
+                <CheckBox x:Name="ChkWideFilter" Content="Apri il filtro della radio in CW" FontSize="12" Margin="0,0,6,4" />
+                <ComboBox x:Name="CmbCwFilter" Width="96" MinHeight="28" FontSize="11" Margin="0,0,8,4" />
+                <TextBlock x:Name="TxtPassband" Classes="sub" FontSize="11" VerticalAlignment="Center" Margin="0,0,12,4" Text="Filtro radio: —" />
+                <TextBlock Classes="lbl" Text="Intensità cascata" VerticalAlignment="Center" Margin="0,0,4,0" />
+                <Slider x:Name="SldWfIntensity" Width="110" Minimum="0" Maximum="100" Margin="0,0,0,4" />
+              </WrapPanel>
+              <Border CornerRadius="8" ClipToBounds="True" BorderBrush="{DynamicResource B.Border}" BorderThickness="1">
+                <ui:Waterfall x:Name="Wf" Height="190" />
+              </Border>
+              <Border Background="{DynamicResource B.Field}" BorderBrush="{DynamicResource B.Border}" BorderThickness="1" CornerRadius="8" Padding="10,6">
+                <TextBlock x:Name="TxtDecoded" Classes="mono" FontSize="15" TextTrimming="None" TextWrapping="NoWrap" HorizontalAlignment="Right" Text=" " />
+              </Border>
+              <TextBlock Classes="sub" FontSize="11" Text="Clic su un segnale nel campo del pitch = pitch su quel segnale · fuori dal pitch = finestra di decodifica in più · F1..F8 mandano le macro CW anche da questa scheda" />
+            </StackPanel>
+          </TabItem>
+
+          <TabItem x:Name="TabAudio" Header="Audio">
+            <StackPanel x:Name="PanelAudio" Spacing="8">
+              <TextBlock Classes="h2" Text="AUDIO · 8 kHz, 16 bit mono · modalità condivisa" />
+              <Grid ColumnDefinitions="*,10,*">
+                <StackPanel>
+                  <TextBlock x:Name="TxtInLabel" Classes="lbl" Text="Microfono (verso la radio)" />
+                  <ComboBox x:Name="CmbIn" MinHeight="32" FontSize="12" />
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                  <TextBlock x:Name="TxtOutLabel" Classes="lbl" Text="Altoparlante (dalla radio)" />
+                  <ComboBox x:Name="CmbOut" MinHeight="32" FontSize="12" />
+                </StackPanel>
+              </Grid>
+              <Grid ColumnDefinitions="*,10,*">
+                <Border Classes="inset" Padding="10,6">
+                  <StackPanel Spacing="4">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock x:Name="TxtRxTitle" Text="RX · audio ricevuto" FontWeight="SemiBold" FontSize="12" />
+                      <TextBlock x:Name="TxtRxVol" Grid.Column="1" Classes="lbl" Margin="0" />
+                    </Grid>
+                    <Slider x:Name="SldRx" Minimum="0" Maximum="100" />
+                    <Grid ColumnDefinitions="Auto,60,Auto,*">
+                      <TextBlock Text="Boost oltre soglia %" Classes="sub" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
+                      <TextBox x:Name="TxtRxBoost" Grid.Column="1" MinHeight="28" HorizontalContentAlignment="Right" />
+                      <ProgressBar x:Name="PbRx" Grid.Column="3" Height="8" MinHeight="8" Margin="10,0,0,0" VerticalAlignment="Center" />
+                    </Grid>
+                  </StackPanel>
+                </Border>
+                <Border Grid.Column="2" Classes="inset" Padding="10,6">
+                  <StackPanel Spacing="4">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock x:Name="TxtTxTitle" Text="TX · audio inviato" FontWeight="SemiBold" FontSize="12" />
+                      <TextBlock x:Name="TxtTxVol" Grid.Column="1" Classes="lbl" Margin="0" />
+                    </Grid>
+                    <Slider x:Name="SldTx" Minimum="0" Maximum="100" />
+                    <Grid ColumnDefinitions="Auto,60,Auto,*">
+                      <TextBlock Text="Boost oltre soglia %" Classes="sub" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
+                      <TextBox x:Name="TxtTxBoost" Grid.Column="1" MinHeight="28" HorizontalContentAlignment="Right" />
+                      <ProgressBar x:Name="PbTx" Grid.Column="3" Height="8" MinHeight="8" Margin="10,0,0,0" VerticalAlignment="Center" />
+                    </Grid>
+                  </StackPanel>
+                </Border>
               </Grid>
             </StackPanel>
-          </Border>
-          <TextBlock x:Name="TxtNotice" Classes="sub" IsVisible="False" />
+          </TabItem>
+
+          <TabItem x:Name="TabLink" Header="Collegamento">
+            <StackPanel Spacing="8">
+              <UniformGrid Columns="6">
+                <Border Classes="inset" Padding="8,6" Margin="0,0,6,0"><StackPanel><TextBlock Text="Stato" FontSize="10" Foreground="{DynamicResource B.Muted}" /><TextBlock x:Name="TxtState" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap" /></StackPanel></Border>
+                <Border Classes="inset" Padding="8,6" Margin="0,0,6,0"><StackPanel><TextBlock Text="Latenza" FontSize="10" Foreground="{DynamicResource B.Muted}" /><TextBlock x:Name="TxtLatency" Classes="mono" FontSize="15" FontWeight="Bold" Text="—" /></StackPanel></Border>
+                <Border Classes="inset" Padding="8,6" Margin="0,0,6,0"><StackPanel><TextBlock Text="Jitter" FontSize="10" Foreground="{DynamicResource B.Muted}" /><TextBlock x:Name="TxtJitter" Classes="mono" FontSize="15" FontWeight="Bold" Text="—" /></StackPanel></Border>
+                <Border Classes="inset" Padding="8,6" Margin="0,0,6,0"><StackPanel><TextBlock Text="Pacchetti persi" FontSize="10" Foreground="{DynamicResource B.Muted}" /><TextBlock x:Name="TxtLoss" Classes="mono" FontSize="15" FontWeight="Bold" Text="—" /></StackPanel></Border>
+                <Border Classes="inset" Padding="8,6" Margin="0,0,6,0"><StackPanel><TextBlock Text="Buffer" FontSize="10" Foreground="{DynamicResource B.Muted}" /><TextBlock x:Name="TxtBuffer" Classes="mono" FontSize="15" FontWeight="Bold" Text="—" /></StackPanel></Border>
+                <Border Classes="inset" Padding="8,6"><StackPanel><TextBlock Text="Punto d'incontro MQTT" FontSize="10" Foreground="{DynamicResource B.Muted}" /><TextBlock x:Name="TxtMqtt" FontSize="13" FontWeight="SemiBold" Text="—" /></StackPanel></Border>
+              </UniformGrid>
+              <Border x:Name="PanelFallbackServer" Classes="inset" IsVisible="False">
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel>
+                    <TextBlock Text="Codice di riserva: il punto d'incontro non risponde, dettalo al client" FontSize="12" Foreground="{DynamicResource B.Muted}" />
+                    <TextBlock x:Name="TxtFallbackCode" Classes="mono" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource B.Accent}" />
+                  </StackPanel>
+                  <Button x:Name="BtnCopyFallback" Grid.Column="1" Classes="small" Content="Copia codice" VerticalAlignment="Center" />
+                </Grid>
+              </Border>
+              <TextBlock Classes="sub" FontSize="11" Text="Porte, chiavi e riconnessione sono gestite in automatico." />
+            </StackPanel>
+          </TabItem>
+        </TabControl>
+      </Border>
+
+      <!-- server non raggiungibile (client): resta sempre in vista -->
+      <Border x:Name="PanelFallbackClient" Classes="inset" IsVisible="False">
+        <StackPanel Spacing="6">
+          <TextBlock Text="Server non raggiungibile" FontSize="14" FontWeight="SemiBold" />
+          <TextBlock Classes="sub" FontSize="12" Text="Il programma continua a riprovare da solo. Intanto puoi chiedere a chi sta al server il codice di riserva." />
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBox x:Name="TxtFallbackInput" />
+            <Button x:Name="BtnFallbackConnect" Grid.Column="1" Classes="accent" Content="Connetti" Margin="8,0,0,0" />
+          </Grid>
         </StackPanel>
       </Border>
+
+      <!-- avvisi -->
+      <TextBlock x:Name="TxtNotice" Classes="sub" FontSize="12" Margin="4,0" IsVisible="False" />
     </StackPanel>
   </ScrollViewer>
 </Window>

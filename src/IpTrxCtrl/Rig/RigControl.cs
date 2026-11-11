@@ -53,6 +53,21 @@ namespace IpTrxCtrl.Rig
         private int _highSwrCount;
         private bool _swrMissingLogged;
 
+        // tempo massimo di trasmissione: la trasmissione resta interrotta finché l'operatore non rilascia il PTT
+        private volatile bool _txTimedOut;
+        private DateTime _txSince = DateTime.MinValue;
+        private bool _txWasOn;
+        // precedenza a chi è alla radio: trasmissioni che il programma non ha comandato bloccano quella remota
+        private DateTime _ownTxUntil = DateTime.MinValue;    // fino a qui una trasmissione della radio è «nostra»
+        private DateTime _localLockUntil = DateTime.MinValue;
+        // comandi della radio: letti ogni 4 s e subito dopo un comando
+        private volatile bool _ctlRefresh = true;
+        private static readonly int[] DbSteps = { 1, 2, 3, 6, 10, 12, 15, 16, 18, 20, 21, 24, 30 };
+        private static readonly int[] AgcCycle = { 2, 5, 3 };   // FAST, MID, SLOW
+
+        /// <summary>Avviso per l'operatore (va anche al client collegato).</summary>
+        public event Action<string>? Notice;
+
         public RigTelemetry Telemetry { get; private set; } = new();
         public string Status { get; private set; } = "Radio non configurata";
         public event Action? Updated;
@@ -61,6 +76,43 @@ namespace IpTrxCtrl.Rig
 
         /// <summary>Trasmissione bloccata dalla protezione ROS.</summary>
         public bool TxBlocked => _txBlocked;
+
+        /// <summary>La radio è in trasmissione (letta via CAT o comandata dal programma).</summary>
+        public bool TransmittingNow => Telemetry.Transmitting || _pttActual;
+
+        /// <summary>Trasmissione remota bloccata: qualcuno ha trasmesso dalla radio (o dal programma sul server).</summary>
+        public bool LocalLockActive => _s.LocalPriority && DateTime.UtcNow < _localLockUntil;
+        public int LocalLockSeconds => LocalLockActive ? (int)Math.Ceiling((_localLockUntil - DateTime.UtcNow).TotalSeconds) : 0;
+
+        /// <summary>L'operatore alla stazione ha trasmesso: la trasmissione remota resta bloccata per qualche minuto.</summary>
+        public void NoteLocalOperator(string how)
+        {
+            if (!_s.LocalPriority) return;
+            bool was = LocalLockActive;
+            _localLockUntil = DateTime.UtcNow.AddMinutes(Math.Clamp(_s.LocalPriorityMin, 1, 30));
+            if (!was)
+            {
+                SessionLog.Write($"PRECEDENZA trasmissione locale ({how}): trasmissione remota bloccata per {_s.LocalPriorityMin} minuti");
+                Notice?.Invoke($"Operatore alla radio ({how}): la trasmissione remota è bloccata per {_s.LocalPriorityMin} minuti.");
+            }
+        }
+
+        public void ClearLocalLock(string who)
+        {
+            if (!LocalLockActive) return;
+            _localLockUntil = DateTime.MinValue;
+            SessionLog.Write("PRECEDENZA blocco della trasmissione remota tolto " + who);
+            PushTelemetry();
+        }
+
+        /// <summary>Cambio di frequenza o modo rifiutato durante la trasmissione (se l'opzione è attiva).</summary>
+        private bool QsyRefused(string what)
+        {
+            if (!_s.QsyLockInTx || !TransmittingNow) return false;
+            SessionLog.Write($"QSY rifiutato in trasmissione: {what}");
+            Notice?.Invoke($"In trasmissione non cambio {what}: rilascia il PTT e riprova.");
+            return true;
+        }
 
         public bool IsConfigured => _s.CatViaTci || _s.UseExternalRigctld || (_s.RigModel > 0 && !string.IsNullOrEmpty(_s.RigCom));
 
@@ -340,6 +392,8 @@ namespace IpTrxCtrl.Rig
             t.Transmitting = (await GetAsync("t", ct)) == "1";
             t.StrengthDb = ParseF(await GetAsync("l STRENGTH", ct));
             bool txNow = t.Transmitting || _pttActual;   // anche se la radio non risponde al comando «t»
+            CheckTxTime(t);
+            CheckLocalTx(t);
 
             if (txNow || slow)
             {
@@ -352,6 +406,19 @@ namespace IpTrxCtrl.Rig
                     t.PowerW = w;
                 }
                 if (_wattsMeter == false) t.PowerRel = ParseF(await GetAsync("l RFPOWER_METER", ct));
+                t.Alc = txNow ? ParseF(await GetAsync("l ALC", ct)) : float.NaN;
+            }
+            if (_ctlRefresh || _cycle % 8 == 1)
+            {
+                _ctlRefresh = false;
+                t.Nr = FuncOn(await GetAsync("u NR", ct));
+                t.Nb = FuncOn(await GetAsync("u NB", ct));
+                t.Anf = FuncOn(await GetAsync("u ANF", ct));
+                t.Comp = FuncOn(await GetAsync("u COMP", ct));
+                t.Att = LevelInt(await GetAsync("l ATT", ct));
+                t.Preamp = LevelInt(await GetAsync("l PREAMP", ct));
+                t.Agc = LevelInt(await GetAsync("l AGC", ct));
+                t.Sql = ParseF(await GetAsync("l SQL", ct));
             }
 
             if (slow)
@@ -382,6 +449,51 @@ namespace IpTrxCtrl.Rig
             FillSwrFields(t);
             Telemetry = t;
             Updated?.Invoke();
+        }
+
+        private static int FuncOn(string? v) => v == null ? -1 : v.Split('\n')[0].Trim() == "1" ? 1 : 0;
+        private static int LevelInt(string? v) { float f = ParseF(v); return float.IsNaN(f) ? -1 : (int)Math.Round(f); }
+
+        // ------------------------------------------------------------------ tempo massimo di trasmissione
+
+        /// <summary>
+        /// Conta la durata delle trasmissioni comandate dal programma (PTT, messaggi, tasto CW su linea seriale).
+        /// Oltre il tempo massimo il PTT si toglie e resta tolto finché l'operatore non lo rilascia.
+        /// </summary>
+        private void CheckTxTime(RigTelemetry t)
+        {
+            bool own = _pttActual;
+            var now = DateTime.UtcNow;
+            if (own && !_txWasOn) _txSince = now;
+            _txWasOn = own;
+            t.TxSeconds = own ? (int)(now - _txSince).TotalSeconds : 0;
+            t.TxLimit = _s.TxTimeoutEnabled ? Math.Clamp(_s.TxTimeoutSec, 30, 600) : 0;
+            if (own && t.TxLimit > 0 && t.TxSeconds >= t.TxLimit && !_txTimedOut)
+            {
+                _txTimedOut = true;
+                SessionLog.Write($"TEMPO MASSIMO di trasmissione raggiunto ({t.TxLimit} s): PTT tolto");
+                Notice?.Invoke($"Tempo massimo di trasmissione ({t.TxLimit} s): ho tolto il PTT. Rilascialo e premilo di nuovo per trasmettere ancora.");
+                _ = Task.Run(StopTxAsync);
+            }
+        }
+
+        /// <summary>Il PTT è stato rilasciato: dopo il tempo massimo si può trasmettere di nuovo.</summary>
+        private void ResetTimeoutIfReleased()
+        {
+            if (_txTimedOut && !_pttWanted && !_cwPtt) { _txTimedOut = false; PushTelemetry(); }
+        }
+
+        // ------------------------------------------------------------------ precedenza a chi è alla radio
+
+        /// <summary>
+        /// La radio trasmette ma il programma non l'ha comandata (né ora né negli ultimi secondi, per il VOX che
+        /// rilascia in ritardo e per il CW mandato al keyer della radio): è l'operatore alla radio.
+        /// </summary>
+        private void CheckLocalTx(RigTelemetry t)
+        {
+            var now = DateTime.UtcNow;
+            if (_pttActual || _cwPtt) _ownTxUntil = now.AddSeconds(4);
+            if (_s.LocalPriority && t.Transmitting && now > _ownTxUntil) NoteLocalOperator("trasmissione dalla radio");
         }
 
         // ------------------------------------------------------------------ protezione ROS
@@ -459,6 +571,11 @@ namespace IpTrxCtrl.Rig
             t.SwrTripAt = (float)_s.SwrTrip;
             t.TxBlocked = _txBlocked;
             t.TxBlockedSwr = _blockedSwr;
+            t.TxTimedOut = _txTimedOut;
+            t.LocalLockSec = LocalLockSeconds;
+            t.QsyLock = _s.QsyLockInTx;
+            if (t.TxLimit == 0 && _s.TxTimeoutEnabled) t.TxLimit = Math.Clamp(_s.TxTimeoutSec, 30, 600);
+            if (!_s.TxTimeoutEnabled) t.TxLimit = 0;
         }
 
         /// <summary>Potenza impostata in watt tramite power2mW; se la radio non converte resta in percentuale.</summary>
@@ -486,10 +603,61 @@ namespace IpTrxCtrl.Rig
             else t.PowerSetW = float.NaN;
         }
 
+        // ------------------------------------------------------------------ comandi della radio
+
+        /// <summary>
+        /// NR, NB, ANF (notch automatico), COMP: 0/1. SQL: 0..1. ATT, PREAMP, AGC: valore -1 = passo successivo
+        /// (si provano i valori in ordine e si tiene il primo che la radio accetta, poi si torna a spento).
+        /// </summary>
+        public async Task SetRadioCtlAsync(string name, float value)
+        {
+            var t = Telemetry;
+            switch (name)
+            {
+                case "NR": case "NB": case "ANF": case "COMP":
+                    await SetAsync($"U {name} {(value > 0.5f ? 1 : 0)}");
+                    break;
+                case "SQL":
+                    await SetAsync("L SQL " + Inv(Math.Round(Math.Clamp(value, 0f, 1f), 2)));
+                    break;
+                case "ATT":
+                case "PREAMP":
+                {
+                    // valore successivo: il primo che la radio accetta e che, riletto, è più alto di quello attuale
+                    // (le radio con un solo valore accettano qualunque numero: rileggendo si torna a spento)
+                    int cur = Math.Max(0, name == "ATT" ? t.Att : t.Preamp);
+                    bool done = false;
+                    var ct = _cts?.Token ?? CancellationToken.None;
+                    foreach (int v in DbSteps)
+                    {
+                        if (v <= cur) continue;
+                        if (!await SetAsync($"L {name} {v}")) continue;
+                        _unsupported.Remove("l " + name);
+                        float rb = ParseF(await GetAsync("l " + name, ct));
+                        if (float.IsNaN(rb) || rb > cur) { done = true; break; }
+                    }
+                    if (!done) await SetAsync($"L {name} 0");
+                    break;
+                }
+                case "AGC":
+                {
+                    int i = Array.IndexOf(AgcCycle, t.Agc);
+                    for (int k = 1; k <= AgcCycle.Length; k++)
+                        if (await SetAsync("L AGC " + AgcCycle[(Math.Max(i, -1) + k + AgcCycle.Length) % AgcCycle.Length])) break;
+                    break;
+                }
+                default: return;
+            }
+            SessionLog.Write($"RADIO comando {name} {(value < 0 ? "passo successivo" : value.ToString("0.##", CultureInfo.InvariantCulture))}");
+            _unsupported.Remove(name is "NR" or "NB" or "ANF" or "COMP" ? "u " + name : "l " + name);
+            _ctlRefresh = true;
+        }
+
         // ------------------------------------------------------------------ comandi
 
         public async Task SetFreqModeAsync(long hz, string? mode)
         {
+            if (QsyRefused(hz > 0 ? "frequenza" : "modo")) return;
             if (hz > 0) await SetAsync("F " + hz.ToString(CultureInfo.InvariantCulture));
             if (!string.IsNullOrWhiteSpace(mode)) await SetAsync($"M {mode.Trim()} 0");
         }
@@ -498,14 +666,20 @@ namespace IpTrxCtrl.Rig
         public async Task SetPassbandAsync(string mode, int hz)
         {
             if (string.IsNullOrWhiteSpace(mode)) return;
+            if (QsyRefused("filtro")) return;
             await SetAsync($"M {mode.Trim()} {Math.Clamp(hz, 0, 10000)}");
             SessionLog.Write($"RADIO filtro {mode} a {hz} Hz");
         }
 
-        public Task SetVfoBAsync(long hz) => SetAsync("I " + hz.ToString(CultureInfo.InvariantCulture));
+        public async Task SetVfoBAsync(long hz)
+        {
+            if (QsyRefused("la frequenza del VFO B")) return;
+            await SetAsync("I " + hz.ToString(CultureInfo.InvariantCulture));
+        }
 
         public async Task SetSplitAsync(bool on)
         {
+            if (QsyRefused("lo split")) { PushTelemetry(); return; }
             await SetAsync(on ? "S 1 VFOB" : "S 0 VFOA");
             _cycle = 0;
         }
@@ -513,6 +687,7 @@ namespace IpTrxCtrl.Rig
         public async Task VfoOpAsync(string op)
         {
             if (op != "XCHG" && op != "CPY") return;
+            if (QsyRefused("i VFO")) return;
             await SetAsync("G " + op);
             _cycle = 0;
         }
@@ -561,6 +736,11 @@ namespace IpTrxCtrl.Rig
         {
             text = (text ?? "").Trim();
             if (text.Length == 0) return;
+            // il keyer della radio trasmette da solo: per la durata stimata (circa 12 punti per carattere)
+            // la trasmissione è del programma, non di un operatore alla radio
+            int wpm = Telemetry.KeySpeed >= 5 ? Telemetry.KeySpeed : 18;
+            var until = DateTime.UtcNow.AddSeconds(text.Length * 12.0 * 1.2 / wpm + 4);
+            if (until > _ownTxUntil) _ownTxUntil = until;
             if (!await SetAsync("b " + text)) SetStatus("La radio non accetta testo CW via CAT (send_morse)");
         }
 
@@ -571,6 +751,7 @@ namespace IpTrxCtrl.Rig
         {
             if (_pttWanted == on) return;
             _pttWanted = on;
+            if (!on) ResetTimeoutIfReleased();
             await ApplyPttAsync();
         }
 
@@ -578,6 +759,7 @@ namespace IpTrxCtrl.Rig
         private void SetCwPtt(bool on)
         {
             _cwPtt = on;
+            if (!on) ResetTimeoutIfReleased();
             try { ApplyPttAsync().GetAwaiter().GetResult(); } catch { }
         }
 
@@ -587,9 +769,10 @@ namespace IpTrxCtrl.Rig
             await _pttLock.WaitAsync();
             try
             {
-                bool on = !_txBlocked && (_pttWanted || _cwPtt);
+                bool on = !_txBlocked && !_txTimedOut && (_pttWanted || _cwPtt);
                 if (on == _pttActual) return;
                 _pttActual = on;
+                _ownTxUntil = DateTime.UtcNow.AddSeconds(4);   // la radio può restare in TX ancora un attimo (VOX, ritardi)
                 switch (_s.PttMethod)
                 {
                     case PttMethod.Vox: return;
@@ -616,6 +799,7 @@ namespace IpTrxCtrl.Rig
         public async Task SendCwAsync(string text, int wpm)
         {
             if (_txBlocked) { SetStatus("Trasmissione bloccata per ROS alto: testo CW non inviato"); return; }
+            if (_txTimedOut) return;
             if (_keyer != null) { _keyer.Send(text, wpm); return; }
             if (wpm >= 5) await SetKeySpeedAsync(wpm);
             await SendMorseAsync(text);

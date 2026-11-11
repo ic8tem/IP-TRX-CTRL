@@ -112,6 +112,8 @@ namespace IpTrxCtrl.Core
         public event Action? PairingExpired;
         /// <summary>Client: l'elenco dei server o quello in uso è cambiato.</summary>
         public event Action? ServersChanged;
+        /// <summary>Client: dopo un nuovo collegamento la finestra richiede il panadapter se lo mostra.</summary>
+        public event Action? SpectrumResend;
         /// <summary>Client: giro del ciclo delle porte durante l'abbinamento (giro, totale).</summary>
         public event Action<int, int>? PairingRound;
         private CancellationTokenSource? _pairListenCts;
@@ -160,6 +162,9 @@ namespace IpTrxCtrl.Core
             LoadKeyForRole();
             Rig = new RigControl(s);
             Rig.Updated += OnRigUpdated;
+            Rig.Notice += OnRigNotice;
+            Pan = new Panadapter(s);
+            Pan.Line += OnPanLine;
             Audio.Captured += OnCaptured;
             Audio.Keyer.PttRequest += on => SetPttLocal(on);
             Audio.RxSamples += (f, n) => _digital?.PushRx(f, n);
@@ -184,6 +189,7 @@ namespace IpTrxCtrl.Core
             if (_s.Role == NodeRole.Server)
             {
                 Rig.Start();
+                Pan.Start();
                 _ = StartServerAsync();
             }
             else
@@ -270,6 +276,7 @@ namespace IpTrxCtrl.Core
             StopDigital();
             StopUdp();
             _tunnelSrv.Dispose();
+            Pan.Dispose();
             Task.Run(() => StopServerAsync()).Wait(3000);
             Task.Run(CloseClientPortsAsync).Wait(3000);
             Rig.Stop();
@@ -905,6 +912,9 @@ namespace IpTrxCtrl.Core
                 try { await ch.SendAsync(new MsgWriter(Msg.PeerInfo).Str(ch.Remote.Address.MapToIPv4().ToString()).Build(), ct); } catch { }
                 Stats.ClientEndpoint = ch.Remote.Address.MapToIPv4().ToString();
                 _ = SendDeviceStateAsync();
+                SendServerMemories();
+                _spectrumWanted = false;
+                _remotePttRefusedNotified = false;
                 _ = Task.Run(() => OfferUdpAsync(ct));
                 await ReceiveLoopAsync(ch, ct);
             }
@@ -1630,6 +1640,44 @@ namespace IpTrxCtrl.Core
                         case Msg.SetFreqMode:
                             if (IsServer) { long hz = r.I64(); string mode = r.Str(); _ = Rig.SetFreqModeAsync(hz, mode); }
                             break;
+                        case Msg.ServerNotice:
+                            if (!IsServer) Notice?.Invoke(r.Str());
+                            break;
+                        case Msg.SetRadioCtl:
+                            if (IsServer) { string name = r.Str(); float v = r.F32(); _ = Rig.SetRadioCtlAsync(name, v); }
+                            break;
+                        case Msg.Memories:
+                            if (!IsServer)
+                            {
+                                int n = Math.Clamp(r.I32(), 0, 1000);
+                                var list = new List<MemoryEntry>(n);
+                                for (int i = 0; i < n; i++) list.Add(new MemoryEntry { Id = r.Str(), Name = r.Str(), FreqHz = r.I64(), Mode = r.Str() });
+                                ServerMemoriesSeen = list;
+                                MemoriesChanged?.Invoke();
+                            }
+                            break;
+                        case Msg.MemorySave:
+                            if (IsServer)
+                            {
+                                string name = r.Str(); long hz = r.I64(); string mode = r.Str();
+                                if (SessionCanTransmit(out string why)) SaveServerMemory(name, hz, mode, ClientName(_sessionClientId));
+                                else SendNotice("Le memorie del server le cambia solo un client che può trasmettere (" + why + ").");
+                            }
+                            break;
+                        case Msg.MemoryDelete:
+                            if (IsServer)
+                            {
+                                string id = r.Str();
+                                if (SessionCanTransmit(out string why)) DeleteServerMemory(id, ClientName(_sessionClientId));
+                                else SendNotice("Le memorie del server le cambia solo un client che può trasmettere (" + why + ").");
+                            }
+                            break;
+                        case Msg.SpectrumOn:
+                            if (IsServer) { _spectrumWanted = r.Bool(); SessionLog.Write("PANADAPTER " + (_spectrumWanted ? "chiesto" : "non più chiesto") + " dal client"); }
+                            break;
+                        case Msg.Spectrum:
+                            if (!IsServer) SpectrumReceived?.Invoke(SpectrumLine.Decode(r));
+                            break;
                         case Msg.SetVfoB: if (IsServer) _ = Rig.SetVfoBAsync(r.I64()); break;
                         case Msg.SetPassband: if (IsServer) { string pm = r.Str(); int hz = r.I32(); _ = Rig.SetPassbandAsync(pm, hz); } break;
                         case Msg.SetSplit: if (IsServer) _ = Rig.SetSplitAsync(r.Bool()); break;
@@ -1641,12 +1689,20 @@ namespace IpTrxCtrl.Core
                             {
                                 string text = r.Str();
                                 int wpm = r.AtEnd ? _s.CwSpeedWpm : r.I32();
+                                if (!SessionCanTransmit(out string why)) { SendNotice("CW non trasmesso: " + why + "."); break; }
                                 SessionLog.Write($"CW dal client ({wpm} WPM): {text}");
                                 _ = Rig.SendCwAsync(text, wpm);
                             }
                             break;
                         case Msg.StopMorse: if (IsServer) _ = Rig.StopCwAsync(); break;
-                        case Msg.CwKey: if (IsServer) { bool down = r.Bool(); Rig.CwKeyEvent(down, r.I64()); } break;
+                        case Msg.CwKey:
+                            if (IsServer)
+                            {
+                                bool down = r.Bool(); long ms = r.I64();
+                                if (down && !SessionCanTransmit(out string why)) { NotifyRefusedOnce(why); break; }
+                                Rig.CwKeyEvent(down, ms);
+                            }
+                            break;
                         case Msg.SetKeySpeed: if (IsServer) _ = Rig.SetKeySpeedAsync(r.I32()); break;
                         case Msg.SetDeviceMute:
                             if (IsServer) { bool input = r.U8() == 0; bool mute = r.Bool(); DeviceMute.SetMute(input ? _s.InputDevice : _s.OutputDevice, input, mute); _ = SendDeviceStateAsync(); }
@@ -1658,10 +1714,19 @@ namespace IpTrxCtrl.Core
                             if (IsServer) { string din = r.Str(); string dout = r.Str(); _ = ChangeServerDevicesAsync(din, dout, true); }
                             break;
                         case Msg.SwrUnlock:
-                            if (IsServer) Rig.UnlockTx("dal client");
+                            if (IsServer)
+                            {
+                                if (ClientMayTransmit()) Rig.UnlockTx("dal client");
+                                else SendNotice("Un client in solo ascolto non può sbloccare la trasmissione.");
+                            }
                             break;
                         case Msg.SetSwrProtection:
-                            if (IsServer) { bool on = r.Bool(); float warn = r.F32(); float trip = r.F32(); ApplySwrProtection(on, warn, trip, "dal client"); }
+                            if (IsServer)
+                            {
+                                bool on = r.Bool(); float warn = r.F32(); float trip = r.F32();
+                                if (ClientMayTransmit()) ApplySwrProtection(on, warn, trip, "dal client");
+                                else SendNotice("Un client in solo ascolto non può cambiare la protezione ROS.");
+                            }
                             break;
                         case Msg.SetAutoUnmute:
                             if (IsServer) { _s.AutoUnmute = r.Bool(); _s.Save(); _ = SendDeviceStateAsync(); }
@@ -1669,8 +1734,11 @@ namespace IpTrxCtrl.Core
                         case Msg.Ptt:
                             if (IsServer)
                             {
+                                bool wasOn = _remotePtt;
                                 _remotePtt = r.U8() == 1;
                                 _lastRemotePtt = DateTime.UtcNow;
+                                if (!_remotePtt) _remotePttRefusedNotified = false;
+                                else if (!wasOn && !SessionCanTransmit(out string why)) NotifyRefusedOnce(why);
                                 await ApplyPttAsync();
                             }
                             break;
@@ -1682,6 +1750,7 @@ namespace IpTrxCtrl.Core
                         case Msg.NewAudioPort:
                             _newAudioPortTcs?.TrySetResult(r.I32()); break;
                         case Msg.SwapRequest:
+                            if (IsServer && !ClientMayTransmit()) { SendNotice("Un client in solo ascolto non può chiedere lo scambio dei ruoli."); break; }
                             SwapRequested?.Invoke(accepted => _ = AnswerSwapAsync(accepted)); break;
                         case Msg.SwapAnswer:
                             if (r.U8() == 1) _ = BeginSwapAsync(); else Notice?.Invoke("Il peer ha rifiutato lo scambio dei ruoli.");
@@ -1693,7 +1762,7 @@ namespace IpTrxCtrl.Core
                             {
                                 int id = r.I32();
                                 byte[] d = r.Rest();
-                                if (IsServer) await _tunnelSrv.DataAsync(id, d);
+                                if (IsServer) await _tunnelSrv.DataAsync(id, d);   // i comandi di PTT grezzi vengono scartati dal tunnel
                                 else _tunnelCli?.OnData(id, d);
                             }
                             break;
@@ -1891,7 +1960,11 @@ namespace IpTrxCtrl.Core
 
         private void OnRigUpdated()
         {
-            var t = Rig.Telemetry;
+            var t = Rig.Telemetry.Clone();
+            t.TxAllowed = SessionCanTransmit(out string why);
+            t.TxDenied = why;
+            t.PanAvailable = Pan.Available;
+            t.PanStatus = Pan.Status;
             LastTelemetry = t;
             TelemetryChanged?.Invoke(t);
             var ctl = _control;
@@ -2030,6 +2103,150 @@ namespace IpTrxCtrl.Core
 
         public void StopMorse() { if (IsServer) _ = Rig.StopCwAsync(); else Send(new MsgWriter(Msg.StopMorse).Build()); }
 
+        /// <summary>Comandi della radio (NR, NB, ANF, COMP: 0/1 · SQL: 0..1 · ATT, PREAMP, AGC: -1 = passo successivo).</summary>
+        public void SetRadioCtl(string name, float value)
+        {
+            if (IsServer) _ = Rig.SetRadioCtlAsync(name, value);
+            else Send(new MsgWriter(Msg.SetRadioCtl).Str(name).F32(value).Build());
+        }
+
+        // =================================================================== permessi di trasmissione (server)
+
+        private bool _remotePttRefusedNotified;
+
+        /// <summary>Il client collegato è abilitato a trasmettere (non è in solo ascolto).</summary>
+        private bool ClientMayTransmit() =>
+            _s.Clients.FirstOrDefault(c => c.Id == _sessionClientId) is not { CanTransmit: false };
+
+        /// <summary>Il client collegato può trasmettere adesso: non è in solo ascolto e nessuno trasmette dalla radio.</summary>
+        private bool SessionCanTransmit(out string why)
+        {
+            why = "";
+            if (!IsServer) return true;
+            if (!ClientMayTransmit()) { why = "il server ti ha impostato in solo ascolto"; return false; }
+            if (Rig.LocalLockActive) { why = $"c'è un operatore alla radio (trasmissione remota bloccata ancora {Rig.LocalLockSeconds} s)"; return false; }
+            return true;
+        }
+
+        private void NotifyRefusedOnce(string why)
+        {
+            if (_remotePttRefusedNotified) return;
+            _remotePttRefusedNotified = true;
+            SessionLog.Write("TRASMISSIONE remota rifiutata: " + why);
+            SendNotice("Trasmissione non permessa: " + why + ".");
+        }
+
+        /// <summary>Server: avviso per l'operatore remoto (e anche qui).</summary>
+        private void SendNotice(string text)
+        {
+            if (IsServer) Send(new MsgWriter(Msg.ServerNotice).Str(text).Build());
+        }
+
+        private void OnRigNotice(string text)
+        {
+            Notice?.Invoke(text);
+            SendNotice(text);
+        }
+
+        /// <summary>Server: client in solo ascolto o abilitato a trasmettere.</summary>
+        public void SetClientCanTransmit(string id, bool can)
+        {
+            var e = _s.Clients.FirstOrDefault(x => x.Id == id);
+            if (e == null || e.CanTransmit == can) return;
+            e.CanTransmit = can;
+            _s.Save();
+            SessionLog.Write($"CLIENT {e.Name}: " + (can ? "può trasmettere" : "solo ascolto"));
+            ClientsChanged?.Invoke();
+            if (!can && id == _sessionClientId && _remotePtt) { _remotePtt = false; _ = ApplyPttAsync(); }
+            Rig.PushTelemetry();
+        }
+
+        public void ClearLocalLock() => Rig.ClearLocalLock("dal server");
+
+        // =================================================================== memorie
+
+        /// <summary>Client: memorie del server collegato (comuni a tutti i client).</summary>
+        public List<MemoryEntry> ServerMemoriesSeen { get; private set; } = new();
+        public event Action? MemoriesChanged;
+
+        /// <summary>Memorie del server: sul server quelle salvate qui, sul client quelle ricevute.</summary>
+        public IReadOnlyList<MemoryEntry> ServerMemories => IsServer ? _s.ServerMemories : ServerMemoriesSeen;
+
+        private void SendServerMemories()
+        {
+            if (!IsServer) return;
+            var w = new MsgWriter(Msg.Memories).I32(_s.ServerMemories.Count);
+            foreach (var m in _s.ServerMemories) w.Str(m.Id).Str(m.Name).I64(m.FreqHz).Str(m.Mode);
+            Send(w.Build());
+        }
+
+        public void SaveServerMemoryFromUi(string name, long hz, string mode)
+        {
+            if (IsServer) SaveServerMemory(name, hz, mode, "server");
+            else Send(new MsgWriter(Msg.MemorySave).Str(name).I64(hz).Str(mode).Build());
+        }
+
+        public void DeleteServerMemoryFromUi(string id)
+        {
+            if (IsServer) DeleteServerMemory(id, "server");
+            else Send(new MsgWriter(Msg.MemoryDelete).Str(id).Build());
+        }
+
+        private void SaveServerMemory(string name, long hz, string mode, string who)
+        {
+            if (hz <= 0) return;
+            name = string.IsNullOrWhiteSpace(name) ? $"{hz / 1000.0:0.0} kHz" : name.Trim();
+            var e = _s.ServerMemories.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (e == null) { e = new MemoryEntry { Id = Guid.NewGuid().ToString("N")[..8], Name = name }; _s.ServerMemories.Add(e); }
+            e.FreqHz = hz; e.Mode = mode ?? "";
+            _s.ServerMemories.Sort((a, b) => a.FreqHz.CompareTo(b.FreqHz));
+            _s.Save();
+            SessionLog.Write($"MEMORIA del server salvata ({who}): {name} {hz} Hz {mode}");
+            SendServerMemories();
+            MemoriesChanged?.Invoke();
+        }
+
+        private void DeleteServerMemory(string id, string who)
+        {
+            int n = _s.ServerMemories.RemoveAll(m => m.Id == id);
+            if (n == 0) return;
+            _s.Save();
+            SessionLog.Write($"MEMORIA del server cancellata ({who}): {id}");
+            SendServerMemories();
+            MemoriesChanged?.Invoke();
+        }
+
+        // =================================================================== panadapter
+
+        public Panadapter Pan { get; }
+        private volatile bool _spectrumWanted;
+        private bool _spectrumAsked;
+        /// <summary>Riga del panadapter (sul server dalla radio, sul client ricevuta dal server).</summary>
+        public event Action<SpectrumLine>? SpectrumReceived;
+
+        private void OnPanLine(SpectrumLine l)
+        {
+            SpectrumReceived?.Invoke(l);   // anche la finestra del server lo mostra
+            if (_spectrumWanted) Send(l.Encode());
+        }
+
+        /// <summary>Client: chiede (o non chiede più) il panadapter al server.</summary>
+        public void SetSpectrumWanted(bool on)
+        {
+            if (IsServer) return;
+            if (_spectrumAsked == on && _control != null) return;
+            _spectrumAsked = on;
+            Send(new MsgWriter(Msg.SpectrumOn).Bool(on).Build());
+        }
+
+        /// <summary>Server: riavvia il panadapter dopo un cambio delle impostazioni.</summary>
+        public void RestartPanadapter()
+        {
+            if (!IsServer) return;
+            Pan.Start();
+            Rig.PushTelemetry();
+        }
+
         public void SetRemoteDeviceMute(bool input, bool mute) => Send(new MsgWriter(Msg.SetDeviceMute).U8((byte)(input ? 0 : 1)).Bool(mute).Build());
         public void SetRemoteDeviceVolume(bool input, float v) => Send(new MsgWriter(Msg.SetDeviceVolume).U8((byte)(input ? 0 : 1)).F32(v).Build());
         public void SetRemoteAutoUnmute(bool on) => Send(new MsgWriter(Msg.SetAutoUnmute).Bool(on).Build());
@@ -2076,6 +2293,7 @@ namespace IpTrxCtrl.Core
         {
             if (_localPtt == on) return;
             _localPtt = on;
+            if (on && IsServer && _control != null) Rig.NoteLocalOperator("PTT del programma sul server");
             _pttChanged = DateTime.UtcNow;
             if (IsServer) _ = ApplyPttAsync();
             else SendPttState();
@@ -2089,8 +2307,9 @@ namespace IpTrxCtrl.Core
 
         private async Task ApplyPttAsync()
         {
-            bool on = _localPtt || _remotePtt;
-            Stats.PeerTx = _remotePtt;
+            bool remote = _remotePtt && SessionCanTransmit(out _);
+            bool on = _localPtt || remote;
+            Stats.PeerTx = remote;
             await Rig.SetPttAsync(on);
             StatsChanged?.Invoke();
         }
@@ -2199,7 +2418,9 @@ namespace IpTrxCtrl.Core
             var e = _s.Clients.FirstOrDefault(x => x.Id == id);
             if (e == null)
             {
-                e = new ClientEntry { Id = id, Name = $"Client {_s.Clients.Count + 1}", PairedAt = DateTime.Now, How = how };
+                // con il codice fisso chi entra parte in solo ascolto (se l'opzione è attiva): lo abilita il server
+                e = new ClientEntry { Id = id, Name = $"Client {_s.Clients.Count + 1}", PairedAt = DateTime.Now, How = how,
+                                      CanTransmit = !(how == "codice fisso" && _s.FixedCodeRxOnly) };
                 _s.Clients.Add(e);
             }
             KeyStore.SaveMaster(master, "cli-" + id);
@@ -2487,6 +2708,7 @@ namespace IpTrxCtrl.Core
 
         private void OnConnected()
         {
+            if (!IsServer && _spectrumAsked) { _spectrumAsked = false; SpectrumResend?.Invoke(); }
             Stats.Connected = true;
             Stats.ConnectedSince = DateTime.Now;
             SetStatus("Collegato", true);
@@ -2544,6 +2766,8 @@ namespace IpTrxCtrl.Core
                         UpdateUdpAudio("nessun pacchetto UDP da 4 s");
                     }
 
+                    // il permesso può cambiare durante la trasmissione (operatore alla radio, solo ascolto)
+                    if (IsServer && _remotePtt && Stats.PeerTx && !SessionCanTransmit(out string denied)) { NotifyRefusedOnce(denied); await ApplyPttAsync(); }
                     if (IsServer && _remotePtt && DateTime.UtcNow - _lastRemotePtt > TimeSpan.FromSeconds(1))
                     {
                         _remotePtt = false;

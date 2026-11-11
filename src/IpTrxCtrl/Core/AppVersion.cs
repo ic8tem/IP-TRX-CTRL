@@ -8,7 +8,8 @@ namespace IpTrxCtrl.Core
     /// Il PROTOCOLLO cambia solo quando server e client devono essere aggiornati insieme:
     ///   1 = 0.1.0 – 0.1.3
     ///   2 = 0.2.0 – 0.2.8
-    ///   3 = 0.3.0 e successive (abbinamento con il numero a 10 cifre)
+    ///   3 = 0.3.0 e successive (abbinamento con il numero a 10 cifre, più client, telemetria nuova con sicurezza
+    ///       in trasmissione, comandi della radio e panadapter: non compatibile con le versioni precedenti)
     /// Dentro lo stesso protocollo le versioni si parlano; alcune funzioni richiedono una versione minima
     /// su entrambi i PC (vedi <see cref="Notes"/>).
     /// Formato scambiato (abbinamento MQTT, indirizzo sul broker, saluto sul canale cifrato): «P2 0.2.3».

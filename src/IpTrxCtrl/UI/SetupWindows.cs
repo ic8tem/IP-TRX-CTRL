@@ -255,6 +255,7 @@ namespace IpTrxCtrl.UI
         public bool PairingReset { get; private set; }
         public bool DigitalChanged { get; private set; }
         public bool SerialInputChanged { get; private set; }
+        public bool PanChanged { get; private set; }
 
         public SettingsWindow(AppSettings s, Node node)
         {
@@ -281,7 +282,7 @@ namespace IpTrxCtrl.UI
             // ---- protezione ROS: decide il server; dal client si cambia a distanza quando è collegato
             bool swrServer = s.Role == NodeRole.Server;
             var tel = node.LastTelemetry;
-            bool swrRemoteOk = !swrServer && node.Connected && tel.CatOk && tel.SwrKnown;
+            bool swrRemoteOk = !swrServer && node.Connected && tel.CatOk;
             bool swrOnNow = swrServer ? s.SwrProtection : tel.SwrProtect;
             double swrWarnNow = swrServer ? s.SwrWarn : tel.SwrWarnAt, swrTripNow = swrServer ? s.SwrTrip : tel.SwrTripAt;
             var swrOn = new CheckBox { Content = "Protezione ROS (consigliata, attiva dall'installazione)", IsChecked = swrOnNow };
@@ -355,15 +356,22 @@ namespace IpTrxCtrl.UI
             var cliName = new TextBox { Watermark = "nome del client" };
             var cliRename = Ui.Btn("Rinomina");
             var cliDelete = Ui.Btn("Togli accesso");
+            var cliTx = new CheckBox { Content = "Può trasmettere (altrimenti solo ascolto)" };
             var cliInfo = Ui.Sub("", 12);
+            bool cliFilling = false;
             List<ClientEntry> CliItems() => node.Clients.OrderByDescending(x => x.LastUsed).ToList();
             void ShowCli()
             {
+                cliFilling = true;
+                cliTx.IsChecked = (cliList.SelectedItem as ClientEntry)?.CanTransmit ?? true;
+                cliTx.IsEnabled = cliList.SelectedItem is ClientEntry;
+                cliFilling = false;
                 if (cliList.SelectedItem is ClientEntry e)
                 {
                     cliName.Text = e.Name;
                     cliInfo.Text = $"Nominativo: {(e.Callsign.Length > 0 ? e.Callsign : "—")} · abbinato il {e.PairedAt:dd/MM/yyyy}"
                                  + (e.How.Length > 0 ? $" con {e.How}" : "") + $" · ultimo uso {e.LastUsed:dd/MM/yyyy HH:mm}"
+                                 + (e.CanTransmit ? "" : " · SOLO ASCOLTO")
                                  + (e.Id == node.SessionClientId ? " · COLLEGATO ORA" : "");
                 }
                 else { cliName.Text = ""; cliInfo.Text = "Nessun client abbinato."; }
@@ -394,7 +402,13 @@ namespace IpTrxCtrl.UI
             var cliNameRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,8,Auto,8,Auto") };
             Grid.SetColumn(cliRename, 2); Grid.SetColumn(cliDelete, 4);
             cliNameRow.Children.Add(cliName); cliNameRow.Children.Add(cliRename); cliNameRow.Children.Add(cliDelete);
-            var cliPanel = Ui.Col(6, Ui.Lbl("Client abbinati (ognuno con la sua chiave; si collega uno per volta, gli altri trovano il server occupato)"), cliList, cliNameRow, cliInfo);
+            cliTx.IsCheckedChanged += (_, _) =>
+            {
+                if (cliFilling || cliList.SelectedItem is not ClientEntry e) return;
+                node.SetClientCanTransmit(e.Id, cliTx.IsChecked == true);
+                ShowCli();
+            };
+            var cliPanel = Ui.Col(6, Ui.Lbl("Client abbinati (ognuno con la sua chiave; si collega uno per volta, gli altri trovano il server occupato)"), cliList, cliNameRow, cliTx, cliInfo);
 
             // ---- server: codice fisso
             var fixOn = new CheckBox { Content = "Accetta nuovi client con il codice fisso del server", IsChecked = node.FixedCodeEnabled };
@@ -480,6 +494,47 @@ namespace IpTrxCtrl.UI
             Grid.SetColumn(extPort, 2);
             extRow.Children.Add(extHost); extRow.Children.Add(extPort);
 
+            // ---- finestra principale: parti facoltative
+            var optBands = new CheckBox { Content = "Pulsanti delle bande e passo di sintonia", IsChecked = s.ShowBands };
+            var optCtl = new CheckBox { Content = "Comandi della radio (NR, NB, Notch, ATT, preamplificatore, AGC, compressore, squelch)", IsChecked = s.ShowRadioControls };
+            var optMem = new CheckBox { Content = "Memorie (di questo PC e del server)", IsChecked = s.ShowMemories };
+            var optAlc = new CheckBox { Content = "Strumento ALC", IsChecked = s.ShowAlc };
+            var optPan = new CheckBox { Content = "Panadapter della radio (se il server lo fornisce)", IsChecked = s.ShowPanadapter };
+            var optUpd = new CheckBox { Content = "All'avvio controlla se su GitHub c'è una versione nuova", IsChecked = s.CheckUpdates };
+            var optUpdNote = Ui.Sub("Il controllo legge la pagina pubblica delle release (api.github.com), senza account: GitHub vede l'indirizzo IP di chi chiede, come per qualunque pagina web. Nient'altro viene mandato.", 12);
+
+            // ---- sicurezza in trasmissione (server)
+            bool srvRole = s.Role == NodeRole.Server;
+            var totOn = new CheckBox { Content = "Tempo massimo di una trasmissione", IsChecked = s.TxTimeoutEnabled };
+            var totSec = new TextBox { Text = s.TxTimeoutSec.ToString(CultureInfo.InvariantCulture), Width = 80 };
+            var qsyLock = new CheckBox { Content = "Niente cambi di frequenza, modo, filtro e split durante la trasmissione", IsChecked = s.QsyLockInTx };
+            var locOn = new CheckBox { Content = "Precedenza a chi è alla radio: dopo una trasmissione locale il client non trasmette per", IsChecked = s.LocalPriority };
+            var locMin = new TextBox { Text = s.LocalPriorityMin.ToString(CultureInfo.InvariantCulture), Width = 60 };
+            var fixRx = new CheckBox { Content = "I client che si abbinano con il codice fisso partono in solo ascolto", IsChecked = s.FixedCodeRxOnly };
+            var safeNote = Ui.Sub("Tempo massimo (da 30 a 600 s): conta le trasmissioni comandate dal programma (PTT, messaggi, tasto CW su linea seriale, programmi digitali); allo scadere il PTT si toglie e resta tolto finché l'operatore non lo rilascia. "
+                + "Precedenza: se la radio trasmette senza che il programma l'abbia comandata (microfono o PTT della radio), o se si preme il PTT di questo programma sul server, la trasmissione del client si blocca per i minuti scelti (da 1 a 30); funziona con le radio che dicono via CAT quando sono in trasmissione. "
+                + "Il blocco si toglie prima con un clic sulla riga sotto il PTT.", 12);
+
+            // ---- panadapter (server)
+            var panOn = new CheckBox { Content = "Panadapter della radio per i client e per questa finestra", IsChecked = s.PanEnabled };
+            var panCom = new ComboBox { ItemsSource = new[] { "(nessuna)" }.Concat(Hamlib.SerialPorts()).ToList(), MinWidth = 180 };
+            panCom.SelectedItem = s.PanCom.Length > 0 && ((List<string>)panCom.ItemsSource!).Contains(s.PanCom) ? s.PanCom : "(nessuna)";
+            var panBauds = new[] { 9600, 19200, 38400, 57600, 115200 };
+            var panBaud = new ComboBox { ItemsSource = panBauds.Select(b => b.ToString(CultureInfo.InvariantCulture)).ToList(), Width = 110 };
+            panBaud.SelectedIndex = Math.Max(0, Array.IndexOf(panBauds, s.PanBaud));
+            var panAddr = new TextBox { Text = s.PanCivAddr, Width = 70 };
+            var panNote = Ui.Sub(s.CatViaTci
+                ? "Il CAT passa dal TCI: il panadapter usa il flusso IQ del programma della radio (ExpertSDR, Thetis…), senza altre impostazioni."
+                : "Radio Icom: serve una porta CI-V che Hamlib non usa, per esempio la seconda porta USB delle radio che la offrono come CI-V, impostata nel menu della radio. "
+                  + "Indirizzo CI-V della radio in esadecimale (IC-7300 94, IC-705 A4, IC-9700 A2, IC-7610 98: controlla nel menu della radio). "
+                  + "Il programma accende lo scopio e l'uscita dei dati della cascata (comandi CI-V 27 10 e 27 11). Con altre marche, per ora, il panadapter c'è solo via TCI.", 12);
+            var panRows = Ui.Row(12, Ui.Col(0, Ui.Lbl("Porta CI-V"), panCom), Ui.Col(0, Ui.Lbl("Velocità"), panBaud), Ui.Col(0, Ui.Lbl("Indirizzo"), panAddr));
+            panRows.IsVisible = !s.CatViaTci;
+
+            // ---- rapporto per segnalare un problema
+            var report = Ui.Btn("Rapporto per un problema…");
+            report.Click += async (_, _) => await ReportAsync(s);
+
             var save = Ui.Btn("Salva", true);
             var cancel = Ui.Btn("Annulla");
             cancel.Click += (_, _) => Close();
@@ -521,6 +576,30 @@ namespace IpTrxCtrl.UI
                 int newRp = int.TryParse(rigctlPort.Text, out int rp) && rp > 1023 && rp < 65536 ? rp : s.RigctlPort;
                 DigitalChanged = newDig != s.DigitalEnabled || newTo != s.DigitalToProgram || newFrom != s.DigitalFromProgram || newRp != s.RigctlPort;
                 s.DigitalEnabled = newDig; s.DigitalToProgram = newTo; s.DigitalFromProgram = newFrom; s.RigctlPort = newRp;
+                // finestra principale
+                s.ShowBands = optBands.IsChecked == true; s.ShowRadioControls = optCtl.IsChecked == true; s.ShowMemories = optMem.IsChecked == true;
+                s.ShowAlc = optAlc.IsChecked == true; s.ShowPanadapter = optPan.IsChecked == true; s.CheckUpdates = optUpd.IsChecked == true;
+                if (srvRole)
+                {
+                    // sicurezza in trasmissione
+                    bool totNew = totOn.IsChecked == true;
+                    int sec = int.TryParse(totSec.Text, out int ts) ? Math.Clamp(ts, 30, 600) : s.TxTimeoutSec;
+                    int min = int.TryParse(locMin.Text, out int lm) ? Math.Clamp(lm, 1, 30) : s.LocalPriorityMin;
+                    if (totNew != s.TxTimeoutEnabled || sec != s.TxTimeoutSec || (qsyLock.IsChecked == true) != s.QsyLockInTx
+                        || (locOn.IsChecked == true) != s.LocalPriority || min != s.LocalPriorityMin || (fixRx.IsChecked == true) != s.FixedCodeRxOnly)
+                        SessionLog.Write($"SICUREZZA TX: tempo massimo {(totNew ? sec + " s" : "spento")} · blocco QSY {(qsyLock.IsChecked == true ? "sì" : "no")} · precedenza locale {(locOn.IsChecked == true ? min + " min" : "no")} · codice fisso in solo ascolto {(fixRx.IsChecked == true ? "sì" : "no")}");
+                    s.TxTimeoutEnabled = totNew; s.TxTimeoutSec = sec; s.QsyLockInTx = qsyLock.IsChecked == true;
+                    s.LocalPriority = locOn.IsChecked == true; s.LocalPriorityMin = min; s.FixedCodeRxOnly = fixRx.IsChecked == true;
+                    // panadapter
+                    string pc = panCom.SelectedItem as string ?? "";
+                    if (pc.StartsWith("(")) pc = "";
+                    int pb = panBaud.SelectedIndex >= 0 ? panBauds[panBaud.SelectedIndex] : s.PanBaud;
+                    string pa = (panAddr.Text ?? "").Trim().ToUpperInvariant();
+                    if (!byte.TryParse(pa.Replace("0X", "").Replace("H", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _)) pa = s.PanCivAddr;
+                    PanChanged = (panOn.IsChecked == true) != s.PanEnabled || pc != s.PanCom || pb != s.PanBaud || pa != s.PanCivAddr;
+                    s.PanEnabled = panOn.IsChecked == true; s.PanCom = pc; s.PanBaud = pb; s.PanCivAddr = pa;
+                    node.Rig.PushTelemetry();
+                }
                 var list = (brokers.Text ?? "").Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
                 if (list.Count > 0) s.MqttBrokers = list;
                 RigChanged = oldModel != s.RigModel || oldBaud != s.RigBaud || oldCom != s.RigCom || oldExt != s.UseExternalRigctld
@@ -569,17 +648,74 @@ namespace IpTrxCtrl.UI
                             Ui.Col(0, Ui.Lbl("Porta del rigctld locale: nel programma scegli la radio Hamlib «NET rigctl» su 127.0.0.1 e questa porta"), rigctlPort),
                             digState))
                         : Ui.Panel(Ui.Col(10, Ui.H2("PROGRAMMI DIGITALI (CLIENT)"), Ui.Sub("Non disponibili nella versione per Windows 32 bit.", 13))),
+                    Ui.Panel(Ui.Col(8, Ui.H2("FINESTRA PRINCIPALE"),
+                        Ui.Sub("Le parti nuove si possono nascondere per tenere la finestra più piccola.", 12),
+                        optBands, optCtl, optMem, optAlc, optPan, optUpd, optUpdNote)),
+                    srvRole
+                        ? Ui.Panel(Ui.Col(8, Ui.H2("SICUREZZA IN TRASMISSIONE (SERVER)"),
+                            Ui.Row(8, totOn, totSec, Ui.Sub("secondi", 13)), qsyLock, Ui.Row(8, locOn, locMin, Ui.Sub("minuti", 13)), fixRx, safeNote))
+                        : Ui.Panel(Ui.Col(8, Ui.H2("SICUREZZA IN TRASMISSIONE"),
+                            Ui.Sub("Tempo massimo di trasmissione, blocco dei cambi di frequenza in trasmissione, precedenza a chi è alla radio e solo ascolto si impostano sul server: valgono per tutti i client.", 13))),
+                    srvRole
+                        ? Ui.Panel(Ui.Col(8, Ui.H2("PANADAPTER DELLA RADIO (SERVER)"), panOn, panRows, panNote))
+                        : new Control(),
                     Ui.Panel(Ui.Col(10, Ui.H2("RETE E AUDIO"), prefillTxt, prefill,
                         Ui.Col(0, Ui.Lbl("Broker MQTT (uno per riga, host:porta)"), brokers),
                         fwBtn, fwNote)),
                     Ui.Panel(Ui.Col(10, Ui.H2("ABBINAMENTO E REGISTRI"),
                         Ui.Sub("Impronta dell'abbinamento" + (clientRole ? " in uso" : "") + ": " + (node.IsPaired ? node.Fingerprint : "nessun abbinamento"), 13),
                         srvPanel, srvSidePanel,
-                        Ui.Row(8, newPair, export, folder, lic))),
+                        Ui.Row(8, newPair, export, folder),
+                        Ui.Row(8, report, lic))),
                     bottom
                 }
             };
             Content = new ScrollViewer { Content = body };
+        }
+
+        /// <summary>Rapporto per segnalare un problema: registri con gli indirizzi IP pubblici mascherati.</summary>
+        private async Task ReportAsync(AppSettings s)
+        {
+            var desc = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 110, Watermark = "Cosa è successo, quando, cosa ti aspettavi (facoltativo)" };
+            var saveBtn = Ui.Btn("Salva il rapporto…", true);
+            var issue = Ui.Btn("Apri la pagina delle segnalazioni");
+            var close = Ui.Btn("Chiudi");
+            var result = Ui.Sub("", 12);
+            var w = new Window
+            {
+                Title = "Rapporto per segnalare un problema",
+                Width = 600,
+                SizeToContent = SizeToContent.Height,
+                CanResize = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Content = Ui.Col(10,
+                    Ui.H1("Rapporto per segnalare un problema"),
+                    Ui.Sub("Il rapporto raccoglie versione, sistema, impostazioni principali (senza chiavi né codici) e gli ultimi registri errori.log e sessioni.log. "
+                         + "Gli indirizzi IP pubblici diventano [IP-1], [IP-2]…; restano solo gli indirizzi di rete locale. Prima di allegarlo puoi aprirlo e leggerlo.", 13),
+                    desc, Ui.Row(8, saveBtn, issue, close), result)
+            };
+            if (w.Content is Control c) c.Margin = new Thickness(24);
+            saveBtn.Click += async (_, _) =>
+            {
+                var file = await w.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+                {
+                    Title = "Salva il rapporto",
+                    SuggestedFileName = $"IP-TRX-CTRL_rapporto_{s.Callsign}_{DateTime.Now:yyyyMMdd_HHmm}.txt",
+                    DefaultExtension = "txt"
+                });
+                string? path = file?.TryGetLocalPath();
+                if (path == null) return;
+                try
+                {
+                    File.WriteAllText(path, Support.BuildReport(s, desc.Text ?? ""), Encoding.UTF8);
+                    SessionLog.Write("RAPPORTO per un problema salvato su file");
+                    result.Text = "Salvato. Apri una segnalazione (Issue) su GitHub e allega il file.";
+                }
+                catch (Exception ex) { result.Text = "Non riesco a salvare: " + ex.Message; }
+            };
+            issue.Click += (_, _) => MainWindow.OpenUrl(Support.IssuesUrl);
+            close.Click += (_, _) => w.Close();
+            await w.ShowDialog(this);
         }
 
         private async Task ExportAsync(AppSettings s)
@@ -728,10 +864,60 @@ l'accesso ai client già abbinati.
 INDIRIZZI CIFRATI: l'indirizzo IP del server passa solo cifrato sui broker MQTT (abbinamento e riconnessioni) e
 nei codici di riserva; i nomi dei canali MQTT sono impronte che non rivelano nulla.
 
+FINESTRA PRINCIPALE (dalla 0.3.0)
+Più piccola: tre colonne in alto (radio · strumenti e PTT · l'altro PC), panadapter se attivo, schede in basso
+(Keyer, CW in modo CW, Audio, Collegamento). Reti, metodo PTT e schede audio del server sono riquadri richiudibili.
+Bande, passo, comandi della radio, memorie, ALC, panadapter e controllo della versione nuova si nascondono da
+Impostazioni › Finestra principale.
+
 PTT
 Pulsante «premi e tieni» o barra spaziatrice. Il server manda in trasmissione la radio con il metodo scelto:
 CAT, RTS, DTR, VOX o TCI. Per sicurezza il PTT si rilascia se il collegamento cade o la finestra perde il fuoco.
-La spia in alto a destra del riquadro del server lampeggia di rosso quando la radio trasmette.
+La spia RX/TX lampeggia di rosso quando la radio trasmette. Sotto il PTT una riga dice da quanto dura la
+trasmissione e il tempo massimo, oppure perché la trasmissione non è permessa.
+
+SICUREZZA IN TRASMISSIONE (server, dalla 0.3.0)
+Impostazioni › Sicurezza in trasmissione (server), valgono per tutti i client:
+- Tempo massimo di una trasmissione (attivo, 180 s; da 30 a 600): allo scadere il PTT si toglie e resta tolto
+  finché non lo rilasci. 15 secondi prima la riga sotto il PTT diventa rossa.
+- Niente cambi di frequenza, modo, filtro, VFO B e split mentre la radio trasmette (attivo).
+- Precedenza a chi è alla radio (attiva, 3 minuti; da 1 a 30): se la radio trasmette senza che il programma l'abbia
+  comandata, o se si preme il PTT del programma sul server, il client non trasmette per quei minuti. Sul server un
+  clic sulla riga sotto il PTT toglie il blocco. Serve una radio che dica via CAT quando trasmette.
+- Solo ascolto: in Impostazioni › Abbinamento il server sceglie per ogni client «Può trasmettere» o no. Chi si
+  abbina con il codice fisso parte in solo ascolto (opzione attiva di serie).
+
+COMANDI DELLA RADIO (dalla 0.3.0)
+NR, NB, NOTCH (notch automatico ANF), COMP (compressore della radio): acceso/spento. ATT e PRE: ogni clic passa al
+valore successivo che la radio accetta, poi spento. AGC: veloce, medio, lento. SQL: squelch 0-100 %. Strumenti
+ALC e Po accanto al ROS. Sono comandi standard di Hamlib: un pulsante grigio = la radio non lo fornisce.
+Con il CAT via TCI funzionano NR, NB, NOTCH e SQL.
+
+BANDE, PASSO E MEMORIE (dalla 0.3.0)
+Bande da 160 m a 70 cm: un clic porta all'ultima frequenza usata su quella banda. Passo di sintonia da 1 Hz a
+25 kHz con ◀ ▶ (anche la rotella sopra i pulsanti). Memorie: «Salva…» le mette in questo PC oppure sul server,
+comuni a tutti i client; «Vai» (o doppio clic) le richiama.
+
+PANADAPTER DELLA RADIO (dalla 0.3.0)
+Lo spettro della radio, a scelta: sul server Impostazioni › Panadapter (spento all'installazione), su ogni PC
+Impostazioni › Finestra principale. SDR con CAT via TCI: flusso IQ, niente altro da impostare. Icom con scopio:
+una porta CI-V che Hamlib non usa (per esempio la seconda porta USB impostata come CI-V), velocità e indirizzo
+CI-V della radio. Clic sullo spettro = sintonia lì, rotella = un passo. Funzione nuova: se resta in attesa dei
+dati, la riga di stato e sessioni.log (righe PANADAPTER) dicono cosa manca.
+Fonti: Icom CI-V Reference Guide IC-9700 e IC-7300MK2 (comandi 27 00, 27 10, 27 11)
+  https://www.icomfrance.com/uploads/files/produit/not-IC-9700_ENG_CI-V_1-en.pdf
+  https://icomuk.co.uk/files/icom/PDF/productAdditionalFile/IC-7300MK2_ENG_CI-V_0.pdf
+  Libreria TCI github.com/ftl/tci (iq_start, iq_samplerate, dds, rx_nr_enable, rx_nb_enable, rx_anf_enable, sql_enable)
+  https://pkg.go.dev/github.com/ftl/tci/client
+  Manuale di rigctl (funzioni NR, NB, ANF, COMP; livelli ATT, PREAMP, AGC, SQL, ALC)
+  https://hamlib.sourceforge.net/html/rigctl.1.html
+
+RAPPORTO PER UN PROBLEMA E VERSIONE NUOVA (dalla 0.3.0)
+Impostazioni › Abbinamento e registri › «Rapporto per un problema…»: salva un file con versione, sistema,
+impostazioni principali e gli ultimi registri, con gli indirizzi IP pubblici sostituiti da [IP-1], [IP-2]…; poi
+«Apri la pagina delle segnalazioni» apre le Issue su GitHub, dove si allega il file.
+All'avvio il programma chiede a GitHub l'ultima release (api.github.com, senza account): se è più nuova compare
+una riga in alto. Si spegne in Impostazioni › Finestra principale.
 
 KEYER (solo client)
 SSB: F1..F8 trasmettono messaggi WAV (pulsante «File WAV…»). Filtro, compressore e volume come in WavPTT.
@@ -805,7 +991,7 @@ Server e client devono avere versioni dello stesso «protocollo». La versione d
   Versioni          Protocollo   Compatibili con
   0.1.0 – 0.1.3     1            solo 0.1.x
   0.2.0 – 0.2.8     2            tutte le 0.2.x
-  0.3.0             3            solo 0.3.x (numero a 10 cifre, codice fisso, più client)
+  0.3.0             3            solo 0.3.x (numero a 10 cifre, codice fisso, più client, sicurezza TX, panadapter)
 Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   scelta delle schede audio del server dal client ......... 0.2.1 o successiva
   server senza UPnP e collegamento sulla rete locale ...... 0.2.2 o successiva
@@ -816,6 +1002,7 @@ Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   ciclo delle porte anche nell'abbinamento ............... 0.2.7 su entrambi i PC
   numero a 10 cifre ed elenco dei server sul client ....... 0.3.0 su entrambi i PC
   più client sul server e codice fisso del server ......... 0.3.0 su entrambi i PC
+  sicurezza in trasmissione, comandi radio, panadapter .... 0.3.0 su entrambi i PC
 Dalla 0.2.3 i due PC si scambiano la versione (sul broker MQTT durante l'abbinamento e all'inizio di ogni
 collegamento). Se il protocollo è diverso l'abbinamento si ferma e compare una finestra; se l'altro PC è
 più vecchio compare un avviso. La versione dell'altro PC si vede nella riga della sua rete.

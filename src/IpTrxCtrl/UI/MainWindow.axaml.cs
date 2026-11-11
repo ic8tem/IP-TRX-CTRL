@@ -84,6 +84,7 @@ namespace IpTrxCtrl.UI
             BuildFKeys();
             LoadControls();
             HookEvents();
+            BuildExtras();
 
             _node.StatsChanged += () => Dispatcher.UIThread.Post(RefreshStats);
             _node.TelemetryChanged += t => Dispatcher.UIThread.Post(() => { _tel = t; RefreshRadio(); });
@@ -110,7 +111,7 @@ namespace IpTrxCtrl.UI
             _uiTimer.Start();
             // la cascata CW scorre a 62,5 righe al secondo: ridisegno ogni 40 ms per un movimento continuo
             _wfTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
-            _wfTimer.Tick += (_, _) => { if (_cwActive) Wf.Flush(); };
+            _wfTimer.Tick += (_, _) => { if (_cwActive) Wf.Flush(); if (_panShown) PanView.Flush(); };
             _wfTimer.Start();
 
             Opened += OnOpened;
@@ -132,6 +133,7 @@ namespace IpTrxCtrl.UI
             RefreshRadio();
             if (!string.IsNullOrEmpty(_node.Audio.LastError)) { TxtNotice.Text = _node.Audio.LastError; TxtNotice.IsVisible = true; }
             if (!_node.IsPaired) ShowPairing();
+            CheckUpdatesAsync();
         }
 
         private void OnClosingWindow()
@@ -334,8 +336,6 @@ namespace IpTrxCtrl.UI
             };
             BtnOffMinus.Click += (_, _) => SetOffset(_offsetKhz - OffsetStep);
             BtnOffPlus.Click += (_, _) => SetOffset(_offsetKhz + OffsetStep);
-            SldOffset.ValueChanged += (_, e) => { if (!_loading && Math.Abs(e.NewValue - _offsetKhz) >= OffsetStep / 2) SetOffset(e.NewValue); };
-            SldOffset.PointerWheelChanged += (_, e) => { SetOffset(_offsetKhz + Math.Sign(e.Delta.Y) * OffsetStep); e.Handled = true; };
             TxtOffset.KeyDown += (_, e) => { if (e.Key == Key.Enter) ParseOffsetBox(); };
             TxtOffset.LostFocus += (_, _) => ParseOffsetBox();
             TxtOffset.PointerWheelChanged += (_, e) => { SetOffset(_offsetKhz + Math.Sign(e.Delta.Y) * OffsetStep); e.Handled = true; };
@@ -473,8 +473,8 @@ namespace IpTrxCtrl.UI
             bool server = !IsClient;
             TxtRoleBadge.Text = server ? "SERVER" : "CLIENT";
             TxtRoleLine.Text = server
-                ? $"{_s.Callsign} · Server: la radio è collegata a questo PC · audio 8 kHz cifrato AES-256"
-                : $"Client collegato al server di {(_s.PeerCallsign.Length > 0 ? _s.PeerCallsign : "—")} · audio 8 kHz cifrato AES-256";
+                ? $"{_s.Callsign} · server: la radio è collegata qui · audio cifrato AES-256"
+                : $"{_s.Callsign} · client del server di {(_s.PeerCallsign.Length > 0 ? _s.PeerCallsign : "—")} · audio cifrato AES-256";
             TxtRadioTitle.Text = server
                 ? "RADIO · IN LOCALE · " + (_s.UseExternalRigctld ? $"rigctld {_s.ExternalRigctldHost}:{_s.ExternalRigctldPort}" : "HAMLIB")
                 : "RADIO REMOTA" + (_tel.RigName.Length > 0 ? " · " + _tel.RigName.ToUpperInvariant() : "");
@@ -488,9 +488,16 @@ namespace IpTrxCtrl.UI
             TxtOutLabel.Text = server ? "Uscita: verso l'ingresso TX della radio" : "Altoparlante (dalla radio)";
             TxtRxTitle.Text = server ? "Audio dal client · verso la radio" : "RX · audio ricevuto";
             TxtTxTitle.Text = server ? "Audio della radio · verso il client" : "TX · audio inviato";
-            PanelPttMethod.IsVisible = server;
+            ExpPtt.IsVisible = server;
             PanelPttInfo.IsVisible = !server;
-            PanelKeyer.IsVisible = !server;
+            TabKeyer.IsVisible = !server;
+            if (server)
+            {
+                TabCw.IsVisible = false;
+                if (Tabs.SelectedItem == TabKeyer || Tabs.SelectedItem == TabCw || Tabs.SelectedItem == null) Tabs.SelectedItem = TabAudio;
+            }
+            else if (Tabs.SelectedItem == null) Tabs.SelectedItem = TabKeyer;
+            ApplyOptionalParts();
             PanelFallbackServer.IsVisible = false;
             PanelFallbackClient.IsVisible = false;
             TxtRadioModel.Text = "Radio: " + (server ? (string.IsNullOrEmpty(_s.RigModelName) ? "non configurata" : $"{_s.RigModelName} su {_s.RigCom}") : (_tel.RigName.Length > 0 ? _tel.RigName : "del server"));
@@ -535,6 +542,9 @@ namespace IpTrxCtrl.UI
                 if (w.AudioChanged && _s.Role == NodeRole.Server) _node.RestartAudio();
                 if (w.DigitalChanged) _node.StartDigital();
                 if (w.SerialInputChanged) StartSerialInput();
+                if ((w.PanChanged || w.RigChanged) && _s.Role == NodeRole.Server) _node.RestartPanadapter();
+                ApplyOptionalParts();
+                FillMemories();
                 if (w.PairingReset) ShowPairing();
             }
         }
@@ -553,11 +563,11 @@ namespace IpTrxCtrl.UI
             bool cw = IsClient && RigTelemetry.IsCw(_tel.Mode);
             _cwActive = cw;
             if (cw && !_cwLayout) ApplyCwFilter();     // appena si entra in CW
-            if (cw == _cwLayout && PanelCw.IsVisible == cw) { RefreshFKeyNames(); return; }
+            if (cw == _cwLayout && TabCw.IsVisible == cw) { RefreshFKeyNames(); return; }
             _cwLayout = cw;
-            PanelCw.IsVisible = cw;
-            PanelAudio.IsVisible = !cw;
-            PanelRxCompact.IsVisible = cw;
+            TabCw.IsVisible = cw;
+            if (cw) Tabs.SelectedItem = TabCw;                              // entrando in CW si vede la cascata
+            else if (Tabs.SelectedItem == TabCw) Tabs.SelectedItem = IsClient ? TabKeyer : TabAudio;
             RowWav.IsVisible = !cw;
             RowCw.IsVisible = cw;
             TxtKeyerTitle.Text = cw ? "CW KEYER · 8 macro di testo" : "VOICE KEYER · 8 messaggi WAV";
@@ -589,6 +599,7 @@ namespace IpTrxCtrl.UI
         {
             if (!IsClient || i < 0 || i > 7) return;
             if (!_node.Connected) { TxtKeyerStatus.Text = "Non collegato al server"; return; }
+            if (TxRefusedHere()) { TxtKeyerStatus.Text = "Trasmissione non permessa: " + _tel.TxDenied; return; }
             if (_cwLayout)
             {
                 string text = _s.ExpandMacro(_s.CwMacros[i].Text);
@@ -720,6 +731,7 @@ namespace IpTrxCtrl.UI
 
         private void SetManualPtt(bool on)
         {
+            if (on && TxRefusedHere()) return;
             _manualPtt = on;
             if (!on && _node.Audio.Keyer.Active) return;   // il keyer gestisce il suo PTT
             _node.SetPttLocal(on);
@@ -800,7 +812,6 @@ namespace IpTrxCtrl.UI
         {
             bool old = _loading;
             _loading = true;
-            SldOffset.Value = khz;
             if (!TxtOffset.IsFocused)
                 TxtOffset.Text = (khz >= 0 ? "+" : "−") + Math.Abs(khz).ToString(OffsetStep < 1 ? "0.0" : "0", CultureInfo.InvariantCulture).Replace('.', ',') + " kHz";
             _loading = old;
@@ -816,8 +827,10 @@ namespace IpTrxCtrl.UI
         private void UpdateSplitNote(bool split)
         {
             string step = OffsetStep < 1 ? "0,1 kHz in CW" : "1 kHz in fonia";
-            TxtSplitNote.Text = (split ? "SPLIT attivo · RX su VFO A, TX su VFO B" : "TX e RX su VFO A")
-                                + $" · passo {step} · campo da −50 a +50 kHz · rotella del mouse = un passo";
+            string note = (split ? "SPLIT attivo · RX su VFO A, TX su VFO B" : "TX e RX su VFO A")
+                          + $" · offset: passo {step}, da −50 a +50 kHz, rotella del mouse = un passo";
+            ToolTip.SetTip(BtnSplit, note);
+            ToolTip.SetTip(TxtOffset, note);
             TxtVfoALabel.Text = split ? "VFO A · RX" : "VFO A";
             TxtVfoBLabel.Text = split ? "VFO B · TX" : "VFO B";
         }
@@ -829,6 +842,7 @@ namespace IpTrxCtrl.UI
 
         private void OnUiTick()
         {
+            TickExtras();
             var st = _node.Stats;
             PbRx.Value = st.RxPeak * 100;
             PbRxCompact.Value = st.RxPeak * 100;
@@ -908,6 +922,7 @@ namespace IpTrxCtrl.UI
             if (st.Connected && st.PeerVersion.Length > 0) TxtNetPeer.Text += " · versione " + st.PeerVersion;
             if (st.Connected && IsClient) PanelFallbackClient.IsVisible = false;
             if (IsClient && _s.PeerCallsign.Length > 0 && !TxtRoleLine.Text!.Contains(_s.PeerCallsign)) ApplyRoleTexts();
+            RefreshPanel();
         }
 
         /// <summary>
@@ -1051,6 +1066,8 @@ namespace IpTrxCtrl.UI
             }
             finally { _loading = false; }
             UpdateModeLayout();
+            _loading = true;
+            try { RefreshExtras(t); } finally { _loading = false; }
         }
 
         // ================================================================= schede audio del server

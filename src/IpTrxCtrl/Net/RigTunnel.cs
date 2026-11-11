@@ -172,9 +172,36 @@ namespace IpTrxCtrl.Net
             catch { _send(new MsgWriter(Msg.RigTunnelClose).I32(id).Build()); }
         }
 
+        private static readonly Regex RawPtt = new(@"^\s*[+;|,]?\s*(T|\\set_ptt)(\s+[A-Za-z]+[A-Za-z0-9]*)?\s+[0-9]\s*$", RegexOptions.Compiled);
+
+        /// <summary>
+        /// Comandi dal client verso il rigctld. Il client trasforma i comandi di PTT nel PTT del programma (con i
+        /// suoi controlli: solo ascolto, tempo massimo, operatore alla radio): un comando di PTT che arriva grezzo
+        /// non viene eseguito e riceve un errore.
+        /// </summary>
         public async Task DataAsync(int id, byte[] data)
         {
             if (!_conns.TryGetValue(id, out var tcp)) return;
+            string text = Encoding.ASCII.GetString(data);
+            if (text.Contains('T') || text.Contains("set_ptt"))
+            {
+                var keep = new StringBuilder();
+                string[] parts = text.Split('\n');
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    bool last = i == parts.Length - 1;   // pezzo senza a capo (vuoto se il testo finiva con l'a capo)
+                    if (!last && RawPtt.IsMatch(parts[i].TrimEnd('\r')))
+                    {
+                        SessionLog.Write($"RIGCTL comando di PTT grezzo dal client scartato (#{id})");
+                        _send(new MsgWriter(Msg.RigTunnelData).I32(id).Bytes(Encoding.ASCII.GetBytes("RPRT -1\n")).Build());
+                        continue;
+                    }
+                    keep.Append(parts[i]);
+                    if (!last) keep.Append('\n');
+                }
+                data = Encoding.ASCII.GetBytes(keep.ToString());
+                if (data.Length == 0) return;
+            }
             try { await tcp.GetStream().WriteAsync(data); } catch { Close(id); }
         }
 

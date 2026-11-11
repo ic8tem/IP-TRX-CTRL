@@ -1,36 +1,42 @@
-# Finestra principale (client)
+# Finestra principale
 
-La finestra del client è divisa in riquadri: in alto **radio** e **audio** a sinistra, **server e PTT** a destra; sotto, a tutta larghezza, cascata CW, keyer e collegamento. Dalla 0.2.5 la finestra si apre alta 816 punti (prima 960): se lo schermo è più basso del contenuto compare la barra di scorrimento. Il programma si chiama **IP-TRX-CTRL** e il nome compare in alto a sinistra; accanto ci sono lo stato del collegamento, il ruolo (CLIENT o SERVER), la scelta dei colori, **Impostazioni**, **Inverti ruoli** e **Help**.
+Dalla 0.3.0 la finestra è più piccola: si apre a **1080 × 760** punti (prima 1240 × 816) e si può stringere fino a 900 × 520; se il contenuto non entra compare la barra di scorrimento. È organizzata così:
 
-## Radio remota
+1. **Intestazione** su una riga: nome del programma, stato del collegamento, LED UPnP, ruolo (CLIENT o SERVER), colori, **Impostazioni**, **Inverti ruoli**, **Help**. Sotto, quando c'è, la riga della **versione nuova** (vedi *Registri e risoluzione dei problemi*).
+2. **Tre colonne**: radio · strumenti e PTT · l'altro PC.
+3. **Panadapter della radio**, se attivo (vedi *Panadapter*).
+4. **Schede** in basso: **Keyer**, **CW** (solo in modo CW), **Audio**, **Collegamento**.
+5. Riga degli **avvisi** (server occupato, trasmissione non permessa, tempo massimo…).
 
-- **VFO A** in grande, con frequenza e modo. **Sintonia con la rotella** (dalla 0.2.6): con il mouse su una cifra della QRG, la rotella fa salire o scendere quella cifra di uno, con riporto sulle cifre a sinistra; vale anche per il VFO B.
-- **VFO B** con i pulsanti **A/B** (scambio), **A=B** (copia) e **SPLIT**. Con lo split attivo si riceve su A e si trasmette su B. Vedi *Radio, split e potenza*.
-- Casella per impostare una nuova frequenza in Hz e il modo.
-- Indicatori: S-meter, potenza RF in uscita, SWR. Con la **protezione ROS** la barra del SWR lampeggia in rosso sopra la soglia di avviso; se la trasmissione è bloccata, un clic sulla barra riapre la finestra di sblocco (vedi *Radio, split e potenza*).
-- **Potenza TX**: cursore da 1 a 100 W, oppure da 1 a 100 % per le radio che non la esprimono in watt.
-- In modo CW, l'audio di ricezione (altoparlante, volume, boost, livello) si sposta qui su una sola riga, per lasciare spazio alla cascata.
+Le parti nuove si nascondono da **Impostazioni › Finestra principale**: pulsanti delle bande e passo, comandi della radio, memorie, strumento ALC, panadapter, controllo della versione nuova. Così la finestra resta ancora più bassa.
 
-## Server (stazione radio)
+## Radio
 
-- Nominativo del server, **IP del server con le porte**, **IP del client** (pubblico e di rete locale), ora di collegamento, latenza.
-- **Rete** di questo PC e dell'altro: se c'è IPv4 e/o IPv6 verso internet (con «IPv6 solo locale» quando la scheda ha un indirizzo IPv6 ma internet non risponde in IPv6).
-- Livello dell'audio che arriva dal server.
-- **Spia RX/TX** in alto a destra: grigia in ricezione, **rossa lampeggiante** quando la radio è in trasmissione (anche durante un messaggio F1…F8).
-- **PTT**: pulsante "premi e tieni", anche con la barra spaziatrice. Sotto è indicato il metodo PTT impostato sul server (RTS, DTR, CAT o TCI) e il ritardo.
+- **VFO A** in grande, con il modo. **Rotella sulle cifre**: con il mouse su una cifra la rotella la fa salire o scendere, con riporto (vale anche per il VFO B).
+- Casella **Nuova QRG** (Hz), modo, **Imposta**.
+- **Passo di sintonia** (da 1 Hz a 25 kHz) con i pulsanti ◀ ▶ (anche con la rotella sopra i pulsanti).
+- **Bande** da 160 m a 70 cm: un clic porta all'ultima frequenza e all'ultimo modo usati su quella banda (la prima volta a una frequenza tipica). La banda in uso è evidenziata.
+- **VFO B** su una riga con **A/B**, **A=B**, **SPLIT** e lo scostamento (−, valore, +). La spiegazione dello split è nel suggerimento del pulsante.
+- **Potenza** TX.
+- **Comandi della radio** (vedi *Radio, split e potenza*): NR, NB, NOTCH, COMP, ATT, PRE, AGC, SQL.
+- **Memorie** (vedi *Radio, split e potenza*).
 
-## Audio (modi fonia)
+## Strumenti e PTT
 
-Sotto la radio, nella colonna di sinistra (dalla 0.2.5, per non lasciare spazio vuoto accanto al riquadro del server). Scelta di microfono e altoparlante, volume e boost per RX e TX, indicatori di livello. In modo CW questo riquadro si nasconde e sotto i riquadri compaiono cascata e decodificatore (vedi *Modo CW*).
+- **S**, **Po** (potenza in uscita), **ROS**, **ALC** (in trasmissione), **Gain** (guadagno TX della radio). La barra del ROS lampeggia con la protezione ROS.
+- Spia **RX/TX**.
+- **PTT** «premi e tieni», anche con la barra spaziatrice. Sotto il PTT una riga dice da quanto dura la trasmissione e il **tempo massimo**, oppure perché la trasmissione **non è permessa** (solo ascolto, operatore alla radio). Quando non è permessa il pulsante è sbiadito e scrive «PTT NON PERMESSO».
+- Sul client: metodo PTT e ritardo impostati sul server.
 
-## Keyer
+## L'altro PC
 
-Tasti **F1…F8**. In SSB sono messaggi WAV, in CW sono macro di testo. Vedi *Keyer, messaggi WAV e macro CW*.
+- Client: elenco dei **server abbinati** e **Abbina…**.
+- Nominativo, IP, ora di collegamento, latenza, livello dell'audio ricevuto.
+- Riquadri richiudibili: **Reti dei due PC** (IPv4/IPv6, percorso dell'audio, versione dell'altro PC), **Metodo PTT e CW** (solo server), **Schede audio del server**.
 
-## Collegamento
+## Schede
 
-Stato, latenza, jitter, pacchetti persi, buffer e stato dei broker MQTT.
-
-## Schede audio del server
-
-Il client vede se le schede audio del server sono silenziate (mute) dal sistema operativo e può togliere il mute a distanza. Vedi *Schede audio del server*.
+- **Keyer**: F1…F8 (WAV in fonia, macro in CW). Vedi *Keyer, messaggi WAV e macro CW*.
+- **CW**: compare in modo CW e si apre da sola; audio RX su una riga, pitch, larghezza, velocità, soglia, filtro della radio, cascata e decodificatore. F1…F8 funzionano anche da qui. Vedi *Modo CW*.
+- **Audio**: microfono e altoparlante, volumi, boost e livelli.
+- **Collegamento**: stato, latenza, jitter, pacchetti persi, buffer, broker MQTT e, sul server, il codice di riserva.
