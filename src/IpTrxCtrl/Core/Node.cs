@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -88,6 +89,15 @@ namespace IpTrxCtrl.Core
         private OutboundProbe.Result? _outbound; // client: porte che escono dalla sua rete
         private CancellationTokenSource? _serverCts;
         private byte[]? _pairingSecret;
+        // abbinamento: ciclo delle porte lato server (porte sempre nuove, un giro per proposta del client)
+        private readonly SemaphoreSlim _pairRoundLock = new(1, 1);
+        private readonly object _pairDoneLock = new();
+        private readonly HashSet<int> _pairTriedSrv = new();
+        private long _pairLastTicks;
+        private int _pairRoundPort;
+        private TcpListener? _pairRoundListener;
+        /// <summary>Client: giro del ciclo delle porte durante l'abbinamento (giro, totale).</summary>
+        public event Action<int, int>? PairingRound;
         private CancellationTokenSource? _pairListenCts;
         private DateTime _lastRemotePtt = DateTime.MinValue;
         private bool _remotePtt, _localPtt;
@@ -600,13 +610,18 @@ namespace IpTrxCtrl.Core
             Log('·', $"indirizzo pubblico {addr.Value.Ip} · porte {addr.Value.ControlPort} / {addr.Value.AudioPort} · UPnP {(_ports?.UpnpAvailable == true ? "ok" : "non disponibile")}");
             _pairingSecret = RandomNumberGenerator.GetBytes(Crypto.PairingSecretSize);
             string code = Crypto.MakePairingCode(_pairingSecret, addr.Value);
+            lock (_pairTriedSrv) _pairTriedSrv.Clear();
+            _pairLastTicks = 0;
+            if (_keptUnreachable)
+                Log('·', "le porte del server non sono raggiungibili da internet" + (_ports?.CgnatSuspected == true ? $" (router con IP {_ports.RouterIp}: CGNAT o doppio NAT)" : "")
+                         + ": se il client non entra, si passa al ciclo delle porte con il collegamento inverso");
 
             _pairListenCts?.Cancel();
             _pairListenCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var secret = _pairingSecret;
             var lct = _pairListenCts.Token;
-            _ = Task.Run(() => PairingRendezvous.ServerListenAsync(secret,
-                () => (CurrentServerAddress, _ports?.UpnpAvailable == true, LanIp() == "—" ? "" : LanIp()), _s.MqttBrokers, Log, lct));
+            _ = Task.Run(() => PairingRendezvous.ServerListenAsync(secret, PairInfo,
+                o => OnPairOfferAsync(o, secret, lct), _s.MqttBrokers, Log, lct));
             return code;
         }
 
@@ -614,6 +629,146 @@ namespace IpTrxCtrl.Core
         {
             _pairingSecret = null;
             _pairListenCts?.Cancel();
+            _ = ClosePairRoundPortAsync();
+        }
+
+        private PairServerInfo PairInfo() =>
+            new(CurrentServerAddress, _ports?.UpnpAvailable == true, LanIp() == "—" ? "" : LanIp(), _keptUnreachable, _ports?.CgnatSuspected == true);
+
+        private static string Esito(bool? reach) => reach == true ? "raggiungibile" : reach == false ? "NON raggiungibile" : "non verificabile";
+
+        /// <summary>Perché una connessione non è riuscita, in parole semplici.</summary>
+        private static string Why(Exception ex) => ex switch
+        {
+            OperationCanceledException => "nessuna risposta (i pacchetti vengono scartati: firewall, router senza inoltro o CGNAT)",
+            SocketException se when se.SocketErrorCode == SocketError.ConnectionRefused => "connessione rifiutata (nessun programma in ascolto su quella porta)",
+            SocketException se => "errore di rete " + se.SocketErrorCode,
+            CryptographicException => "il codice di abbinamento non corrisponde",
+            IOException => "collegamento chiuso durante lo scambio",
+            _ => ex.Message
+        };
+
+        /// <summary>
+        /// Server, ciclo delle porte in abbinamento: per ogni proposta del client prova a collegarsi alla sua porta
+        /// (collegamento inverso); se non riesce apre una porta NUOVA (mai provata prima: a giri alterni una comune
+        /// come 443/80/8080, oppure una a caso), la verifica da internet e comunica numero ed esito al client.
+        /// </summary>
+        private async Task<PairRoundReply?> OnPairOfferAsync(PortOffer o, byte[] secret, CancellationToken ct)
+        {
+            try { await _pairRoundLock.WaitAsync(ct); } catch { return null; }
+            try
+            {
+                if (_pairingSecret == null || !ReferenceEquals(secret, _pairingSecret) || o.Ticks <= _pairLastTicks) return null;
+                _pairLastTicks = o.Ticks;   // la stessa proposta arriva da più broker: una sola volta
+                Log('◀', $"giro {o.Round}/{MaxPortRounds} · il client propone IP {o.Ip}, porta TCP {(o.ControlPort > 0 ? o.ControlPort.ToString() : "nessuna")}"
+                         + (o.Restricted ? $" · dalla sua rete escono solo le porte {string.Join(", ", o.OutboundPorts)}" : ""));
+
+                // 1) collegamento inverso: il server si collega alla porta aperta dal client
+                if (o.ControlPort > 0 && IPAddress.TryParse(o.Ip, out var cip) && await PairReverseAsync(cip, o.ControlPort, secret, ct))
+                    return null;
+                if (_pairingSecret == null) return null;
+
+                // 2) porta nuova del server
+                var pm = _ports;
+                if (pm == null) return new PairRoundReply(o.Round, "", 0, 0, -1, false, false, "porte del server non pronte");
+                var sct = _serverCts?.Token ?? ct;
+                int ext, inner;
+                lock (_pairTriedSrv) { if (_ctlPort > 0) _pairTriedSrv.Add(_ctlPort); if (_audPort > 0) _pairTriedSrv.Add(_audPort); }
+                (ext, inner) = await pm.OpenDistinctTcpAsync(_pairTriedSrv, o.Restricted ? o.OutboundPorts : new List<int>(), o.Round % 2 == 0, "IP-TRX-CTRL abbinamento", ct);
+                await ClosePairRoundPortAsync();
+                string ip = (pm.ExternalIp ?? CurrentServerAddress?.Ip)?.ToString() ?? "";
+                string note = pm.CgnatSuspected ? $"router del server con IP {pm.RouterIp}: CGNAT o doppio NAT" : "";
+                if (ext == 0)
+                {
+                    Log('✗', $"giro {o.Round} · il router del server non ha accettato una porta nuova");
+                    return new PairRoundReply(o.Round, ip, 0, 0, -1, pm.UpnpAvailable, pm.CgnatSuspected, "il router del server non accetta altre porte");
+                }
+                TcpListener l;
+                try { l = new TcpListener(IPAddress.Any, inner); l.Start(); }
+                catch (Exception ex)
+                {
+                    await pm.ClosePortAsync(ext);
+                    Log('✗', $"giro {o.Round} · porta {inner} del PC non apribile ({ex.Message})");
+                    return new PairRoundReply(o.Round, ip, 0, 0, -1, pm.UpnpAvailable, pm.CgnatSuspected, "porta del PC occupata");
+                }
+                _pairRoundPort = ext; _pairRoundListener = l;
+                _ = Task.Run(() => AcceptLoopAsync(l, ChannelKind.Control, sct));
+                bool? reach = await PortProbe.TcpReachableAsync(ext, SessionLog.Write, ct);
+                Log('▶', $"giro {o.Round} · nuova porta del server TCP {ext}" + (inner != ext ? $" (porta del PC {inner})" : "")
+                         + $" · verifica da internet: {Esito(reach)}" + (note.Length > 0 ? " · " + note : ""));
+                if (reach == true) PromotePairRoundPort();
+                return new PairRoundReply(o.Round, ip, ext, inner, reach == true ? 1 : reach == false ? 0 : -1, pm.UpnpAvailable, pm.CgnatSuspected, note);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                Log('✗', $"giro {o.Round}: {ex.Message}");
+                return null;
+            }
+            catch { return null; }
+            finally { _pairRoundLock.Release(); }
+        }
+
+        /// <summary>Server: si collega alla porta del client e fa l'abbinamento su quella connessione.</summary>
+        private async Task<bool> PairReverseAsync(IPAddress ip, int port, byte[] secret, CancellationToken ct)
+        {
+            Log('▶', $"TCP {ip}:{port}  collegamento inverso verso la porta del client");
+            var tcp = new TcpClient();
+            try
+            {
+                using (var t = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                {
+                    t.CancelAfter(6000);
+                    await tcp.ConnectAsync(ip, port, t.Token);
+                }
+                var res = await SecureChannel.AcceptAsync(tcp, ChannelKind.Control, _master, secret, ct);
+                if (res.NewMaster != null && CompleteServerPairing(res.NewMaster, $" · collegamento inverso sulla porta {port} del client")) return true;
+                res.Channel?.Dispose();
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested) { Log('✗', $"porta {port} del client: {Why(ex)}"); }
+            catch { }
+            finally { tcp.Dispose(); }
+            return false;
+        }
+
+        /// <summary>Server: la porta del giro è raggiungibile da internet e diventa la porta di controllo.</summary>
+        private void PromotePairRoundPort()
+        {
+            var l = _pairRoundListener; int p = _pairRoundPort;
+            if (l == null || p == 0 || p == _ctlPort) return;
+            var oldL = _ctlListener; int oldP = _ctlPort;
+            _ctlPort = p; _ctlListener = l;
+            _pairRoundPort = 0; _pairRoundListener = null;
+            try { oldL?.Stop(); } catch { }
+            if (oldP > 0 && _ports != null) _ = _ports.ClosePortAsync(oldP);
+            UpdateServerEndpoint();
+            PortLog($"PORTE la porta {p} è raggiungibile: ora è la porta di controllo del server (la {oldP} è chiusa)");
+        }
+
+        private async Task ClosePairRoundPortAsync()
+        {
+            var l = _pairRoundListener; int p = _pairRoundPort;
+            _pairRoundListener = null; _pairRoundPort = 0;
+            try { l?.Stop(); } catch { }
+            if (p > 0 && p != _ctlPort && _ports != null) await _ports.ClosePortAsync(p);
+        }
+
+        /// <summary>Server: abbinamento riuscito (vale il primo, se ne arrivassero due insieme).</summary>
+        private bool CompleteServerPairing(byte[] master, string how)
+        {
+            lock (_pairDoneLock)
+            {
+                if (_pairingSecret == null) return false;
+                _pairingSecret = null;
+            }
+            SetMaster(master);
+            _pairListenCts?.Cancel();
+            Log('◀', "handshake ECDH P-256 ok · chiave AES-256 derivata");
+            Log('✓', "Abbinamento completato" + how);
+            PairingCompleted?.Invoke();
+            _ = ClosePairRoundPortAsync();
+            var sct = _serverCts?.Token ?? CancellationToken.None;
+            _ = PublishNowAsync(sct);
+            return true;
         }
 
         private async Task AcceptLoopAsync(TcpListener listener, ChannelKind kind, CancellationToken ct)
@@ -630,13 +785,9 @@ namespace IpTrxCtrl.Core
                         var res = await SecureChannel.AcceptAsync(tcp, kind, _master, _pairingSecret, ct);
                         if (res.NewMaster != null)
                         {
-                            SetMaster(res.NewMaster);
-                            _pairingSecret = null;
-                            _pairListenCts?.Cancel();
-                            Log('◀', "handshake ECDH P-256 ok · chiave AES-256 derivata");
-                            Log('✓', "Abbinamento completato");
-                            PairingCompleted?.Invoke();
-                            _ = PublishNowAsync(ct);
+                            // abbinamento arrivato sulla porta di un giro del ciclo: diventa la porta di controllo
+                            if (ReferenceEquals(listener, _pairRoundListener)) PromotePairRoundPort();
+                            CompleteServerPairing(res.NewMaster, "");
                             return;
                         }
                         if (res.Channel == null) return;
@@ -748,8 +899,9 @@ namespace IpTrxCtrl.Core
         }
 
         /// <summary>
-        /// Client: abbinamento. Cerca il server sui broker MQTT (indirizzo aggiornato), poi apre il
-        /// collegamento diretto; se nessun broker risponde usa l'indirizzo scritto nel codice.
+        /// Client: abbinamento. Cerca il server sui broker MQTT (indirizzo aggiornato ed esito della verifica delle
+        /// sue porte), prova il collegamento diretto (prima la rete locale se i due PC escono con lo stesso IP),
+        /// poi il ciclo delle porte: fino a 20 giri, ognuno con una porta nuova di questo PC e una nuova del server.
         /// </summary>
         public async Task<string?> PairClientAsync(string code, CancellationToken ct)
         {
@@ -761,10 +913,11 @@ namespace IpTrxCtrl.Core
             Log('·', $"codice letto · indirizzo nel codice {addr.Ip} · porte {addr.ControlPort} / {addr.AudioPort}");
             var found = await PairingRendezvous.ClientFindAsync(secret, _s.Callsign, _s.MqttBrokers, Log, ct);
             string lan = "";
+            bool srvUnreach = false;
             if (found != null)
             {
-                addr = found.Value.addr; lan = found.Value.lan;
-                var (sp, sv) = AppVersion.Parse(found.Value.version);
+                addr = found.Addr; lan = found.Lan; srvUnreach = found.Unreachable;
+                var (sp, sv) = AppVersion.Parse(found.Version);
                 if (!AppVersion.Compatible(sp))
                 {
                     string msg = AppVersion.Notes(sp, sv, true);
@@ -776,42 +929,210 @@ namespace IpTrxCtrl.Core
             }
             else Log('·', "nessuna risposta dai broker: provo l'indirizzo scritto nel codice");
 
+            // stessa rete? Se questo PC esce su internet con lo stesso IP del server, conta la rete locale
+            IPAddress? myPub = null;
+            try { myPub = await PortManager.GetPublicIpAsync(ct); } catch { }
+            IPAddress? lanIp = IPAddress.TryParse(lan, out var li) ? li : null;
+            bool sameNet = myPub != null && myPub.Equals(addr.Ip);
+            if (myPub != null) Log('·', $"IP pubblico di questo PC {myPub}" + (sameNet ? " · uguale a quello del server: siete sulla stessa rete, provo prima la rete locale" : ""));
+
+            var direct = new List<(ServerAddress a, string label, bool local)>();
+            if (sameNet && lanIp != null) direct.Add((addr with { Ip = lanIp }, "rete locale", true));
+            direct.Add((addr, "indirizzo pubblico", false));
+            if (!sameNet && lanIp != null) direct.Add((addr with { Ip = lanIp }, "rete locale", true));
+
+            byte[]? master = null;
+            ServerAddress used = addr;
+            foreach (var (a, label, local) in direct)
+            {
+                if (ct.IsCancellationRequested) return null;
+                Log('▶', $"TCP {a.Ip}:{a.ControlPort}  apertura canale di controllo ({label})");
+                try { master = await SecureChannel.PairAsClientAsync(a, secret, ct, 6); used = a; break; }
+                catch (CryptographicException)
+                {
+                    Log('✗', "il server ha risposto ma il codice non corrisponde: ricopia il codice mostrato dal server");
+                    return "Codice di abbinamento errato.";
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    bool silent = ex is OperationCanceledException;
+                    string hint = local && silent && sameNet ? " → il PC server scarta le connessioni: quasi certamente il firewall di Windows sul server (Impostazioni › Rete › «Consenti nel firewall»)"
+                        : local && silent ? " (normale se questo PC non è sulla rete di casa del server)"
+                        : !local && silent && srvUnreach ? " (atteso: il server ha verificato che da internet non si entra)"
+                        : !local && silent && sameNet ? " (molti router non permettono di rientrare dal proprio IP pubblico)"
+                        : "";
+                    Log('✗', $"{label}: {Why(ex)}{hint}");
+                }
+            }
+
+            if (master == null && !ct.IsCancellationRequested)
+            {
+                if (found == null)
+                {
+                    Log('✗', "senza i broker MQTT il ciclo delle porte non si può fare (serve per scambiarsi le porte con il server)");
+                    return "Abbinamento non riuscito: server non raggiungibile e broker MQTT senza risposta (vedi il registro).";
+                }
+                var r = await PairPortCycleAsync(secret, addr, lanIp, srvUnreach, found.Cgnat, ct);
+                if (r != null) { master = r.Value.master; used = r.Value.addr; }
+            }
+            if (master == null)
+                return ct.IsCancellationRequested ? null : $"Abbinamento non riuscito dopo il ciclo delle porte (vedi il registro).";
+
+            Log('◀', "handshake ECDH P-256 ok · chiave AES-256 derivata");
+            SetMaster(master);
+            _s.LastServerLan = lan;
+            RememberServer(used);
+            Log('✓', "Abbinamento completato");
+            PairingCompleted?.Invoke();
+            StartClient();
+            return null;
+        }
+
+        /// <summary>
+        /// Client: ciclo delle porte in abbinamento. A ogni giro apre una porta NUOVA di questo PC (a giri alterni
+        /// una comune come 443/80/8080 o una a caso), la verifica da internet e la propone al server sul broker; il
+        /// server prova a collegarsi a lei e intanto apre una porta nuova sua, che il client prova subito dopo.
+        /// </summary>
+        private async Task<(byte[] master, ServerAddress addr)?> PairPortCycleAsync(byte[] secret, ServerAddress addr, IPAddress? lanIp,
+            bool srvUnreach, bool srvCgnat, CancellationToken ct)
+        {
+            Log('·', $"inizio il ciclo delle porte: fino a {MaxPortRounds} giri, in ognuno una porta nuova di questo PC e una nuova del server");
+            await using var session = await PairingRendezvous.ClientSession.OpenAsync(secret, _s.MqttBrokers, Log, ct);
+            if (session.Brokers == 0) { Log('✗', "nessun broker MQTT raggiungibile per il ciclo delle porte"); return null; }
+
+            void PLog(string line) { SessionLog.Write(line); PairingLog?.Invoke('·', line.StartsWith("PORTE ") ? line[6..] : line); }
+            var pm = new PortManager { Log = PLog };
+            bool upnp = await pm.DiscoverAsync(ct);
+            if (!upnp) Log('·', "il router di questo PC non risponde con UPnP: uso porte del PC, che funzionano solo con DMZ o inoltro manuale");
+            _outbound ??= await OutboundProbe.RunAsync(SessionLog.Write, ct);
+            if (_outbound.Known && _outbound.Restricted)
+                Log('·', $"da questa rete escono solo le porte {string.Join(", ", _outbound.Allowed)}: le comunico al server, che proverà quelle");
+            IPAddress? myIp = pm.ExternalIp;
+            try { myIp ??= await PortManager.GetPublicIpAsync(ct); } catch { }
+
+            var tried = new HashSet<int>();
+            int lastServerPort = addr.ControlPort, noReply = 0, round = 0;
+            bool anyMine = false, anySrv = false;
+            TcpListener? cur = null;   // porta del giro in corso: chiusa comunque alla fine
             try
             {
-                byte[] master;
-                Log('▶', $"TCP {addr.Ip}:{addr.ControlPort}  apertura canale di controllo");
-                try { master = await SecureChannel.PairAsClientAsync(addr, secret, ct); }
-                catch (Exception ex) when (!ct.IsCancellationRequested && IPAddress.TryParse(lan, out var lanIp)
-                                           && (ex is OperationCanceledException || ex is SocketException))
+                for (round = 1; round <= MaxPortRounds && !ct.IsCancellationRequested; round++)
                 {
-                    Log('✗', $"la porta {addr.ControlPort} non risponde dall'indirizzo pubblico: provo la rete locale");
-                    addr = addr with { Ip = lanIp };
-                    Log('▶', $"TCP {addr.Ip}:{addr.ControlPort}  apertura canale di controllo (rete locale)");
-                    master = await SecureChannel.PairAsClientAsync(addr, secret, ct);
+                    PairingRound?.Invoke(round, MaxPortRounds);
+                    Log('·', $"── giro {round} di {MaxPortRounds} ──");
+                    var tcs = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    TcpListener? l = null;
+                    int ext = 0;
+                    var (e, inner) = await pm.OpenDistinctTcpAsync(tried, Array.Empty<int>(), round % 2 == 0, "IP-TRX-CTRL abbinamento client", ct);
+                    if (e > 0)
+                    {
+                        try
+                        {
+                            l = new TcpListener(IPAddress.Any, inner);
+                            l.Start();
+                            ext = e;
+                            cur = l;
+                            var lst = l;
+                            _ = Task.Run(() => PairListenAsync(lst, secret, tcs, ct));
+                        }
+                        catch (Exception ex) { Log('✗', $"porta {inner} del PC non apribile ({ex.Message})"); await pm.ClosePortAsync(e); l = null; }
+                    }
+                    if (ext > 0)
+                    {
+                        bool? reach = await PortProbe.TcpReachableAsync(ext, SessionLog.Write, ct);
+                        if (reach == true) anyMine = true;
+                        Log('·', $"porta di questo PC TCP {ext}" + (inner != ext ? $" (PC {inner})" : "") + $" · verifica da internet: {Esito(reach)}");
+                    }
+                    else Log('·', "questo PC non ha aperto porte in questo giro: chiedo comunque al server una porta nuova");
+
+                    var offer = new PortOffer(round, myIp?.ToString() ?? "", ext, 0, lastServerPort, DateTime.UtcNow.Ticks)
+                    {
+                        Restricted = _outbound.Known && _outbound.Restricted,
+                        OutboundPorts = _outbound.Allowed
+                    };
+                    int sent = await session.SendOfferAsync(offer, ct);
+                    Log('▶', $"proposta al server: IP {offer.Ip}, porta TCP {(ext > 0 ? ext.ToString() : "nessuna")} ({sent} broker)");
+
+                    // il server si collega alla porta di questo PC, oppure risponde con la sua porta nuova
+                    var replyTask = session.WaitRoundAsync(round, TimeSpan.FromSeconds(45), ct);
+                    var first = await Task.WhenAny(tcs.Task, replyTask);
+                    if (tcs.Task.IsCompletedSuccessfully)
+                    {
+                        Log('◀', $"il server si è collegato alla porta {ext} di questo PC: collegamento inverso riuscito");
+                        return (tcs.Task.Result, addr);
+                    }
+                    var rep = await replyTask;
+                    if (tcs.Task.IsCompletedSuccessfully) return (tcs.Task.Result, addr);
+                    if (rep == null)
+                    {
+                        noReply++;
+                        Log('✗', $"giro {round}: nessuna risposta dal server");
+                        if (noReply >= 3)
+                        {
+                            Log('✗', "il server non partecipa al ciclo delle porte: aggiornalo alla 0.2.7 o successiva");
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        noReply = 0;
+                        if (rep.Reachable == 1) anySrv = true;
+                        Log('◀', $"giro {round} · il server ha aperto la porta TCP {(rep.Port > 0 ? rep.Port.ToString() : "nessuna")}"
+                                 + (rep.InnerPort > 0 && rep.InnerPort != rep.Port ? $" (PC {rep.InnerPort})" : "")
+                                 + (rep.Port > 0 ? $" · verifica da internet: {(rep.Reachable == 1 ? "raggiungibile" : rep.Reachable == 0 ? "NON raggiungibile" : "non verificabile")}" : "")
+                                 + (rep.Note.Length > 0 ? " · " + rep.Note : ""));
+                        if (rep.Port > 0)
+                        {
+                            lastServerPort = rep.Port;
+                            var srvIp = IPAddress.TryParse(rep.Ip, out var sip) ? sip : addr.Ip;
+                            var tries = new List<(ServerAddress a, string label)> { (addr with { Ip = srvIp, ControlPort = rep.Port }, "porta nuova del server") };
+                            if (lanIp != null && rep.InnerPort > 0) tries.Add((addr with { Ip = lanIp, ControlPort = rep.InnerPort }, "porta nuova in rete locale"));
+                            foreach (var (a, label) in tries)
+                            {
+                                if (tcs.Task.IsCompletedSuccessfully) return (tcs.Task.Result, addr);
+                                Log('▶', $"TCP {a.Ip}:{a.ControlPort}  {label}");
+                                try { return (await SecureChannel.PairAsClientAsync(a, secret, ct, 5), a); }
+                                catch (CryptographicException) { Log('✗', "il codice di abbinamento non corrisponde"); return null; }
+                                catch (Exception ex) when (!ct.IsCancellationRequested) { Log('✗', $"{label}: {Why(ex)}"); }
+                            }
+                        }
+                    }
+                    if (tcs.Task.IsCompletedSuccessfully) return (tcs.Task.Result, addr);
+                    try { l?.Stop(); } catch { }
+                    if (ext > 0) await pm.ClosePortAsync(ext);
                 }
-                Log('◀', "handshake ECDH P-256 ok · chiave AES-256 derivata");
-                SetMaster(master);
-                _s.LastServerLan = lan;
-                RememberServer(addr);
-                Log('✓', "Abbinamento completato");
-                PairingCompleted?.Invoke();
-                StartClient();
-                return null;
             }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            finally
             {
-                Log('✗', $"la porta {addr.ControlPort} del server non risponde: UPnP disattivato sul router o rete con IP condiviso (CGNAT)");
-                return "Abbinamento non riuscito: il server non è raggiungibile (vedi il registro).";
+                try { cur?.Stop(); } catch { }
+                await pm.CloseAllAsync();
             }
-            catch (SocketException ex)
+
+            if (ct.IsCancellationRequested) return null;
+            string why = (srvUnreach || srvCgnat) && !anySrv && !anyMine
+                ? (upnp ? "il server è dietro CGNAT o un firewall e nemmeno le porte di questo PC sono raggiungibili da internet (anche qui CGNAT o firewall)"
+                        : "il server è dietro CGNAT o un firewall e il router di questo PC non apre porte con UPnP")
+                  + ": serve UPnP, DMZ o un inoltro manuale sul router di questo PC, oppure i due PC sulla stessa rete"
+                : !anySrv && !anyMine ? "nessuna porta è risultata raggiungibile da internet su nessuno dei due lati"
+                : "alcune porte risultavano raggiungibili ma la connessione non è riuscita: controlla il firewall di Windows su entrambi i PC";
+            Log('✗', $"ciclo delle porte finito dopo {Math.Min(round, MaxPortRounds)} giri: {why}");
+            return null;
+        }
+
+        /// <summary>Client: il server si collega alla porta del giro; lo scambio di abbinamento lo avvia comunque il client.</summary>
+        private async Task PairListenAsync(TcpListener l, byte[] secret, TaskCompletionSource<byte[]> tcs, CancellationToken ct)
+        {
+            while (!ct.IsCancellationRequested && !tcs.Task.IsCompleted)
             {
-                Log('✗', $"connessione rifiutata ({ex.SocketErrorCode}): il programma server è chiuso o la porta non è aperta");
-                return "Abbinamento non riuscito: connessione rifiutata (vedi il registro).";
-            }
-            catch (Exception ex)
-            {
-                Log('✗', ex.Message);
-                return "Abbinamento non riuscito: " + ex.Message;
+                TcpClient tcp;
+                try { tcp = await l.AcceptTcpClientAsync(ct); } catch { break; }
+                _ = Task.Run(async () =>
+                {
+                    try { tcs.TrySetResult(await SecureChannel.PairAsClientOnAsync(tcp, secret, ct)); }
+                    catch (Exception ex) when (!ct.IsCancellationRequested) { Log('✗', $"collegamento in arrivo non valido: {Why(ex)}"); }
+                    catch { }
+                    finally { tcp.Dispose(); }
+                });
             }
         }
 

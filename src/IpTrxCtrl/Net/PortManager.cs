@@ -25,6 +25,11 @@ namespace IpTrxCtrl.Net
 
         public IPAddress? ExternalIp { get; private set; }
         public bool CgnatSuspected { get; private set; }
+        /// <summary>IP esterno dichiarato dal router (con CGNAT è privato, per esempio 10.x o 100.64.x).</summary>
+        public IPAddress? RouterIp { get; private set; }
+
+        /// <summary>Porte comuni che spesso passano i filtri delle reti (provate a giri alterni nell'abbinamento).</summary>
+        public static readonly int[] CommonPorts = { 443, 80, 8080, 8443, 3478, 5222, 1194, 9000, 10443, 2222 };
         public bool UpnpAvailable => _device != null;
         public string LastError { get; private set; } = "";
 
@@ -52,6 +57,7 @@ namespace IpTrxCtrl.Net
                     }
                 }
                 ExternalIp = await _device.GetExternalIPAsync();
+                RouterIp = ExternalIp;
                 CgnatSuspected = IsPrivateOrCgnat(ExternalIp);
                 L($"router UPnP trovato · IP esterno dichiarato dal router: {ExternalIp}");
 
@@ -131,6 +137,54 @@ namespace IpTrxCtrl.Net
                 L($"{description}: porta esterna {proto} {publicPort} rifiutata dal router ({ex.Message})");
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Abbinamento: apre una porta TCP esterna MAI provata prima (la aggiunge a «tried»). Prima le porte
+        /// «preferred» (per esempio quelle che escono dalla rete dell'altro PC), poi, se «common», le porte
+        /// comuni, altrimenti una a caso. Senza UPnP usa una porta locale nuova (serve DMZ o inoltro).
+        /// Restituisce (porta esterna, porta del PC) oppure (0, 0).
+        /// </summary>
+        public async Task<(int ext, int inner)> OpenDistinctTcpAsync(ISet<int> tried, IEnumerable<int> preferred, bool common, string description, CancellationToken ct)
+        {
+            if (_device == null)
+            {
+                for (int i = 0; i < 200; i++)
+                {
+                    int p = PickLocalPort();
+                    if (p == 0) break;
+                    if (tried.Add(p)) { L($"{description}: router senza UPnP, uso la porta del PC {p} (serve DMZ o inoltro manuale)"); return (p, p); }
+                }
+                return (0, 0);
+            }
+            HashSet<int> used = new();
+            try { foreach (var m in await _device.GetAllMappingsAsync()) used.Add(m.PublicPort); } catch { }
+            var fixedList = preferred.Concat(common ? CommonPorts : Array.Empty<int>());
+            foreach (int ext in fixedList)
+            {
+                if (ct.IsCancellationRequested) return (0, 0);
+                if (tried.Contains(ext) || used.Contains(ext)) continue;
+                tried.Add(ext);
+                int inner = PickLocalPort();
+                if (inner == 0) break;
+                if (await OpenFixedAsync(Protocol.Tcp, ext, inner, description)) return (ext, inner);
+            }
+            for (int i = 0; i < MaxAttempts && !ct.IsCancellationRequested; i++)
+            {
+                int port = _rnd.Next(MinPort, MaxPort);
+                if (Excluded.Contains(port) || used.Contains(port) || tried.Contains(port) || !IsLocalPortFree(port)) continue;
+                tried.Add(port);
+                try
+                {
+                    var map = new Mapping(Protocol.Tcp, port, port, 0, description);
+                    await _device.CreatePortMapAsync(map);
+                    lock (_mappings) _mappings.Add(map);
+                    L($"{description}: porta TCP {port} aperta sul router");
+                    return (port, port);
+                }
+                catch (Exception ex) { L($"{description}: porta {port} rifiutata dal router ({ex.Message})"); }
+            }
+            return (0, 0);
         }
 
         public int PickLocalPort()

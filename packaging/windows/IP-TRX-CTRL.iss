@@ -54,7 +54,14 @@ Name: "{autoprograms}\IP-TRX-CTRL"; Filename: "{app}\IP-TRX-CTRL.exe"
 Name: "{autodesktop}\IP-TRX-CTRL"; Filename: "{app}\IP-TRX-CTRL.exe"; Tasks: desktopicon
 
 [Run]
+; firewall di Windows: toglie le regole vecchie del programma (anche i blocchi creati premendo «Annulla»
+; alla prima richiesta di Windows) e consente le connessioni in arrivo su tutte le reti
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=all program=""{app}\IP-TRX-CTRL.exe"""; Flags: runhidden waituntilterminated; Check: IsAdminInstallMode; StatusMsg: "Firewall di Windows: tolgo le regole vecchie…"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""IP-TRX-CTRL"" dir=in action=allow program=""{app}\IP-TRX-CTRL.exe"" enable=yes profile=any"; Flags: runhidden waituntilterminated; Check: IsAdminInstallMode; StatusMsg: "Firewall di Windows: consento IP-TRX-CTRL…"
 Filename: "{app}\IP-TRX-CTRL.exe"; Description: "{cm:LaunchProgram,IP-TRX-CTRL}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=all program=""{app}\IP-TRX-CTRL.exe"""; Flags: runhidden waituntilterminated; Check: IsAdminInstallMode; RunOnceId: "TogliRegoleFirewall"
 
 #if Arch == "x64"
 [Code]

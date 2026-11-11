@@ -251,6 +251,30 @@ namespace IpTrxCtrl.Net
         }
     }
 
+    /// <summary>Stato del server mandato al client in abbinamento.</summary>
+    public sealed record PairServerInfo(ServerAddress? Addr, bool Upnp, string Lan, bool Unreachable, bool Cgnat);
+
+    /// <summary>Risposta del server trovata dal client sul broker.</summary>
+    public sealed record PairFound(ServerAddress Addr, string Lan, string Version, bool Upnp, bool Unreachable, bool Cgnat);
+
+    /// <summary>
+    /// Un giro del ciclo delle porte in abbinamento, dal server al client: la porta nuova che il server ha aperto
+    /// (esterna e del PC, per la rete locale) e l'esito della verifica da internet (1 sì, 0 no, -1 non verificabile).
+    /// </summary>
+    public sealed record PairRoundReply(int Round, string Ip, int Port, int InnerPort, int Reachable, bool Upnp, bool Cgnat, string Note)
+    {
+        public byte[] ToBytes() => new MsgWriter(0).I32(Round).Str(Ip).I32(Port).I32(InnerPort).I32(Reachable).Bool(Upnp).Bool(Cgnat).Str(Note).Build();
+        public static PairRoundReply? FromBytes(byte[] b)
+        {
+            try
+            {
+                var r = new MsgReader(b);
+                return new PairRoundReply(r.I32(), r.Str(), r.I32(), r.I32(), r.I32(), r.Bool(), r.Bool(), r.Str());
+            }
+            catch { return null; }
+        }
+    }
+
     /// <summary>
     /// Abbinamento tramite broker MQTT. Il nome del canale e la chiave derivano dal segreto contenuto
     /// nel codice di abbinamento: il client annuncia la sua presenza, il server risponde con l'indirizzo
@@ -265,17 +289,23 @@ namespace IpTrxCtrl.Net
 
         private static byte[] Key(byte[] secret) => Crypto.Hkdf(secret, Array.Empty<byte>(), "iptrx-pair-key");
 
-        // dopo la versione: «|IP di rete locale» (i client vecchi lo mostrano come parte della versione)
-        private static byte[] ServerPayload(byte[] secret, byte[] nonce, ServerAddress addr, bool upnp, string lan) =>
-            Crypto.Seal(Key(secret), Crypto.Concat(nonce, addr.ToBytes(), new[] { (byte)(upnp ? 1 : 0) }, Encoding.UTF8.GetBytes(AppVersion.Tag + "|" + lan)));
+        // dopo la versione: «|IP di rete locale» (i client vecchi lo mostrano come parte della versione).
+        // Byte dei flag (dalla 0.2.7): 1 = UPnP, 2 = porte NON raggiungibili da internet, 4 = CGNAT probabile.
+        private static byte[] ServerPayload(byte[] secret, byte[] nonce, PairServerInfo info) =>
+            Crypto.Seal(Key(secret), Crypto.Concat(nonce, info.Addr!.Value.ToBytes(),
+                new[] { (byte)((info.Upnp ? 1 : 0) | (info.Unreachable ? 2 : 0) | (info.Cgnat ? 4 : 0)) },
+                Encoding.UTF8.GetBytes(AppVersion.Tag + "|" + info.Lan)));
+
+        private static string TopicOffer(byte[] secret) => Base(secret) + "/off";   // client -> server: porte proposte
+        private static string TopicRound(byte[] secret) => Base(secret) + "/rnd";   // server -> client: esito del giro
 
         /// <summary>
         /// Server: resta in ascolto su tutti i broker finché l'abbinamento non è completato (ct annullato).
         /// </summary>
-        public static async Task ServerListenAsync(byte[] secret, Func<(ServerAddress? addr, bool upnp, string lan)> current,
-            IReadOnlyList<string> brokers, MqttLog log, CancellationToken ct)
+        public static async Task ServerListenAsync(byte[] secret, Func<PairServerInfo> current,
+            Func<PortOffer, Task<PairRoundReply?>> onOffer, IReadOnlyList<string> brokers, MqttLog log, CancellationToken ct)
         {
-            string tCli = Base(secret) + "/cli", tSrv = Base(secret) + "/srv";
+            string tCli = Base(secret) + "/cli", tSrv = Base(secret) + "/srv", tOff = TopicOffer(secret), tRnd = TopicRound(secret);
             var key = Key(secret);
             var clients = new List<IMqttClient>();
             try
@@ -289,6 +319,18 @@ namespace IpTrxCtrl.Net
                     {
                         try
                         {
+                            if (e.ApplicationMessage.Topic == tOff)
+                            {
+                                // ciclo delle porte: proposta del client, risposta con la porta nuova del server
+                                byte[] rawO = e.ApplicationMessage.PayloadSegment.ToArray();
+                                if (rawO.Length == 0) return;
+                                var offer = PortOffer.FromBytes(Crypto.Open(key, rawO));
+                                if (offer == null) return;
+                                var rep = await onOffer(offer);
+                                if (rep == null) return;
+                                await c.PublishAsync(Mqtt.Message(tRnd, Crypto.Seal(key, rep.ToBytes()), false), ct);
+                                return;
+                            }
                             if (e.ApplicationMessage.Topic != tCli) return;
                             byte[] raw = e.ApplicationMessage.PayloadSegment.ToArray();
                             if (raw.Length == 0) return;
@@ -297,11 +339,13 @@ namespace IpTrxCtrl.Net
                             byte[] nonce = plain.AsSpan(0, 16).ToArray();
                             string who = Encoding.UTF8.GetString(plain, 16, plain.Length - 16);
                             log('◀', $"PUBLISH  {Mqtt.Short(tCli)}  HELLO dal client {who} ({raw.Length} B)");
-                            var (addr, upnp, lan) = current();
-                            if (addr == null) { log('✗', "indirizzo pubblico del server non ancora disponibile"); return; }
-                            byte[] payload = ServerPayload(secret, nonce, addr.Value, upnp, lan);
+                            var info = current();
+                            if (info.Addr == null) { log('✗', "indirizzo pubblico del server non ancora disponibile"); return; }
+                            var addr = info.Addr.Value;
+                            byte[] payload = ServerPayload(secret, nonce, info);
                             await c.PublishAsync(Mqtt.Message(tSrv, payload, false), ct);
-                            log('▶', $"PUBLISH  {Mqtt.Short(tSrv)}  IP {addr.Value.Ip} · porte {addr.Value.ControlPort} / {addr.Value.AudioPort}" + (lan.Length > 0 ? $" · LAN {lan}" : ""));
+                            log('▶', $"PUBLISH  {Mqtt.Short(tSrv)}  IP {addr.Ip} · porte {addr.ControlPort} / {addr.AudioPort}" + (info.Lan.Length > 0 ? $" · LAN {info.Lan}" : "")
+                                     + (info.Unreachable ? " · porte NON raggiungibili da internet" + (info.Cgnat ? " (CGNAT)" : "") : ""));
                         }
                         catch (Exception ex) { log('✗', "messaggio non valido: " + ex.Message); }
                     };
@@ -314,6 +358,7 @@ namespace IpTrxCtrl.Net
                         log('◀', $"CONNACK  {(res.ResultCode == MqttClientConnectResultCode.Success ? "accettato" : res.ResultCode.ToString())}");
                         log('▶', $"SUBSCRIBE  {Mqtt.Short(tCli)}  QoS 1");
                         await c.SubscribeAsync(Mqtt.Subscribe(tCli), t.Token);
+                        await c.SubscribeAsync(Mqtt.Subscribe(tOff), t.Token);
                         log('◀', "SUBACK  QoS 1");
                         clients.Add(c);
                     }
@@ -339,7 +384,7 @@ namespace IpTrxCtrl.Net
         }
 
         /// <summary>Client: cerca il server sui broker. Restituisce l'indirizzo aggiornato o null.</summary>
-        public static async Task<(ServerAddress addr, string lan, string version)?> ClientFindAsync(byte[] secret, string callsign, IReadOnlyList<string> brokers,
+        public static async Task<PairFound?> ClientFindAsync(byte[] secret, string callsign, IReadOnlyList<string> brokers,
             MqttLog log, CancellationToken ct)
         {
             string tCli = Base(secret) + "/cli", tSrv = Base(secret) + "/srv";
@@ -392,7 +437,8 @@ namespace IpTrxCtrl.Net
                         continue;
                     }
                     var addr = ServerAddress.FromBytes(plain, 16);
-                    bool upnp = plain[24] == 1;
+                    byte flags = plain[24];
+                    bool upnp = (flags & 1) != 0, unreachable = (flags & 2) != 0, cgnat = (flags & 4) != 0;
                     string ver = Encoding.UTF8.GetString(plain, 25, plain.Length - 25);
                     string lan = "";
                     int bar = ver.IndexOf('|');
@@ -400,7 +446,10 @@ namespace IpTrxCtrl.Net
                     var (proto, sv) = AppVersion.Parse(ver);
                     log('◀', $"PUBLISH  {Mqtt.Short(tSrv)}  server presente · IP {addr.Ip}" + (lan.Length > 0 ? $" · LAN {lan}" : ""));
                     log(' ', $"porte {addr.ControlPort} / {addr.AudioPort} · UPnP {(upnp ? "ok" : "non disponibile")} · versione del server {AppVersion.Show(sv)} (protocollo {proto})");
-                    return (addr, lan, ver);
+                    if (unreachable)
+                        log('·', "il server ha verificato da internet che le sue porte NON sono raggiungibili"
+                                 + (cgnat ? ": il suo operatore usa un IP condiviso (CGNAT) o c'è un doppio NAT" : ""));
+                    return new PairFound(addr, lan, ver, upnp, unreachable, cgnat);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
                 catch (Exception ex)
@@ -413,6 +462,92 @@ namespace IpTrxCtrl.Net
                 }
             }
             return null;
+        }
+
+        /// <summary>
+        /// Client, ciclo delle porte in abbinamento: resta collegato ai broker, manda le proposte di porte e
+        /// riceve per ogni giro la porta nuova del server con l'esito della sua verifica.
+        /// </summary>
+        public sealed class ClientSession : IAsyncDisposable
+        {
+            private readonly byte[] _key;
+            private readonly string _tOff, _tRnd;
+            private readonly List<IMqttClient> _clients = new();
+            private readonly System.Collections.Concurrent.ConcurrentDictionary<int, PairRoundReply> _replies = new();
+            private readonly SemaphoreSlim _signal = new(0);
+
+            private ClientSession(byte[] secret)
+            {
+                _key = Key(secret);
+                _tOff = TopicOffer(secret);
+                _tRnd = TopicRound(secret);
+            }
+
+            public int Brokers => _clients.Count;
+
+            public static async Task<ClientSession> OpenAsync(byte[] secret, IReadOnlyList<string> brokers, MqttLog log, CancellationToken ct)
+            {
+                var s = new ClientSession(secret);
+                foreach (string broker in brokers)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    var c = new MqttFactory().CreateMqttClient();
+                    c.ApplicationMessageReceivedAsync += e =>
+                    {
+                        try
+                        {
+                            if (e.ApplicationMessage.Topic != s._tRnd) return Task.CompletedTask;
+                            var r = PairRoundReply.FromBytes(Crypto.Open(s._key, e.ApplicationMessage.PayloadSegment.ToArray()));
+                            if (r != null && s._replies.TryAdd(r.Round, r)) s._signal.Release();
+                        }
+                        catch { }
+                        return Task.CompletedTask;
+                    };
+                    try
+                    {
+                        using var t = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        t.CancelAfter(TimeSpan.FromSeconds(8));
+                        await c.ConnectAsync(Mqtt.Options(broker, Mqtt.NewClientId()), t.Token);
+                        await c.SubscribeAsync(Mqtt.Subscribe(s._tRnd), t.Token);
+                        s._clients.Add(c);
+                    }
+                    catch { c.Dispose(); }
+                }
+                log('·', $"ciclo delle porte: collegato a {s._clients.Count} broker MQTT per lo scambio con il server");
+                return s;
+            }
+
+            /// <summary>Manda la proposta su tutti i broker; restituisce su quanti è partita.</summary>
+            public async Task<int> SendOfferAsync(PortOffer offer, CancellationToken ct)
+            {
+                byte[] payload = Crypto.Seal(_key, offer.ToBytes());
+                int n = 0;
+                foreach (var c in _clients)
+                {
+                    try { await c.PublishAsync(Mqtt.Message(_tOff, payload, false), ct); n++; } catch { }
+                }
+                return n;
+            }
+
+            /// <summary>Aspetta la risposta del server per il giro indicato (null se non arriva in tempo).</summary>
+            public async Task<PairRoundReply?> WaitRoundAsync(int round, TimeSpan timeout, CancellationToken ct)
+            {
+                var end = DateTime.UtcNow + timeout;
+                while (!ct.IsCancellationRequested)
+                {
+                    if (_replies.TryGetValue(round, out var r)) return r;
+                    var left = end - DateTime.UtcNow;
+                    if (left <= TimeSpan.Zero) return null;
+                    try { await _signal.WaitAsync(left, ct); } catch { return null; }
+                }
+                return null;
+            }
+
+            public async ValueTask DisposeAsync()
+            {
+                foreach (var c in _clients) { await Mqtt.SafeDisconnect(c); c.Dispose(); }
+                _clients.Clear();
+            }
         }
     }
 }

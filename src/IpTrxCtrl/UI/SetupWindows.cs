@@ -225,6 +225,30 @@ namespace IpTrxCtrl.UI
     /// <summary>Impostazioni: ruolo, nominativo, radio, Hamlib, rete, abbinamento, chiavi per le autorità.</summary>
     public sealed class SettingsWindow : Window
     {
+        /// <summary>Windows: regola del firewall per questo eseguibile (con conferma di amministratore).</summary>
+        internal static string AllowInWindowsFirewall()
+        {
+            string? exe = Environment.ProcessPath;
+            if (exe == null) return "Percorso del programma non disponibile.";
+            string cmd = $"/c netsh advfirewall firewall delete rule name=all program=\"{exe}\" >nul 2>&1 & "
+                       + $"netsh advfirewall firewall add rule name=\"IP-TRX-CTRL\" dir=in action=allow program=\"{exe}\" enable=yes profile=any";
+            try
+            {
+                var p = Process.Start(new ProcessStartInfo("cmd.exe", cmd) { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden });
+                if (p == null) return "Il comando non è partito.";
+                p.WaitForExit(20000);
+                bool ok = p.HasExited && p.ExitCode == 0;
+                SessionLog.Write(ok ? $"FIREWALL regola aggiunta per {exe}" : $"FIREWALL regola non aggiunta (codice {(p.HasExited ? p.ExitCode : -1)})");
+                return ok ? "Fatto: il firewall di Windows ora consente le connessioni in arrivo a IP-TRX-CTRL su tutte le reti."
+                          : "Il firewall non ha accettato la regola: prova da Sicurezza di Windows › Firewall e protezione rete › Consenti app attraverso il firewall.";
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                return "Conferma di amministratore annullata: la regola del firewall non è stata aggiunta.";
+            }
+            catch (Exception ex) { return "Firewall: " + ex.Message; }
+        }
+
         public bool Saved { get; private set; }
         public bool RigChanged { get; private set; }
         public bool AudioChanged { get; private set; }
@@ -272,6 +296,12 @@ namespace IpTrxCtrl.UI
             swrOn.IsEnabled = swrEditable; swrWarn.IsEnabled = swrEditable; swrTrip.IsEnabled = swrEditable;
             var prefill = new Slider { Minimum = 40, Maximum = 600, Value = s.PrefillMs };
             var prefillTxt = Ui.Sub($"Jitter buffer (pre-riempimento): {s.PrefillMs} ms", 13);
+            // firewall di Windows: serve soprattutto sul server e con le versioni portatili (l'installatore lo fa da solo)
+            var fwBtn = Ui.Btn("Consenti nel firewall di Windows");
+            var fwNote = Ui.Sub("Toglie i blocchi del firewall di Windows per questo programma (anche quelli creati premendo «Annulla» alla prima "
+                              + "richiesta di Windows) e consente le connessioni in arrivo su tutte le reti. Chiede la conferma di amministratore.", 12);
+            fwBtn.IsVisible = fwNote.IsVisible = OperatingSystem.IsWindows();
+            fwBtn.Click += async (_, _) => await Dialogs.Info(this, AllowInWindowsFirewall());
             prefill.ValueChanged += (_, e) => prefillTxt.Text = $"Jitter buffer (pre-riempimento): {(int)e.NewValue} ms";
             // ---- client: porta seriale d'ingresso (pedale PTT, tasto CW meccanico, porta virtuale)
             var inPorts = new List<string> { "(nessuna)" };
@@ -421,7 +451,8 @@ namespace IpTrxCtrl.UI
                             digState))
                         : Ui.Panel(Ui.Col(10, Ui.H2("PROGRAMMI DIGITALI (CLIENT)"), Ui.Sub("Non disponibili nella versione per Windows 32 bit.", 13))),
                     Ui.Panel(Ui.Col(10, Ui.H2("RETE E AUDIO"), prefillTxt, prefill,
-                        Ui.Col(0, Ui.Lbl("Broker MQTT (uno per riga, host:porta)"), brokers))),
+                        Ui.Col(0, Ui.Lbl("Broker MQTT (uno per riga, host:porta)"), brokers),
+                        fwBtn, fwNote)),
                     Ui.Panel(Ui.Col(10, Ui.H2("ABBINAMENTO E REGISTRI"),
                         Ui.Sub("Impronta dell'abbinamento: " + (node.IsPaired ? node.Fingerprint : "nessun abbinamento"), 13),
                         Ui.Row(8, newPair, export, folder, lic))),
@@ -620,7 +651,7 @@ VERSIONI COMPATIBILI
 Server e client devono avere versioni dello stesso «protocollo». La versione di questo PC è nella finestra «Informazioni e licenze».
   Versioni          Protocollo   Compatibili con
   0.1.0 – 0.1.3     1            solo 0.1.x
-  0.2.0 – 0.2.6     2            tutte le 0.2.x
+  0.2.0 – 0.2.7     2            tutte le 0.2.x
 Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   scelta delle schede audio del server dal client ......... 0.2.1 o successiva
   server senza UPnP e collegamento sulla rete locale ...... 0.2.2 o successiva
@@ -628,6 +659,7 @@ Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   porte in uscita del client comunicate al server ......... 0.2.4 o successiva
   protezione ROS (avviso e blocco della trasmissione) ..... 0.2.4 o successiva
   CAT e audio del server via TCI ......................... 0.2.5 sul server
+  ciclo delle porte anche nell'abbinamento ............... 0.2.7 su entrambi i PC
 Dalla 0.2.3 i due PC si scambiano la versione (sul broker MQTT durante l'abbinamento e all'inizio di ogni
 collegamento). Se il protocollo è diverso l'abbinamento si ferma e compare una finestra; se l'altro PC è
 più vecchio compare un avviso. La versione dell'altro PC si vede nella riga della sua rete.
@@ -660,6 +692,15 @@ Il percorso in uso compare nella riga della rete dell'altro PC («audio UDP» o 
 RETI FILTRATE (dalla 0.2.4): all'avvio il client prova quali porte escono dalla sua rete (443, 80, 8443, 8080…).
 Se la rete le filtra (aziende, alberghi, Wi-Fi pubblici) manda l'elenco al server sul broker MQTT e il server
 chiede al router proprio quelle come porte esterne, inoltrate verso porte libere del PC.
+ABBINAMENTO CON IL CICLO DELLE PORTE (dalla 0.2.7): il server dice al client se le sue porte sono raggiungibili da
+internet (e se è dietro CGNAT). Se i due PC escono con lo stesso IP pubblico il client prova prima la rete locale.
+Se il collegamento diretto non riesce partono fino a 20 giri: in ognuno il client apre una porta NUOVA (a giri
+alterni una comune come 443, 80, 8080 o una a caso), la verifica e la propone al server sul broker; il server
+prova a collegarsi a lei (collegamento inverso), poi apre anche lui una porta nuova, la verifica e la comunica;
+il client la prova subito. Nessuna porta viene provata due volte. Una porta del server raggiungibile da internet
+diventa la sua porta di controllo. Tutto lo scambio compare riga per riga nella finestra di abbinamento.
+FIREWALL DI WINDOWS: l'installatore consente il programma su tutte le reti; con le versioni portatili usa
+Impostazioni › Rete e audio › «Consenti nel firewall di Windows» (serve soprattutto sul server).
 
 ERRORI E REGISTRI
 Impostazioni › «Apri cartella dati»: errori.log (errori imprevisti) e sessioni.log (collegamenti e abbinamento).

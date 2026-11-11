@@ -78,3 +78,5 @@ Se UDP non passa, o se il client non riceve più pacchetti UDP per 4 secondi, l'
 - Attiva **UPnP** sul router di almeno uno dei due PC (meglio su tutti e due).
 - Se l'operatore usa il **CGNAT** (IP condiviso, frequente su rete mobile e FWA) quel PC non può ricevere collegamenti: deve essere l'altro ad aprire le porte.
 - Se entrambi i PC sono dietro CGNAT o senza UPnP, il collegamento diretto non è possibile.
+- **Firewall di Windows**: anche con le porte aperte sul router, il firewall del PC può scartare le connessioni («nessuna risposta» anche dalla rete locale). Dalla 0.2.7 l'installatore consente il programma su tutte le reti; con le versioni portatili c'è il pulsante Impostazioni › Rete e audio › «Consenti nel firewall di Windows».
+- Nell'abbinamento, dalla 0.2.7, il ciclo delle porte parte da solo (vedi *Abbinamento e ritrovo tramite MQTT*).

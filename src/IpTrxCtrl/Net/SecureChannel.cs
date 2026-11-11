@@ -101,14 +101,24 @@ namespace IpTrxCtrl.Net
         }
 
         /// <summary>Abbinamento lato client: ECDH P-256 autenticato con il segreto del codice. Restituisce la chiave master.</summary>
-        public static async Task<byte[]> PairAsClientAsync(ServerAddress addr, byte[] secret, CancellationToken ct)
+        public static async Task<byte[]> PairAsClientAsync(ServerAddress addr, byte[] secret, CancellationToken ct, int connectSeconds = 8)
         {
             using var tcp = new TcpClient();
             using (var t = CancellationTokenSource.CreateLinkedTokenSource(ct))
             {
-                t.CancelAfter(TimeSpan.FromSeconds(8));
+                t.CancelAfter(TimeSpan.FromSeconds(connectSeconds));
                 await tcp.ConnectAsync(addr.Ip, addr.ControlPort, t.Token);
             }
+            return await PairAsClientOnAsync(tcp, secret, ct);
+        }
+
+        /// <summary>
+        /// Abbinamento lato client su una connessione già aperta: serve anche al collegamento inverso durante
+        /// l'abbinamento (il server si collega alla porta del client, ma il client avvia comunque lo scambio).
+        /// </summary>
+        public static async Task<byte[]> PairAsClientOnAsync(TcpClient tcp, byte[] secret, CancellationToken ct)
+        {
+            var remote = tcp.Client.RemoteEndPoint as IPEndPoint;
             var s = tcp.GetStream();
             using var hs = CancellationTokenSource.CreateLinkedTokenSource(ct);
             hs.CancelAfter(TimeSpan.FromSeconds(15));
@@ -130,7 +140,7 @@ namespace IpTrxCtrl.Net
             other.ImportSubjectPublicKeyInfo(pubS, out _);
             byte[] shared = ecdh.DeriveKeyFromHash(other.PublicKey, HashAlgorithmName.SHA256);
             byte[] master = Crypto.Hkdf(shared, secret, "aal-master");
-            SessionLog.Write($"ABBINAMENTO client con {addr.Ip} impronta={Crypto.Fingerprint(master)}");
+            SessionLog.Write($"ABBINAMENTO client con {remote?.Address.MapToIPv4()} impronta={Crypto.Fingerprint(master)}");
             return master;
         }
 

@@ -122,11 +122,13 @@ namespace IpTrxCtrl.UI
 
             _node.PairingLog += OnLog;
             _node.PairingCompleted += OnPaired;
+            _node.PairingRound += OnRound;
             Opened += async (_, _) => { if (server) await StartServerAsync(); };
             Closed += (_, _) =>
             {
                 _node.PairingLog -= OnLog;
                 _node.PairingCompleted -= OnPaired;
+                _node.PairingRound -= OnRound;
                 _cts.Cancel();
                 if (!_node.IsPaired) _node.CancelPairing();
             };
@@ -166,6 +168,10 @@ namespace IpTrxCtrl.UI
                 _pair.IsEnabled = true;
             }
         }
+
+        /// <summary>Client: avanzamento del ciclo delle porte.</summary>
+        private void OnRound(int round, int total) =>
+            Dispatcher.UIThread.Post(() => _result.Text = $"Ciclo delle porte: giro {round} di {total} (una porta nuova per lato a ogni giro)…");
 
         private void OnLog(char sym, string text)
         {

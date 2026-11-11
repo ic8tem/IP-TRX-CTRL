@@ -41,4 +41,18 @@ La finestra di abbinamento mostra, riga per riga, il dialogo con il broker e con
 |---|---|
 | Nessun broker risponde | Connessione internet assente o porta 1883 bloccata dalla rete |
 | Il broker risponde ma il server no | Il programma server è chiuso, oppure non è ancora in attesa di abbinamento |
-| Il server risponde ma il TCP non si apre | Porta non aperta sul router (UPnP disattivato o rete del provider con IP condiviso) |
+| Il server risponde ma il TCP non si apre | Porta non aperta sul router (UPnP disattivato o rete del provider con IP condiviso): dalla 0.2.7 parte il ciclo delle porte |
+| «nessuna risposta» in rete locale con lo stesso IP pubblico | Il firewall di Windows del server scarta le connessioni: sul server Impostazioni › Rete e audio › «Consenti nel firewall di Windows» |
+| «connessione rifiutata» | Il programma server è chiuso o ascolta su un'altra porta |
+| «le porte del server NON sono raggiungibili» e «CGNAT» | Il server non può ricevere collegamenti da internet: serve una porta aperta sul router del client (UPnP, DMZ o inoltro), che il ciclo delle porte usa per il collegamento inverso |
+
+## Ciclo delle porte nell'abbinamento (dalla 0.2.7)
+
+Se il collegamento diretto non riesce, l'abbinamento non si ferma: partono fino a **20 giri** di scambio di porte, sempre attraverso il broker MQTT e cifrati con il codice di abbinamento.
+
+1. Il client apre una porta **nuova** sul suo router (a giri alterni una porta comune che spesso passa i filtri, come 443, 80, 8080, 8443, oppure una a caso), la verifica da internet e la propone al server.
+2. Il server prova a collegarsi a quella porta: è il **collegamento inverso**, l'unico possibile quando il server è dietro CGNAT.
+3. Se non riesce, il server apre anche lui una porta **nuova**, la verifica da internet e comunica al client numero ed esito.
+4. Il client prova subito la porta nuova del server (anche in rete locale).
+
+Nessuna porta viene provata due volte, né sul client né sul server. Se la rete del client lascia uscire solo alcune porte, il server prova prima quelle. Una porta del server che risulta raggiungibile diventa la sua porta di controllo. Alla fine, se nulla ha funzionato, l'ultima riga del registro dice perché (per esempio: server dietro CGNAT e router del client senza UPnP).
