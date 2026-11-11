@@ -7,14 +7,15 @@ namespace IpTrxCtrl.Core
     /// Versione del programma e del protocollo tra server e client.
     /// Il PROTOCOLLO cambia solo quando server e client devono essere aggiornati insieme:
     ///   1 = 0.1.0 – 0.1.3
-    ///   2 = 0.2.0 e successive
+    ///   2 = 0.2.0 – 0.2.8
+    ///   3 = 0.3.0 e successive (abbinamento con il numero a 10 cifre)
     /// Dentro lo stesso protocollo le versioni si parlano; alcune funzioni richiedono una versione minima
     /// su entrambi i PC (vedi <see cref="Notes"/>).
     /// Formato scambiato (abbinamento MQTT, indirizzo sul broker, saluto sul canale cifrato): «P2 0.2.3».
     /// </summary>
     public static class AppVersion
     {
-        public const int Protocol = 2;
+        public const int Protocol = 3;
 
         public static string Text
         {

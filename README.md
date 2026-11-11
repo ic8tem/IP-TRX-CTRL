@@ -38,6 +38,7 @@ Server e client devono avere versioni dello stesso protocollo:
 |---|---|---|
 | 0.1.0 – 0.1.3 | 1 | solo le 0.1.x |
 | 0.2.0 – 0.2.8 | 2 | tutte le 0.2.x (alcune funzioni richiedono una versione minima su entrambi i PC) |
+| 0.3.0 | 3 | solo le 0.3.x (numero a 10 cifre, codice fisso del server, più client sul server) |
 
 Dettagli e controllo automatico: [docs/Versioni-compatibili.md](docs/Versioni-compatibili.md).
 

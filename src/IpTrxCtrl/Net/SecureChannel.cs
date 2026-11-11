@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -150,12 +151,22 @@ namespace IpTrxCtrl.Net
         {
             public SecureChannel? Channel;
             public byte[]? NewMaster;   // valorizzato se la connessione era un abbinamento
+            public byte[]? Master;      // chiave del client che ha aperto la sessione (server con più client)
+            public byte[]? PairingSecret; // segreto usato nell'abbinamento (numero temporaneo o codice fisso)
         }
+
+        public static Task<AcceptResult> AcceptAsync(TcpClient tcp, ChannelKind expected, byte[]? master, byte[]? pairingSecret, CancellationToken ct) =>
+            AcceptAsync(tcp, expected,
+                master == null ? null : new Func<byte[], byte[]?>(pid => Crypto.Equal(pid, Crypto.PairId(master)) ? master : null),
+                pairingSecret == null ? null : (IReadOnlyList<byte[]>)new[] { pairingSecret }, ct);
 
         /// <summary>
         /// Gestisce una connessione in arrivo: abbinamento (se pairingSecret != null) oppure sessione autenticata.
         /// </summary>
-        public static async Task<AcceptResult> AcceptAsync(TcpClient tcp, ChannelKind expected, byte[]? master, byte[]? pairingSecret, CancellationToken ct)
+        /// <param name="masterFor">dato l'identificativo dell'abbinamento mandato dal client, la sua chiave (null se sconosciuto)</param>
+        /// <param name="pairingSecrets">segreti di abbinamento accettati in questo momento (numero temporaneo, codice fisso)</param>
+        public static async Task<AcceptResult> AcceptAsync(TcpClient tcp, ChannelKind expected, Func<byte[], byte[]?>? masterFor,
+            IReadOnlyList<byte[]>? pairingSecrets, CancellationToken ct)
         {
             var s = tcp.GetStream();
             using var hs = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -171,13 +182,15 @@ namespace IpTrxCtrl.Net
 
                 if (kindByte == KindPairing)
                 {
-                    if (pairingSecret == null || kind != ChannelKind.Control) throw new IOException("Abbinamento non attivo");
+                    if (pairingSecrets == null || pairingSecrets.Count == 0 || kind != ChannelKind.Control) throw new IOException("Abbinamento non attivo");
                     int lenC = ToU16(await ReadExactAsync(s, 2, ct));
                     if (lenC <= 0 || lenC > 512) throw new IOException("Abbinamento non valido");
                     byte[] pubC = await ReadExactAsync(s, lenC, ct);
                     byte[] macC = await ReadExactAsync(s, 32, ct);
-                    if (!Crypto.Equal(macC, Crypto.Hmac(pairingSecret, Encoding.ASCII.GetBytes("PC"), pubC)))
-                        throw new CryptographicException("Codice di abbinamento errato");
+                    byte[]? pairingSecret = null;
+                    foreach (var cand in pairingSecrets)
+                        if (Crypto.Equal(macC, Crypto.Hmac(cand, Encoding.ASCII.GetBytes("PC"), pubC))) { pairingSecret = cand; break; }
+                    if (pairingSecret == null) throw new CryptographicException("Codice di abbinamento errato");
 
                     using var ecdh = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
                     byte[] pubS = ecdh.ExportSubjectPublicKeyInfo();
@@ -190,14 +203,14 @@ namespace IpTrxCtrl.Net
                     byte[] newMaster = Crypto.Hkdf(shared, pairingSecret, "aal-master");
                     SessionLog.Write($"ABBINAMENTO server con {tcp.Client.RemoteEndPoint} impronta={Crypto.Fingerprint(newMaster)}");
                     tcp.Dispose();
-                    return new AcceptResult { NewMaster = newMaster };
+                    return new AcceptResult { NewMaster = newMaster, PairingSecret = pairingSecret };
                 }
 
-                if (kindByte != KindSession || master == null) throw new IOException("Sessione non valida");
+                if (kindByte != KindSession || masterFor == null) throw new IOException("Sessione non valida");
                 byte[] rest = await ReadExactAsync(s, 8 + 16, ct);
                 byte[] pairId = rest.AsSpan(0, 8).ToArray();
                 byte[] nC = rest.AsSpan(8, 16).ToArray();
-                if (!Crypto.Equal(pairId, Crypto.PairId(master))) throw new CryptographicException("Peer non abbinato");
+                byte[] master = masterFor(pairId) ?? throw new CryptographicException("Peer non abbinato");
 
                 byte[] nS = RandomNumberGenerator.GetBytes(16);
                 await s.WriteAsync(Crypto.Concat(nS, Crypto.Hmac(master, Encoding.ASCII.GetBytes("S"), new[] { (byte)kind }, nC, nS)), ct);
@@ -208,7 +221,7 @@ namespace IpTrxCtrl.Net
                 byte[] key = Crypto.Hkdf(master, Crypto.Concat(nC, nS), "aal-session-" + (byte)kind);
                 var ch = new SecureChannel(tcp, key, kind);
                 SessionLog.Write($"SESSIONE server<-{ch.Remote} canale={kind} nC={Convert.ToHexString(nC)} nS={Convert.ToHexString(nS)}");
-                return new AcceptResult { Channel = ch };
+                return new AcceptResult { Channel = ch, Master = master };
             }
             catch
             {

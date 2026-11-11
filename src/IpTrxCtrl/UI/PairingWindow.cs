@@ -25,7 +25,7 @@ namespace IpTrxCtrl.UI
         private readonly ScrollViewer _logScroll;
         private readonly StringBuilder _logText = new();
         private readonly TextBlock _code, _result;
-        private readonly TextBox _input = new() { FontFamily = new FontFamily("Consolas, Menlo, DejaVu Sans Mono, monospace") };
+        private readonly TextBox _input = new() { FontFamily = new FontFamily("Consolas, Menlo, DejaVu Sans Mono, monospace"), FontSize = 20, Watermark = "es. 482 913 0571  oppure  4829 1305 7712", MaxLength = 24 };
         private readonly Button _pair, _copy, _retry;
         private bool _completed;
 
@@ -40,32 +40,40 @@ namespace IpTrxCtrl.UI
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
             bool server = s.Role == NodeRole.Server;
-            _code = Ui.Mono("Preparo il codice…", 22);
+            _code = Ui.Mono("Preparo il numero…", 30);
             _code.FontWeight = FontWeight.Bold;
             _code.Foreground = this.FindResource("B.Accent") as IBrush;
             _code.TextWrapping = TextWrapping.Wrap;
             _result = new TextBlock { FontSize = 14, FontWeight = FontWeight.Bold, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
             _pair = Ui.Btn("Abbina", true);
-            _copy = Ui.Btn("Copia codice");
+            _copy = Ui.Btn("Copia numero");
             _copy.IsEnabled = false;
             _retry = Ui.Btn("Riprova");
 
             var root = new StackPanel { Margin = new Thickness(30), Spacing = 0 };
             root.Children.Add(Ui.H1("Abbinamento con l'altro PC"));
             var intro = Ui.Sub(server
-                ? "Detta questo codice a chi usa il client. Dopo l'abbinamento chiavi, porte e riconnessioni sono automatiche."
-                : "Scrivi il codice che compare sul server. Serve solo la prima volta.", 14);
+                ? "Detta questo numero a chi usa il client. Vale 10 minuti e una sola volta; non contiene l'indirizzo del server, "
+                  + "che il client riceve cifrato. Dopo l'abbinamento chiavi, porte e riconnessioni sono automatiche."
+                : "Scrivi il numero di 10 cifre che compare sul server (vale 10 minuti) oppure il codice fisso del server (12 cifre). "
+                  + "Ogni server abbinato resta nell'elenco del client: dopo si sceglie da lì, senza numero.", 14);
             intro.Margin = new Thickness(0, 6, 0, 20);
             root.Children.Add(intro);
 
             if (server)
             {
-                root.Children.Add(Ui.Inset(Ui.Col(8, Ui.Lbl("Codice di abbinamento da dettare al client (solo questa volta)"), _code, _copy)));
+                root.Children.Add(Ui.Inset(Ui.Col(8, Ui.Lbl("Numero di abbinamento da dettare al client (10 minuti, una sola volta)"), _code, _copy)));
                 _copy.Click += async (_, _) => await Dialogs.CopyText(this, _code.Text ?? "");
+                if (node.FixedCodeEnabled && node.FixedCode.Length > 0)
+                {
+                    var fix = Ui.Sub($"Codice fisso del server, sempre valido: {node.FixedCode}  (si gestisce nelle Impostazioni)", 13);
+                    fix.Margin = new Thickness(0, 10, 0, 0);
+                    root.Children.Add(fix);
+                }
             }
             else
             {
-                root.Children.Add(Ui.Lbl("Codice di abbinamento mostrato dal server"));
+                root.Children.Add(Ui.Lbl("Numero di abbinamento (10 cifre) mostrato dal server, o codice fisso del server (12 cifre)"));
                 root.Children.Add(_input);
                 var row = Ui.Row(12, _pair, _result);
                 row.Margin = new Thickness(0, 14, 0, 0);
@@ -123,21 +131,23 @@ namespace IpTrxCtrl.UI
             _node.PairingLog += OnLog;
             _node.PairingCompleted += OnPaired;
             _node.PairingRound += OnRound;
+            _node.PairingExpired += OnExpired;
             Opened += async (_, _) => { if (server) await StartServerAsync(); };
             Closed += (_, _) =>
             {
                 _node.PairingLog -= OnLog;
                 _node.PairingCompleted -= OnPaired;
                 _node.PairingRound -= OnRound;
+                _node.PairingExpired -= OnExpired;
                 _cts.Cancel();
-                if (!_node.IsPaired) _node.CancelPairing();
+                if (!_completed) _node.CancelPairing();   // il numero temporaneo non vale più; il codice fisso resta
             };
         }
 
         private async System.Threading.Tasks.Task StartServerAsync()
         {
             _copy.IsEnabled = false;
-            _code.Text = "Preparo il codice…";
+            _code.Text = "Preparo il numero…";
             try
             {
                 string? code = await _node.BeginPairingServerAsync(_cts.Token);
@@ -168,6 +178,14 @@ namespace IpTrxCtrl.UI
                 _pair.IsEnabled = true;
             }
         }
+
+        /// <summary>Server: il numero è scaduto dopo 10 minuti.</summary>
+        private void OnExpired() => Dispatcher.UIThread.Post(() =>
+        {
+            _code.Text = "scaduto";
+            _copy.IsEnabled = false;
+            _result.Text = "Il numero è scaduto (vale 10 minuti): premi Riprova per averne uno nuovo.";
+        });
 
         /// <summary>Client: avanzamento del ciclo delle porte.</summary>
         private void OnRound(int round, int total) =>
@@ -206,7 +224,9 @@ namespace IpTrxCtrl.UI
                 if (_completed) return;
                 _completed = true;
                 _result.Foreground = this.FindResource("B.Ok") as IBrush;
-                _result.Text = "Abbinamento completato. Da ora il collegamento è automatico.";
+                _result.Text = _s.Role == NodeRole.Server
+                    ? "Abbinamento completato: il client è stato aggiunto all'elenco. Da ora il collegamento è automatico."
+                    : "Abbinamento completato. Da ora il collegamento è automatico.";
                 _pair.IsEnabled = false;
             });
         }

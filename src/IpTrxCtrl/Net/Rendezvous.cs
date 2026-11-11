@@ -255,7 +255,11 @@ namespace IpTrxCtrl.Net
     public sealed record PairServerInfo(ServerAddress? Addr, bool Upnp, string Lan, bool Unreachable, bool Cgnat);
 
     /// <summary>Risposta del server trovata dal client sul broker.</summary>
-    public sealed record PairFound(ServerAddress Addr, string Lan, string Version, bool Upnp, bool Unreachable, bool Cgnat);
+    public sealed record PairFound(ServerAddress Addr, string Lan, string Version, bool Upnp, bool Unreachable, bool Cgnat)
+    {
+        /// <summary>Segreto che ha trovato il server (con il numero a 10 cifre il client ne prova più d'uno).</summary>
+        public byte[] Secret { get; init; } = Array.Empty<byte>();
+    }
 
     /// <summary>
     /// Un giro del ciclo delle porte in abbinamento, dal server al client: la porta nuova che il server ha aperto
@@ -384,20 +388,28 @@ namespace IpTrxCtrl.Net
         }
 
         /// <summary>Client: cerca il server sui broker. Restituisce l'indirizzo aggiornato o null.</summary>
-        public static async Task<PairFound?> ClientFindAsync(byte[] secret, string callsign, IReadOnlyList<string> brokers,
+        public static Task<PairFound?> ClientFindAsync(byte[] secret, string callsign, IReadOnlyList<string> brokers,
+            MqttLog log, CancellationToken ct) => ClientFindAsync(new[] { secret }, callsign, brokers, log, ct);
+
+        /// <summary>
+        /// Cerca il server provando più segreti insieme (con il numero a 10 cifre: le finestre di 10 minuti vicine,
+        /// per l'attesa tra la lettura del numero e il suo inserimento e per orologi un po' diversi).
+        /// </summary>
+        public static async Task<PairFound?> ClientFindAsync(IReadOnlyList<byte[]> secrets, string callsign, IReadOnlyList<string> brokers,
             MqttLog log, CancellationToken ct)
         {
-            string tCli = Base(secret) + "/cli", tSrv = Base(secret) + "/srv";
-            var key = Key(secret);
+            string[] tClis = secrets.Select(x => Base(x) + "/cli").ToArray();
+            string[] tSrvs = secrets.Select(x => Base(x) + "/srv").ToArray();
             foreach (string broker in brokers)
             {
                 if (ct.IsCancellationRequested) break;
                 using var c = new MqttFactory().CreateMqttClient();
                 byte[] nonce = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
-                var reply = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var reply = new TaskCompletionSource<(int idx, byte[] data)>(TaskCreationOptions.RunContinuationsAsynchronously);
                 c.ApplicationMessageReceivedAsync += e =>
                 {
-                    if (e.ApplicationMessage.Topic == tSrv) reply.TrySetResult(e.ApplicationMessage.PayloadSegment.ToArray());
+                    int idx = Array.IndexOf(tSrvs, e.ApplicationMessage.Topic);
+                    if (idx >= 0) reply.TrySetResult((idx, e.ApplicationMessage.PayloadSegment.ToArray()));
                     return Task.CompletedTask;
                 };
                 string id = Mqtt.NewClientId();
@@ -417,20 +429,26 @@ namespace IpTrxCtrl.Net
                             log('✗', "nessuna risposta in 8 s → broker successivo");
                             continue;
                         }
-                        log('▶', $"SUBSCRIBE  {Mqtt.Short(tSrv)}  QoS 1");
-                        await c.SubscribeAsync(Mqtt.Subscribe(tSrv), t.Token);
+                        log('▶', $"SUBSCRIBE  {Mqtt.Short(tSrvs[0])}" + (tSrvs.Length > 1 ? $" e altri {tSrvs.Length - 1}" : "") + "  QoS 1");
+                        foreach (string tSrv in tSrvs) await c.SubscribeAsync(Mqtt.Subscribe(tSrv), t.Token);
                         log('◀', "SUBACK  QoS 1");
-                        byte[] hello = Crypto.Seal(key, Crypto.Concat(nonce, Encoding.UTF8.GetBytes(callsign)));
-                        await c.PublishAsync(Mqtt.Message(tCli, hello, false), t.Token);
-                        log('▶', $"PUBLISH  {Mqtt.Short(tCli)}  HELLO cifrato {hello.Length} B");
+                        for (int i = 0; i < secrets.Count; i++)
+                        {
+                            byte[] hello = Crypto.Seal(Key(secrets[i]), Crypto.Concat(nonce, Encoding.UTF8.GetBytes(callsign)));
+                            await c.PublishAsync(Mqtt.Message(tClis[i], hello, false), t.Token);
+                        }
+                        log('▶', $"PUBLISH  {Mqtt.Short(tClis[0])}" + (tClis.Length > 1 ? $" e altri {tClis.Length - 1}" : "") + "  HELLO cifrato");
                     }
                     var done = await Task.WhenAny(reply.Task, Task.Delay(TimeSpan.FromSeconds(8), ct));
                     if (done != reply.Task)
                     {
-                        log('✗', "il server non risponde su questo broker (programma chiuso o non in attesa di abbinamento)");
+                        log('✗', "il server non risponde su questo broker (numero sbagliato o scaduto, programma chiuso o non in attesa di abbinamento)");
                         continue;
                     }
-                    byte[] plain = Crypto.Open(key, reply.Task.Result);
+                    var (hit, data) = reply.Task.Result;
+                    var key = Key(secrets[hit]);
+                    string tSrvHit = tSrvs[hit];
+                    byte[] plain = Crypto.Open(key, data);
                     if (plain.Length < 16 + 9 || !Crypto.Equal(plain.AsSpan(0, 16).ToArray(), nonce))
                     {
                         log('✗', "risposta non valida");
@@ -444,12 +462,12 @@ namespace IpTrxCtrl.Net
                     int bar = ver.IndexOf('|');
                     if (bar >= 0) { lan = ver[(bar + 1)..]; ver = ver[..bar]; }
                     var (proto, sv) = AppVersion.Parse(ver);
-                    log('◀', $"PUBLISH  {Mqtt.Short(tSrv)}  server presente · IP {addr.Ip}" + (lan.Length > 0 ? $" · LAN {lan}" : ""));
+                    log('◀', $"PUBLISH  {Mqtt.Short(tSrvHit)}  server presente (indirizzo arrivato cifrato) · IP {addr.Ip}" + (lan.Length > 0 ? $" · LAN {lan}" : ""));
                     log(' ', $"porte {addr.ControlPort} / {addr.AudioPort} · UPnP {(upnp ? "ok" : "non disponibile")} · versione del server {AppVersion.Show(sv)} (protocollo {proto})");
                     if (unreachable)
                         log('·', "il server ha verificato da internet che le sue porte NON sono raggiungibili"
                                  + (cgnat ? ": il suo operatore usa un IP condiviso (CGNAT) o c'è un doppio NAT" : ""));
-                    return new PairFound(addr, lan, ver, upnp, unreachable, cgnat);
+                    return new PairFound(addr, lan, ver, upnp, unreachable, cgnat) { Secret = secrets[hit] };
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
                 catch (Exception ex)

@@ -16,55 +16,60 @@ namespace IpTrxCtrl.Core
         private const string Service = "IP-TRX-CTRL";
         private const string Account = "pairing-master";
         private static string KeyPath => Path.Combine(AppSettings.Folder, "pairing.key");
+        // id = null: chiave unica (server, e client fino alla 0.2.x); altrimenti la chiave di un server del client
+        private static string PathFor(string? id) => id == null ? KeyPath : Path.Combine(AppSettings.Folder, $"pairing-{id}.key");
+        private static string AccountFor(string? id) => id == null ? Account : $"pairing-{id}";
         private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("IP-TRX-CTRL-pairing-v1");
 
-        public static byte[]? LoadMaster()
+        public static byte[]? LoadMaster(string? id = null)
         {
             try
             {
                 byte[]? key = null;
+                string path = PathFor(id);
                 if (OperatingSystem.IsWindows())
                 {
-                    if (File.Exists(KeyPath))
-                        key = ProtectedData.Unprotect(File.ReadAllBytes(KeyPath), Entropy, DataProtectionScope.CurrentUser);
+                    if (File.Exists(path))
+                        key = ProtectedData.Unprotect(File.ReadAllBytes(path), Entropy, DataProtectionScope.CurrentUser);
                 }
                 else if (OperatingSystem.IsMacOS())
                 {
-                    string hex = Run("security", $"find-generic-password -s {Service} -a {Account} -w").Trim();
+                    string hex = Run("security", $"find-generic-password -s {Service} -a {AccountFor(id)} -w").Trim();
                     if (hex.Length == 64) key = Convert.FromHexString(hex);
                 }
                 else
                 {
-                    if (File.Exists(KeyPath)) key = Crypto.Open(LocalKey(), File.ReadAllBytes(KeyPath));
+                    if (File.Exists(path)) key = Crypto.Open(LocalKey(), File.ReadAllBytes(path));
                 }
                 return key != null && key.Length == 32 ? key : null;
             }
             catch { return null; }
         }
 
-        public static void SaveMaster(byte[] key)
+        public static void SaveMaster(byte[] key, string? id = null)
         {
+            string path = PathFor(id);
             if (OperatingSystem.IsWindows())
             {
-                File.WriteAllBytes(KeyPath, ProtectedData.Protect(key, Entropy, DataProtectionScope.CurrentUser));
+                File.WriteAllBytes(path, ProtectedData.Protect(key, Entropy, DataProtectionScope.CurrentUser));
             }
             else if (OperatingSystem.IsMacOS())
             {
-                Run("security", $"add-generic-password -U -s {Service} -a {Account} -w {Convert.ToHexString(key)}");
+                Run("security", $"add-generic-password -U -s {Service} -a {AccountFor(id)} -w {Convert.ToHexString(key)}");
             }
             else
             {
-                File.WriteAllBytes(KeyPath, Crypto.Seal(LocalKey(), key));
-                try { File.SetUnixFileMode(KeyPath, UnixFileMode.UserRead | UnixFileMode.UserWrite); } catch { }
+                File.WriteAllBytes(path, Crypto.Seal(LocalKey(), key));
+                try { File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite); } catch { }
             }
         }
 
-        public static void DeleteMaster()
+        public static void DeleteMaster(string? id = null)
         {
             try
             {
-                if (OperatingSystem.IsMacOS()) Run("security", $"delete-generic-password -s {Service} -a {Account}");
-                else File.Delete(KeyPath);
+                if (OperatingSystem.IsMacOS()) Run("security", $"delete-generic-password -s {Service} -a {AccountFor(id)}");
+                else File.Delete(PathFor(id));
             }
             catch { }
         }

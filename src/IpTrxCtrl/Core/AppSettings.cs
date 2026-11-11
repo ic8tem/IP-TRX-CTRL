@@ -24,6 +24,35 @@ namespace IpTrxCtrl.Core
     }
 
     /// <summary>Impostazioni salvate nella cartella dati dell'utente (IP-TRX-CTRL/settings.json).</summary>
+    /// <summary>Un server abbinato al client (dalla 0.3.0): la sua chiave sta nel deposito sicuro con questo Id.</summary>
+    public sealed class ServerEntry
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Callsign { get; set; } = "";
+        public string Ip { get; set; } = "";
+        public int ControlPort { get; set; }
+        public int AudioPort { get; set; }
+        public string Lan { get; set; } = "";
+        public DateTime PairedAt { get; set; }
+        public DateTime LastUsed { get; set; }
+
+        public override string ToString() => Name + (Callsign.Length > 0 && Callsign != Name ? $" · {Callsign}" : "");
+    }
+
+    /// <summary>Un client abbinato al server (dalla 0.3.0 il server ne ricorda più d'uno, uno collegato per volta).</summary>
+    public sealed class ClientEntry
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Callsign { get; set; } = "";
+        public string How { get; set; } = "";        // numero temporaneo, codice fisso, abbinamento precedente, scambio dei ruoli
+        public DateTime PairedAt { get; set; }
+        public DateTime LastUsed { get; set; }
+
+        public override string ToString() => Name + (Callsign.Length > 0 && Callsign != Name ? $" · {Callsign}" : "");
+    }
+
     public sealed class AppSettings
     {
         public bool FirstRunDone { get; set; }
@@ -123,7 +152,15 @@ namespace IpTrxCtrl.Core
         public string LastServerIp { get; set; } = "";
         public int LastServerControlPort { get; set; }
         public int LastServerAudioPort { get; set; }
-        public string LastServerLan { get; set; } = "";   // IP di rete locale del server (stessa rete del client)
+        public string LastServerLan { get; set; } = "";
+        // client: tutti i server abbinati e quello in uso (uno solo per volta)
+        public List<ServerEntry> Servers { get; set; } = new();
+        public string ActiveServerId { get; set; } = "";
+        // server: client abbinati e codice fisso (le cifre stanno nel deposito sicuro, non qui)
+        public List<ClientEntry> Clients { get; set; } = new();
+        public bool FixedCodeEnabled { get; set; }
+        // 0.3.0: la chiave unica delle 0.2.x è già passata negli elenchi
+        public bool KeysMigratedV3 { get; set; }   // IP di rete locale del server (stessa rete del client)
         public List<string> MqttBrokers { get; set; } = new() { "broker.hivemq.com:1883", "test.mosquitto.org:1883", "broker.emqx.io:1883" };
 
         public static List<CwMacro> DefaultMacros() => new()

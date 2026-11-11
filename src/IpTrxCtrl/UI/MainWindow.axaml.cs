@@ -145,6 +145,34 @@ namespace IpTrxCtrl.UI
             _s.Save();
         }
 
+        private bool _fillingServers;
+
+        /// <summary>Elenco dei server abbinati, con quello in uso selezionato.</summary>
+        private void FillServers()
+        {
+            _fillingServers = true;
+            var list = _node.Servers.OrderByDescending(x => x.LastUsed).ToList();
+            CmbServer.ItemsSource = list;
+            CmbServer.SelectedItem = list.FirstOrDefault(x => x.Id == _node.ActiveServer?.Id);
+            CmbServer.PlaceholderText = list.Count == 0 ? "nessun server abbinato" : "";
+            _fillingServers = false;
+        }
+
+        /// <summary>Scelta di un altro server: chiude il collegamento in corso e si collega a quello.</summary>
+        private async System.Threading.Tasks.Task OnServerPicked()
+        {
+            if (_fillingServers || CmbServer.SelectedItem is not ServerEntry e) return;
+            var cur = _node.ActiveServer;
+            if (cur != null && cur.Id == e.Id) return;
+            if (cur != null && _node.Stats.Connected
+                && !await Dialogs.YesNo(this, $"Mi scollego da «{cur.Name}» e mi collego a «{e.Name}»?"))
+            {
+                FillServers();
+                return;
+            }
+            if (!_node.SwitchServer(e.Id)) FillServers();
+        }
+
         private async void ShowPairing()
         {
             var w = new PairingWindow(_node, _s);
@@ -280,6 +308,11 @@ namespace IpTrxCtrl.UI
             BtnHelp.Click += async (_, _) => await new HelpWindow().ShowDialog(this);
 
             BtnSetQrg.Click += (_, _) => SendQrg();
+            // server abbinati (client): scelta, uno per volta
+            CmbServer.SelectionChanged += async (_, _) => await OnServerPicked();
+            BtnNewServer.Click += (_, _) => ShowPairing();
+            _node.ServersChanged += () => Dispatcher.UIThread.Post(FillServers);
+            FillServers();
             // rotella sulle cifre: cambia la cifra sotto il mouse (con riporto sulle altre)
             TxtQrg.PointerWheelChanged += (_, e) => OnQrgWheel(TxtQrg, false, e);
             TxtQrgB.PointerWheelChanged += (_, e) => OnQrgWheel(TxtQrgB, true, e);
@@ -446,6 +479,7 @@ namespace IpTrxCtrl.UI
                 ? "RADIO · IN LOCALE · " + (_s.UseExternalRigctld ? $"rigctld {_s.ExternalRigctldHost}:{_s.ExternalRigctldPort}" : "HAMLIB")
                 : "RADIO REMOTA" + (_tel.RigName.Length > 0 ? " · " + _tel.RigName.ToUpperInvariant() : "");
             TxtPeerTitle.Text = server ? "CLIENT (OPERATORE REMOTO)" : "SERVER (STAZIONE RADIO)";
+            PanelServerPick.IsVisible = !server;
             TxtClientIpLabel.Text = server ? "IP client" : "Mio IP (client)";
             TxtNetLocalLabel.Text = server ? "Rete server" : "Rete client";
             TxtNetPeerLabel.Text = server ? "Rete client" : "Rete server";

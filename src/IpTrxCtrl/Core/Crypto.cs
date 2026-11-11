@@ -125,6 +125,67 @@ namespace IpTrxCtrl.Core
         // segreto(10) | indirizzo(8) | controllo(1) = 19 byte
         public const int PairingSecretSize = 10;
 
+        // ---------- Numero di abbinamento (dalla 0.3.0) ----------
+        // 10 cifre a caso, valide 10 minuti e una sola volta. Il numero non contiene l'indirizzo del server
+        // (arriva solo cifrato sul broker MQTT). Il segreto si ricava con PBKDF2-SHA256 lento e con la finestra
+        // di 10 minuti come sale: provare tutti i 10 miliardi di numeri richiede troppo tempo, e una tabella
+        // calcolata prima non serve perché ogni finestra ha il suo sale.
+        public const int PairingDigits = 10;
+        public const int PairingWindowMinutes = 10;
+        private const int PairingIterations = 200_000;
+
+        public static string MakePairingNumber()
+        {
+            var sb = new StringBuilder(PairingDigits);
+            for (int i = 0; i < PairingDigits; i++) sb.Append((char)('0' + RandomNumberGenerator.GetInt32(10)));
+            return sb.ToString();
+        }
+
+        /// <summary>«4829130571» → «482 913 0571».</summary>
+        public static string FormatPairingNumber(string d) => d.Length == PairingDigits ? $"{d[..3]} {d[3..6]} {d[6..]}" : d;
+
+        /// <summary>Tiene solo le cifre; vero se sono esattamente 10.</summary>
+        public static bool TryNormalizePairingNumber(string input, out string digits)
+        {
+            digits = new string((input ?? "").Where(char.IsAsciiDigit).ToArray());
+            return digits.Length == PairingDigits;
+        }
+
+        // ---------- Codice fisso del server ----------
+        // 12 cifre che non scadono: per questo due cifre in più e un calcolo tre volte più lento del numero
+        // temporaneo (provare tutti i codici richiederebbe anni di calcolo anche con hardware dedicato).
+        public const int FixedCodeDigits = 12;
+        private const int FixedIterations = 600_000;
+
+        public static string MakeFixedCode()
+        {
+            var sb = new StringBuilder(FixedCodeDigits);
+            for (int i = 0; i < FixedCodeDigits; i++) sb.Append((char)('0' + RandomNumberGenerator.GetInt32(10)));
+            return sb.ToString();
+        }
+
+        /// <summary>«482913057712» → «4829 1305 7712».</summary>
+        public static string FormatFixedCode(string d) => d.Length == FixedCodeDigits ? $"{d[..4]} {d[4..8]} {d[8..]}" : d;
+
+        public static byte[] PairingSecretFromFixedCode(string digits) =>
+            Rfc2898DeriveBytes.Pbkdf2(Encoding.ASCII.GetBytes(digits), Encoding.ASCII.GetBytes("IP-TRX-CTRL codice fisso del server v3"),
+                FixedIterations, HashAlgorithmName.SHA256, KeySize);
+
+        /// <summary>Solo le cifre: 10 = numero temporaneo, 12 = codice fisso del server.</summary>
+        public static bool TryNormalizeAnyCode(string input, out string digits)
+        {
+            digits = new string((input ?? "").Where(char.IsAsciiDigit).ToArray());
+            return digits.Length == PairingDigits || digits.Length == FixedCodeDigits;
+        }
+
+        /// <summary>Finestra di 10 minuti (UTC) in cui cade un istante.</summary>
+        public static long PairingWindow(DateTime utc) => new DateTimeOffset(utc).ToUnixTimeSeconds() / (PairingWindowMinutes * 60);
+
+        public static byte[] PairingSecretFromNumber(string digits, long window) =>
+            Rfc2898DeriveBytes.Pbkdf2(Encoding.ASCII.GetBytes(digits),
+                Encoding.ASCII.GetBytes("IP-TRX-CTRL abbinamento v3 | finestra " + window.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                PairingIterations, HashAlgorithmName.SHA256, KeySize);
+
         public static string MakePairingCode(byte[] secret, ServerAddress addr)
         {
             byte[] body = Concat(secret, addr.ToBytes());

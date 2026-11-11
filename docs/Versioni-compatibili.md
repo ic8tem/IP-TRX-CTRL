@@ -6,8 +6,9 @@ Server e client devono avere versioni dello stesso **protocollo**. Il protocollo
 |---|---|---|
 | 0.1.0 – 0.1.3 | 1 | solo le 0.1.x |
 | 0.2.0 – 0.2.8 | 2 | tutte le 0.2.x |
+| 0.3.0 | 3 | solo le 0.3.x (numero a 10 cifre, codice fisso del server, più client sul server) |
 
-Una 0.1.x e una 0.2.x **non** vanno usate insieme: aggiorna tutti e due i PC.
+Una 0.1.x e una 0.2.x **non** vanno usate insieme, e nemmeno una 0.2.x e una 0.3.x: aggiorna tutti e due i PC. La 0.3.0 cambia l'abbinamento (numero a 10 cifre al posto del codice lungo); le chiavi già scambiate restano valide e passano da sole nell'elenco dei server del client e nell'elenco dei client del server.
 
 ## Funzioni che richiedono una versione minima su entrambi i PC
 
@@ -21,6 +22,8 @@ Una 0.1.x e una 0.2.x **non** vanno usate insieme: aggiorna tutti e due i PC.
 | Protezione ROS: barra lampeggiante, blocco della trasmissione e finestra sul client | 0.2.4 |
 | CAT e audio del server via TCI (ExpertSDR, Thetis e altri SDR) | 0.2.5 (basta sul server) |
 | Ciclo delle porte anche nell'abbinamento (20 giri, porte sempre nuove, collegamento inverso) | 0.2.7 su entrambi i PC |
+| Numero di abbinamento a 10 cifre, elenco dei server sul client | 0.3.0 su entrambi i PC |
+| Più client sul server (uno collegato per volta, «server occupato»), codice fisso del server | 0.3.0 su entrambi i PC |
 
 ## Controllo automatico (dalla 0.2.3)
 

@@ -53,8 +53,20 @@ namespace IpTrxCtrl.Core
         public RigTelemetry LastTelemetry { get; private set; } = new();
         public DeviceStateInfo DeviceState { get; private set; } = new();
         public NodeRole Role => _s.Role;
-        public bool IsPaired => _master != null;
-        public string Fingerprint => _master == null ? "" : Crypto.Fingerprint(_master);
+        public bool IsPaired => IsServer ? ClientCount > 0 : _master != null;
+        public string Fingerprint => _master != null ? Crypto.Fingerprint(_master)
+            : IsServer && ClientCount > 0 ? $"{ClientCount} client abbinati" : "";
+
+        // server: più client abbinati (una chiave ciascuno, uno collegato per volta) e codice fisso
+        private readonly Dictionary<string, byte[]> _clientKeys = new();
+        private readonly Dictionary<string, Rendezvous> _clientRdvs = new();
+        private string _sessionClientId = "";
+        private string _fixedDigits = "";
+        private volatile byte[]? _fixedSecret;
+        private CancellationTokenSource? _fixedCts;
+        private DateTime _busyUntil = DateTime.MinValue;   // client: server occupato da un altro operatore
+        public event Action? ClientsChanged;
+        private int ClientCount { get { lock (_clientKeys) return _clientKeys.Count; } }
 
         public event Action? StatsChanged;
         public event Action<RigTelemetry>? TelemetryChanged;
@@ -96,6 +108,10 @@ namespace IpTrxCtrl.Core
         private long _pairLastTicks;
         private int _pairRoundPort;
         private TcpListener? _pairRoundListener;
+        /// <summary>Server: il numero di abbinamento è scaduto.</summary>
+        public event Action? PairingExpired;
+        /// <summary>Client: l'elenco dei server o quello in uso è cambiato.</summary>
+        public event Action? ServersChanged;
         /// <summary>Client: giro del ciclo delle porte durante l'abbinamento (giro, totale).</summary>
         public event Action<int, int>? PairingRound;
         private CancellationTokenSource? _pairListenCts;
@@ -141,8 +157,7 @@ namespace IpTrxCtrl.Core
         public Node(AppSettings s)
         {
             _s = s;
-            _master = KeyStore.LoadMaster();
-            if (_master != null) _rdv = new Rendezvous(_master, _s.MqttBrokers);
+            LoadKeyForRole();
             Rig = new RigControl(s);
             Rig.Updated += OnRigUpdated;
             Audio.Captured += OnCaptured;
@@ -274,6 +289,7 @@ namespace IpTrxCtrl.Core
         private async Task StartServerCoreAsync(bool keepChannels)
         {
             await StopServerAsync(!keepChannels);
+            LoadServerKeys();   // tutti i client abbinati (anche dopo lo scambio dei ruoli)
             _serverCts = new CancellationTokenSource();
             var ct = _serverCts.Token;
             _ports = new PortManager { Log = PortLog };
@@ -283,6 +299,7 @@ namespace IpTrxCtrl.Core
             bool ok = await OpenServerPortsAsync(ct);
             _ = Task.Run(() => PublishLoopAsync(ct));
             _ = Task.Run(() => ReverseLoopAsync(ct));
+            RestartFixedListener();
 
             if (_ports.CgnatSuspected)
                 Notice?.Invoke("Il tuo operatore sembra usare il CGNAT: il server potrebbe non essere raggiungibile da internet.");
@@ -453,16 +470,29 @@ namespace IpTrxCtrl.Core
         /// </summary>
         private async Task ReverseLoopAsync(CancellationToken ct)
         {
-            long lastTicks = DateTime.UtcNow.AddMinutes(-2).Ticks;   // le proposte vecchie non contano
+            long start = DateTime.UtcNow.AddMinutes(-2).Ticks;   // le proposte vecchie non contano
+            var lastTicks = new Dictionary<string, long>();
             while (!ct.IsCancellationRequested)
             {
                 try { await Task.Delay(TimeSpan.FromSeconds(4), ct); } catch { break; }
-                if (_control != null || _rdv == null || _master == null || _ports == null) continue;
-                PortOffer? o;
-                try { o = await _rdv.LookupOfferAsync(ct); } catch { continue; }
-                if (o == null || o.Ticks <= lastTicks) continue;
-                lastTicks = o.Ticks;
-                SessionLog.Write($"PORTE giro {o.Round}/{MaxPortRounds}: il client propone {o.Ip} porte {o.ControlPort}/{o.AudioPort} (non ha raggiunto la porta {o.TriedServerPort} del server)"
+                if (_control != null || _ports == null) continue;
+                // ogni client abbinato ha il suo canale cifrato sul broker: guardo le proposte di tutti
+                List<(string id, Rendezvous rdv, byte[] key)> all;
+                lock (_clientKeys) all = _clientRdvs.Select(kv => (kv.Key, kv.Value, _clientKeys[kv.Key])).ToList();
+                PortOffer? o = null;
+                string cid = "";
+                byte[]? ckey = null;
+                foreach (var (id, rdv, key) in all)
+                {
+                    PortOffer? x;
+                    try { x = await rdv.LookupOfferAsync(ct); } catch { continue; }
+                    if (x == null || x.Ticks <= lastTicks.GetValueOrDefault(id, start)) continue;
+                    lastTicks[id] = x.Ticks;
+                    o = x; cid = id; ckey = key;
+                    break;
+                }
+                if (o == null || ckey == null) continue;
+                SessionLog.Write($"PORTE giro {o.Round}/{MaxPortRounds}: {ClientName(cid)} propone {o.Ip} porte {o.ControlPort}/{o.AudioPort} (non ha raggiunto la porta {o.TriedServerPort} del server)"
                     + (o.Restricted ? $" · la sua rete fa uscire solo le porte {string.Join(", ", o.OutboundPorts)}" : ""));
                 if (o.Restricted && o.OutboundPorts.Count >= 2)
                 {
@@ -478,13 +508,13 @@ namespace IpTrxCtrl.Core
                 else if (o.Restricted)
                     SessionLog.Write("PORTE la rete del client fa uscire meno di due porte utili: il collegamento da quella rete non è possibile");
                 if (o.ControlPort > 0 && IPAddress.TryParse(o.Ip, out var ip)
-                    && await ConnectReverseAsync(ip, o.ControlPort, o.AudioPort, ct)) continue;
+                    && await ConnectReverseAsync(ip, o.ControlPort, o.AudioPort, ckey, ct)) continue;
                 if (o.TriedServerPort == 0 || o.TriedServerPort == _ctlPort || _ctlPort == 0)
                     await RotateServerPortsAsync(ct);
             }
         }
 
-        private async Task<bool> ConnectReverseAsync(IPAddress ip, int ctlPort, int audPort, CancellationToken ct)
+        private async Task<bool> ConnectReverseAsync(IPAddress ip, int ctlPort, int audPort, byte[] key, CancellationToken ct)
         {
             var tcp = new TcpClient();
             try
@@ -494,11 +524,11 @@ namespace IpTrxCtrl.Core
                     t.CancelAfter(6000);
                     await tcp.ConnectAsync(ip, ctlPort, t.Token);
                 }
-                var res = await SecureChannel.AcceptAsync(tcp, ChannelKind.Control, _master, null, ct);
+                var res = await SecureChannel.AcceptAsync(tcp, ChannelKind.Control, key, null, ct);
                 if (res.Channel == null) { tcp.Dispose(); return false; }
                 SessionLog.Write($"PORTE collegamento inverso riuscito: il server si è collegato alle porte del client {ip}:{ctlPort}");
                 var ctlCh = res.Channel;
-                _ = Task.Run(() => ServeChannelAsync(ctlCh, ChannelKind.Control, ct));
+                _ = Task.Run(() => ServeChannelAsync(ctlCh, ChannelKind.Control, key, ct));
                 for (int i = 0; i < 3 && audPort > 0 && !ct.IsCancellationRequested; i++)
                 {
                     var at = new TcpClient();
@@ -509,11 +539,11 @@ namespace IpTrxCtrl.Core
                             t.CancelAfter(6000);
                             await at.ConnectAsync(ip, audPort, t.Token);
                         }
-                        var ar = await SecureChannel.AcceptAsync(at, ChannelKind.Audio, _master, null, ct);
+                        var ar = await SecureChannel.AcceptAsync(at, ChannelKind.Audio, key, null, ct);
                         if (ar.Channel != null)
                         {
                             var audCh = ar.Channel;
-                            _ = Task.Run(() => ServeChannelAsync(audCh, ChannelKind.Audio, ct));
+                            _ = Task.Run(() => ServeChannelAsync(audCh, ChannelKind.Audio, key, ct));
                             break;
                         }
                         at.Dispose();
@@ -617,8 +647,12 @@ namespace IpTrxCtrl.Core
             }
             _pairingWatch = false;
             Log('·', $"indirizzo pubblico {addr.Value.Ip} · porte {addr.Value.ControlPort} / {addr.Value.AudioPort} · UPnP {(_ports?.UpnpAvailable == true ? "ok" : "non disponibile")}");
-            _pairingSecret = RandomNumberGenerator.GetBytes(Crypto.PairingSecretSize);
-            string code = Crypto.MakePairingCode(_pairingSecret, addr.Value);
+            // numero a 10 cifre: non contiene l'indirizzo (che il client riceve cifrato dal broker)
+            string number = Crypto.MakePairingNumber();
+            long window = Crypto.PairingWindow(DateTime.UtcNow);
+            _pairingSecret = await Task.Run(() => Crypto.PairingSecretFromNumber(number, window), ct);
+            string code = Crypto.FormatPairingNumber(number);
+            Log('·', $"numero di abbinamento pronto: vale {Crypto.PairingWindowMinutes} minuti e una sola volta");
             lock (_pairTriedSrv) _pairTriedSrv.Clear();
             _pairLastTicks = 0;
             if (_keptUnreachable)
@@ -631,6 +665,15 @@ namespace IpTrxCtrl.Core
             var lct = _pairListenCts.Token;
             _ = Task.Run(() => PairingRendezvous.ServerListenAsync(secret, PairInfo,
                 o => OnPairOfferAsync(o, secret, lct), _s.MqttBrokers, Log, lct));
+            // scadenza: dopo 10 minuti il numero non vale più (salvo un ciclo delle porte già in corso)
+            _ = Task.Run(async () =>
+            {
+                try { await Task.Delay(TimeSpan.FromMinutes(Crypto.PairingWindowMinutes), lct); } catch { return; }
+                if (!ReferenceEquals(_pairingSecret, secret) || _pairLastTicks != 0) return;
+                Log('✗', $"il numero è scaduto ({Crypto.PairingWindowMinutes} minuti): premi Riprova per averne uno nuovo");
+                CancelPairing();
+                PairingExpired?.Invoke();
+            });
             return code;
         }
 
@@ -667,7 +710,7 @@ namespace IpTrxCtrl.Core
             try { await _pairRoundLock.WaitAsync(ct); } catch { return null; }
             try
             {
-                if (_pairingSecret == null || !ReferenceEquals(secret, _pairingSecret) || o.Ticks <= _pairLastTicks) return null;
+                if (!IsActivePairingSecret(secret) || o.Ticks <= _pairLastTicks) return null;
                 _pairLastTicks = o.Ticks;   // la stessa proposta arriva da più broker: una sola volta
                 Log('◀', $"giro {o.Round}/{MaxPortRounds} · il client propone IP {o.Ip}, porta TCP {(o.ControlPort > 0 ? o.ControlPort.ToString() : "nessuna")}"
                          + (o.Restricted ? $" · dalla sua rete escono solo le porte {string.Join(", ", o.OutboundPorts)}" : ""));
@@ -675,7 +718,7 @@ namespace IpTrxCtrl.Core
                 // 1) collegamento inverso: il server si collega alla porta aperta dal client
                 if (o.ControlPort > 0 && IPAddress.TryParse(o.Ip, out var cip) && await PairReverseAsync(cip, o.ControlPort, secret, ct))
                     return null;
-                if (_pairingSecret == null) return null;
+                if (!IsActivePairingSecret(secret)) return null;
 
                 // 2) porta nuova del server
                 var pm = _ports;
@@ -729,8 +772,8 @@ namespace IpTrxCtrl.Core
                     t.CancelAfter(6000);
                     await tcp.ConnectAsync(ip, port, t.Token);
                 }
-                var res = await SecureChannel.AcceptAsync(tcp, ChannelKind.Control, _master, secret, ct);
-                if (res.NewMaster != null && CompleteServerPairing(res.NewMaster, $" · collegamento inverso sulla porta {port} del client")) return true;
+                var res = await SecureChannel.AcceptAsync(tcp, ChannelKind.Control, (Func<byte[], byte[]?>?)null, new[] { secret }, ct);
+                if (res.NewMaster != null && CompleteServerPairing(res.NewMaster, $" · collegamento inverso sulla porta {port} del client", secret)) return true;
                 res.Channel?.Dispose();
             }
             catch (Exception ex) when (!ct.IsCancellationRequested) { Log('✗', $"porta {port} del client: {Why(ex)}"); }
@@ -761,23 +804,51 @@ namespace IpTrxCtrl.Core
             if (p > 0 && p != _ctlPort && _ports != null) await _ports.ClosePortAsync(p);
         }
 
-        /// <summary>Server: abbinamento riuscito (vale il primo, se ne arrivassero due insieme).</summary>
-        private bool CompleteServerPairing(byte[] master, string how)
+        /// <summary>
+        /// Server: abbinamento riuscito. Con il numero temporaneo vale il primo (poi il numero non vale più);
+        /// con il codice fisso il codice resta valido. In tutti e due i casi il client si aggiunge all'elenco.
+        /// </summary>
+        private bool CompleteServerPairing(byte[] master, string how, byte[]? usedSecret)
         {
-            lock (_pairDoneLock)
+            bool fixedCode = usedSecret != null && ReferenceEquals(usedSecret, _fixedSecret);
+            if (!fixedCode)
             {
-                if (_pairingSecret == null) return false;
-                _pairingSecret = null;
+                lock (_pairDoneLock)
+                {
+                    if (_pairingSecret == null) return false;
+                    _pairingSecret = null;
+                }
+                _pairListenCts?.Cancel();
             }
-            SetMaster(master);
-            _pairListenCts?.Cancel();
+            SetMaster(master, fixedCode ? "codice fisso" : "numero temporaneo");
             Log('◀', "handshake ECDH P-256 ok · chiave AES-256 derivata");
-            Log('✓', "Abbinamento completato" + how);
+            Log('✓', "Abbinamento completato" + how + (fixedCode ? " · con il codice fisso del server" : ""));
             PairingCompleted?.Invoke();
-            _ = ClosePairRoundPortAsync();
+            if (_pairingSecret == null) _ = ClosePairRoundPortAsync();
             var sct = _serverCts?.Token ?? CancellationToken.None;
             _ = PublishNowAsync(sct);
             return true;
+        }
+
+        private bool IsActivePairingSecret(byte[] secret) =>
+            ReferenceEquals(secret, _pairingSecret) || (ReferenceEquals(secret, _fixedSecret) && _s.FixedCodeEnabled);
+
+        /// <summary>Segreti di abbinamento accettati ora dal server: numero temporaneo e codice fisso (se attivo).</summary>
+        private IReadOnlyList<byte[]>? PairingSecrets()
+        {
+            var l = new List<byte[]>(2);
+            if (_pairingSecret is { } p) l.Add(p);
+            if (_s.FixedCodeEnabled && _fixedSecret is { } f) l.Add(f);
+            return l.Count > 0 ? l : null;
+        }
+
+        /// <summary>Server: chiave del client che si presenta con questo identificativo di abbinamento.</summary>
+        private byte[]? MasterFor(byte[] pairId)
+        {
+            lock (_clientKeys)
+                foreach (var k in _clientKeys.Values)
+                    if (Crypto.Equal(pairId, Crypto.PairId(k))) return k;
+            return null;
         }
 
         private async Task AcceptLoopAsync(TcpListener listener, ChannelKind kind, CancellationToken ct)
@@ -791,16 +862,16 @@ namespace IpTrxCtrl.Core
                 {
                     try
                     {
-                        var res = await SecureChannel.AcceptAsync(tcp, kind, _master, _pairingSecret, ct);
+                        var res = await SecureChannel.AcceptAsync(tcp, kind, MasterFor, PairingSecrets(), ct);
                         if (res.NewMaster != null)
                         {
                             // abbinamento arrivato sulla porta di un giro del ciclo: diventa la porta di controllo
                             if (ReferenceEquals(listener, _pairRoundListener)) PromotePairRoundPort();
-                            CompleteServerPairing(res.NewMaster, "");
+                            CompleteServerPairing(res.NewMaster, "", res.PairingSecret);
                             return;
                         }
-                        if (res.Channel == null) return;
-                        await ServeChannelAsync(res.Channel, kind, ct);
+                        if (res.Channel == null || res.Master == null) return;
+                        await ServeChannelAsync(res.Channel, kind, res.Master, ct);
                     }
                     catch { }
                 }, ct);
@@ -808,10 +879,25 @@ namespace IpTrxCtrl.Core
         }
 
         /// <summary>Server: canale autenticato (in arrivo o collegamento inverso) fino alla sua chiusura.</summary>
-        private async Task ServeChannelAsync(SecureChannel ch, ChannelKind kind, CancellationToken ct)
+        private async Task ServeChannelAsync(SecureChannel ch, ChannelKind kind, byte[] master, CancellationToken ct)
         {
+            string cid = KeyIdOf(master);
             if (kind == ChannelKind.Control)
             {
+                // un operatore per volta: un altro client collegato riceve «server occupato»;
+                // lo stesso client che si ricollega (cambio di rete) prende il posto della sua vecchia sessione
+                if (_control != null && _sessionClientId.Length > 0 && _sessionClientId != cid)
+                {
+                    string who = _s.PeerCallsign.Length > 0 ? _s.PeerCallsign : ClientName(_sessionClientId);
+                    SessionLog.Write($"SESSIONE rifiutata a {ClientName(cid)}: è collegato {who}");
+                    try { await ch.SendAsync(new MsgWriter(Msg.Busy).Str(who).Build(), ct); await Task.Delay(500, ct); } catch { }
+                    ch.Dispose();
+                    return;
+                }
+                if (_sessionClientId != cid) StopUdp();
+                _master = master;
+                _sessionClientId = cid;
+                if (_s.Clients.FirstOrDefault(x => x.Id == cid) is { } ce) { ce.LastUsed = DateTime.Now; _s.Save(); }
                 var old = Interlocked.Exchange(ref _control, ch);
                 old?.Dispose();
                 OnConnected();
@@ -824,6 +910,7 @@ namespace IpTrxCtrl.Core
             }
             else
             {
+                if (_sessionClientId.Length > 0 && _sessionClientId != cid) { ch.Dispose(); return; }   // audio di un altro client
                 var old = Interlocked.Exchange(ref _audio, ch);
                 old?.Dispose();
                 ResetAudioStats();
@@ -844,7 +931,7 @@ namespace IpTrxCtrl.Core
                         var ip = await _ports.RefreshExternalIpAsync(ct);
                         UpdateServerEndpoint();
                         bool changed = ip != null && !ip.Equals(lastIp);
-                        if (_master != null && (changed || DateTime.UtcNow - lastPublish > TimeSpan.FromMinutes(10)))
+                        if (ClientCount > 0 && (changed || DateTime.UtcNow - lastPublish > TimeSpan.FromMinutes(10)))
                         {
                             await PublishNowAsync(ct);
                             lastIp = ip;
@@ -858,13 +945,26 @@ namespace IpTrxCtrl.Core
             }
         }
 
+        /// <summary>Server: indirizzo cifrato sul broker per ogni client abbinato (ognuno lo legge con la sua chiave).</summary>
         private async Task PublishNowAsync(CancellationToken ct)
         {
             var addr = CurrentServerAddress;
-            if (addr == null || _rdv == null || _master == null) return;
-            bool ok = await _rdv.PublishAsync(addr.Value, LanIp(), AppVersion.Tag, ct);
-            Stats.MqttOk = _rdv.LastOkBrokers;
-            FallbackCodeChanged?.Invoke(ok ? null : Crypto.MakeFallbackCode(_master, addr.Value));
+            if (addr == null) return;
+            List<(string id, Rendezvous rdv, byte[] key)> all;
+            lock (_clientKeys) all = _clientRdvs.Select(kv => (kv.Key, kv.Value, _clientKeys[kv.Key])).ToList();
+            if (all.Count == 0) return;
+            bool anyOk = false;
+            int brokers = 0;
+            foreach (var (_, rdv, _) in all)
+            {
+                bool ok = await rdv.PublishAsync(addr.Value, LanIp(), AppVersion.Tag, ct);
+                anyOk |= ok;
+                brokers = Math.Max(brokers, rdv.LastOkBrokers);
+            }
+            Stats.MqttOk = brokers;
+            // codice di riserva (broker irraggiungibili): per il client usato più di recente
+            var recent = _s.Clients.OrderByDescending(c => c.LastUsed).Select(c => all.FirstOrDefault(a => a.id == c.Id)).FirstOrDefault(a => a.key != null);
+            FallbackCodeChanged?.Invoke(anyOk || recent.key == null ? null : Crypto.MakeFallbackCode(recent.key, addr.Value));
         }
 
         private async Task ReplaceAudioPortAsync(SecureChannel control, CancellationToken ct)
@@ -914,16 +1014,43 @@ namespace IpTrxCtrl.Core
         /// </summary>
         public async Task<string?> PairClientAsync(string code, CancellationToken ct)
         {
-            if (!Crypto.TryParsePairingCode(code, out byte[] secret, out ServerAddress addr))
+            if (!Crypto.TryNormalizeAnyCode(code, out string digits))
             {
-                Log('✗', "codice non valido: controlla di averlo scritto bene");
-                return "Codice non valido: controlla di averlo scritto bene.";
+                Log('✗', $"servono {Crypto.PairingDigits} cifre (numero temporaneo) o {Crypto.FixedCodeDigits} (codice fisso del server): controlla di averlo scritto bene");
+                return $"Numero non valido: servono {Crypto.PairingDigits} cifre, o {Crypto.FixedCodeDigits} per il codice fisso del server.";
             }
-            Log('·', $"codice letto · indirizzo nel codice {addr.Ip} · porte {addr.ControlPort} / {addr.AudioPort}");
-            var found = await PairingRendezvous.ClientFindAsync(secret, _s.Callsign, _s.MqttBrokers, Log, ct);
+            bool fixedCode = digits.Length == Crypto.FixedCodeDigits;
+            byte[][] secrets;
+            if (fixedCode)
+            {
+                Log('·', $"codice fisso del server: {Crypto.FormatFixedCode(digits)} · calcolo la chiave (qualche secondo)…");
+                secrets = new[] { await Task.Run(() => Crypto.PairingSecretFromFixedCode(digits), ct) };
+            }
+            else
+            {
+                // il server ha creato il numero in una finestra di 10 minuti: provo quella attuale, le due prima e
+                // quella dopo (attesa fino a 10 minuti e orologi dei due PC non perfettamente allineati)
+                Log('·', $"numero letto: {Crypto.FormatPairingNumber(digits)} · calcolo le chiavi (qualche secondo)…");
+                long now = Crypto.PairingWindow(DateTime.UtcNow);
+                long[] windows = { now, now - 1, now - 2, now + 1 };
+                secrets = await Task.Run(() => windows.AsParallel().AsOrdered().Select(w => Crypto.PairingSecretFromNumber(digits, w)).ToArray(), ct);
+            }
+            var found = await PairingRendezvous.ClientFindAsync(secrets, _s.Callsign, _s.MqttBrokers, Log, ct);
+            if (found == null)
+            {
+                if (ct.IsCancellationRequested) return null;
+                if (fixedCode)
+                {
+                    Log('✗', "nessun server ha risposto a questo codice fisso: controlla le cifre, che il server sia acceso e che sul server il codice fisso sia attivo");
+                    return "Nessun server ha risposto a questo codice fisso (cifre sbagliate, codice fisso disattivato o cambiato, server spento).";
+                }
+                Log('✗', "nessun server ha risposto a questo numero: controlla le cifre, che non sia scaduto (vale 10 minuti) e che il server sia in attesa");
+                return "Nessun server ha risposto a questo numero (cifre sbagliate, numero scaduto o broker MQTT irraggiungibili).";
+            }
+            byte[] secret = found.Secret;
+            ServerAddress addr;
             string lan = "";
             bool srvUnreach = false;
-            if (found != null)
             {
                 addr = found.Addr; lan = found.Lan; srvUnreach = found.Unreachable;
                 var (sp, sv) = AppVersion.Parse(found.Version);
@@ -936,7 +1063,6 @@ namespace IpTrxCtrl.Core
                 string n = AppVersion.Notes(sp, sv, true);
                 Log(n.Length > 0 ? '·' : '✓', n.Length > 0 ? n : $"versioni compatibili: server {sv}, client {AppVersion.Text}");
             }
-            else Log('·', "nessuna risposta dai broker: provo l'indirizzo scritto nel codice");
 
             // stessa rete? Se questo PC esce su internet con lo stesso IP del server, conta la rete locale
             IPAddress? myPub = null;
@@ -976,11 +1102,6 @@ namespace IpTrxCtrl.Core
 
             if (master == null && !ct.IsCancellationRequested)
             {
-                if (found == null)
-                {
-                    Log('✗', "senza i broker MQTT il ciclo delle porte non si può fare (serve per scambiarsi le porte con il server)");
-                    return "Abbinamento non riuscito: server non raggiungibile e broker MQTT senza risposta (vedi il registro).";
-                }
                 var r = await PairPortCycleAsync(secret, addr, lanIp, srvUnreach, found.Cgnat, ct);
                 if (r != null) { master = r.Value.master; used = r.Value.addr; }
             }
@@ -1157,6 +1278,7 @@ namespace IpTrxCtrl.Core
             _s.LastServerIp = a.Ip.ToString();
             _s.LastServerControlPort = a.ControlPort;
             _s.LastServerAudioPort = a.AudioPort;
+            SyncActiveEntry();
             _s.Save();
         }
 
@@ -1169,6 +1291,8 @@ namespace IpTrxCtrl.Core
             int failedRounds = 0, round = 0;
             while (!ct.IsCancellationRequested)
             {
+                var busyWait = _busyUntil - DateTime.UtcNow;   // un altro operatore usa il server
+                if (busyWait > TimeSpan.Zero) { try { await Task.Delay(busyWait, ct); } catch { break; } }
                 if (_master == null)
                 {
                     SetStatus("In attesa dell'abbinamento", false);
@@ -1204,7 +1328,7 @@ namespace IpTrxCtrl.Core
                     SetStatus("Cerco il server…", false);
                     var found = await _rdv.LookupAsync(ct);
                     Stats.MqttOk = _rdv.LastOkBrokers;
-                    if (_rdv.LastLan.Length > 0 && _rdv.LastLan != _s.LastServerLan) { _s.LastServerLan = _rdv.LastLan; _s.Save(); }
+                    if (_rdv.LastLan.Length > 0 && _rdv.LastLan != _s.LastServerLan) { _s.LastServerLan = _rdv.LastLan; SyncActiveEntry(); _s.Save(); }
                     if (found != null && !found.Equals(target))
                     {
                         target = found;
@@ -1443,6 +1567,21 @@ namespace IpTrxCtrl.Core
                         case Msg.Hello:
                             {
                                 _s.PeerCallsign = r.Str();
+                                if (IsServer && _s.Clients.FirstOrDefault(x => x.Id == _sessionClientId) is { } ce && ce.Callsign != _s.PeerCallsign)
+                                {
+                                    if (ce.Name.Length == 0 || ce.Name.StartsWith("Client ", StringComparison.Ordinal) || ce.Name == ce.Callsign) ce.Name = _s.PeerCallsign;
+                                    ce.Callsign = _s.PeerCallsign;
+                                    _s.Save();
+                                    ClientsChanged?.Invoke();
+                                }
+                                if (!IsServer && ActiveServer is { } se && se.Callsign != _s.PeerCallsign)
+                                {
+                                    // il nominativo del server dà anche il nome al posto in elenco, se non è stato rinominato
+                                    if (se.Name.Length == 0 || se.Name.StartsWith("Server ", StringComparison.Ordinal) || se.Name == se.Callsign) se.Name = _s.PeerCallsign;
+                                    se.Callsign = _s.PeerCallsign;
+                                    _s.Save();
+                                    ServersChanged?.Invoke();
+                                }
                                 Stats.PeerNet = r.AtEnd ? "" : r.Str();
                                 var (pp, pv) = AppVersion.Parse(r.AtEnd ? "" : r.Str());
                                 Stats.PeerVersion = AppVersion.Show(pv);
@@ -1450,6 +1589,15 @@ namespace IpTrxCtrl.Core
                                 SessionLog.Write($"VERSIONE questo PC {AppVersion.Text} · altro PC {Stats.PeerVersion} (protocollo {pp})" + (note.Length > 0 ? " · " + note : " · compatibili"));
                                 if (note.Length > 0) VersionWarning?.Invoke(note, AppVersion.Compatible(pp));
                                 _s.Save(); StatsChanged?.Invoke();
+                            }
+                            break;
+                        case Msg.Busy:
+                            if (!IsServer)
+                            {
+                                string who = r.Str();
+                                _busyUntil = DateTime.UtcNow.AddSeconds(30);
+                                SessionLog.Write($"SESSIONE il server è occupato: è collegato {who}");
+                                Notice?.Invoke($"Il server è occupato: è collegato {who}. Riprovo da solo tra 30 secondi.");
                             }
                             break;
                         case Msg.PeerInfo:
@@ -1969,6 +2117,7 @@ namespace IpTrxCtrl.Core
             var oldCtl = _control;
             var oldClientCts = _clientCts;
 
+            if (_master != null) { AddClient(_master, "scambio dei ruoli"); _sessionClientId = KeyIdOf(_master); }   // l'altro PC diventa un client abbinato
             _s.Role = NodeRole.Server;
             _s.Save();
             await StartServerAsync(keepChannels: true);
@@ -1996,6 +2145,7 @@ namespace IpTrxCtrl.Core
             Rig.Stop();
             await StopServerAsync();
             _s.Role = NodeRole.Client;
+            if (_master != null) SetMaster(_master);              // l'altro PC entra nell'elenco dei server
             RememberServer(newServer);
             _s.Save();
             SessionLog.Write("RUOLI invertiti: questo PC ora è CLIENT");
@@ -2005,20 +2155,327 @@ namespace IpTrxCtrl.Core
 
         // =================================================================== varie
 
-        private void SetMaster(byte[] master)
+        private void SetMaster(byte[] master, string how = "")
         {
+            if (_s.Role == NodeRole.Server) { AddClient(master, how); return; }
             _master = master;
-            KeyStore.SaveMaster(master);
+            {
+                // client: ogni server ha la sua chiave; questo diventa quello in uso
+                string id = KeyIdOf(master);
+                var e = _s.Servers.FirstOrDefault(x => x.Id == id);
+                if (e == null)
+                {
+                    e = new ServerEntry { Id = id, Name = $"Server {_s.Servers.Count + 1}", PairedAt = DateTime.Now };
+                    _s.Servers.Add(e);
+                }
+                KeyStore.SaveMaster(master, id);
+                _s.ActiveServerId = id;
+                e.LastUsed = DateTime.Now;
+                _s.PeerCallsign = e.Callsign;
+                _s.Save();
+                SessionLog.Write($"SERVER abbinato: {e.Name} (id {id})");
+                ServersChanged?.Invoke();
+            }
             _rdv = new Rendezvous(master, _s.MqttBrokers);
         }
 
         public void ForgetPairing()
         {
-            KeyStore.DeleteMaster();
-            _master = null;
-            _rdv = null;
-            CloseChannels();
-            SessionLog.Write("ABBINAMENTO cancellato dall'utente");
+            if (_s.Role == NodeRole.Client && ActiveServer is { } active) { DeleteServer(active.Id); return; }
+            foreach (var c in _s.Clients.ToList()) RemoveClient(c.Id);
+            SessionLog.Write("ABBINAMENTO cancellato dall'utente: tutti i client tolti");
+        }
+
+        // =================================================================== client abbinati (server)
+
+        public IReadOnlyList<ClientEntry> Clients => _s.Clients;
+        public string SessionClientId => _control != null ? _sessionClientId : "";
+
+        private string ClientName(string id) => _s.Clients.FirstOrDefault(x => x.Id == id)?.Name ?? ("client " + id);
+
+        private void AddClient(byte[] master, string how)
+        {
+            string id = KeyIdOf(master);
+            var e = _s.Clients.FirstOrDefault(x => x.Id == id);
+            if (e == null)
+            {
+                e = new ClientEntry { Id = id, Name = $"Client {_s.Clients.Count + 1}", PairedAt = DateTime.Now, How = how };
+                _s.Clients.Add(e);
+            }
+            KeyStore.SaveMaster(master, "cli-" + id);
+            lock (_clientKeys)
+            {
+                _clientKeys[id] = master;
+                _clientRdvs[id] = new Rendezvous(master, _s.MqttBrokers);
+            }
+            e.LastUsed = DateTime.Now;
+            _s.Save();
+            SessionLog.Write($"CLIENT abbinato: {e.Name} (id {id}" + (how.Length > 0 ? $", {how}" : "") + ")");
+            ClientsChanged?.Invoke();
+        }
+
+        public void RenameClient(string id, string name)
+        {
+            var e = _s.Clients.FirstOrDefault(x => x.Id == id);
+            if (e == null || string.IsNullOrWhiteSpace(name)) return;
+            e.Name = name.Trim();
+            _s.Save();
+            ClientsChanged?.Invoke();
+        }
+
+        /// <summary>Revoca: il client non può più collegarsi; se è collegato viene scollegato.</summary>
+        public void RemoveClient(string id)
+        {
+            var e = _s.Clients.FirstOrDefault(x => x.Id == id);
+            lock (_clientKeys) { _clientKeys.Remove(id); _clientRdvs.Remove(id); }
+            KeyStore.DeleteMaster("cli-" + id);
+            if (e != null) _s.Clients.Remove(e);
+            if (_sessionClientId == id)
+            {
+                CloseChannels();
+                _sessionClientId = "";
+                _master = null;
+            }
+            _s.Save();
+            SessionLog.Write($"CLIENT tolto dall'elenco: {e?.Name ?? id} (id {id})");
+            ClientsChanged?.Invoke();
+        }
+
+        private void LoadServerKeys()
+        {
+            lock (_clientKeys)
+            {
+                _clientKeys.Clear();
+                _clientRdvs.Clear();
+                foreach (var c in _s.Clients)
+                {
+                    var k = KeyStore.LoadMaster("cli-" + c.Id);
+                    if (k == null) continue;
+                    _clientKeys[c.Id] = k;
+                    _clientRdvs[c.Id] = new Rendezvous(k, _s.MqttBrokers);
+                }
+            }
+            var packed = KeyStore.LoadMaster("fixed-code");
+            string d = packed == null ? "" : System.Text.Encoding.ASCII.GetString(packed).TrimEnd('\0');
+            _fixedDigits = d.Length == Crypto.FixedCodeDigits && d.All(char.IsAsciiDigit) ? d : "";
+            _fixedSecret = null;
+        }
+
+        // ---- codice fisso del server
+
+        public string FixedCode => _fixedDigits.Length == Crypto.FixedCodeDigits ? Crypto.FormatFixedCode(_fixedDigits) : "";
+        public bool FixedCodeEnabled => _s.FixedCodeEnabled;
+
+        public void SetFixedCodeEnabled(bool on)
+        {
+            _s.FixedCodeEnabled = on;
+            if (on && _fixedDigits.Length == 0) NewFixedCode();
+            _s.Save();
+            SessionLog.Write(on ? "CODICE FISSO attivo: i nuovi client possono abbinarsi con il codice fisso" : "CODICE FISSO disattivato");
+            RestartFixedListener();
+        }
+
+        /// <summary>Codice fisso nuovo: quello vecchio non vale più; i client già abbinati restano.</summary>
+        public string RegenerateFixedCode()
+        {
+            NewFixedCode();
+            RestartFixedListener();
+            return FixedCode;
+        }
+
+        private void NewFixedCode()
+        {
+            string d = Crypto.MakeFixedCode();
+            var packed = new byte[32];
+            System.Text.Encoding.ASCII.GetBytes(d).CopyTo(packed, 0);
+            KeyStore.SaveMaster(packed, "fixed-code");
+            _fixedDigits = d;
+            _fixedSecret = null;
+            SessionLog.Write("CODICE FISSO nuovo generato (quello precedente non vale più)");
+        }
+
+        /// <summary>Server: con il codice fisso attivo resta in ascolto sui broker, anche senza la finestra di abbinamento.</summary>
+        private void RestartFixedListener()
+        {
+            _fixedCts?.Cancel();
+            _fixedCts = null;
+            if (!IsServer || !_s.FixedCodeEnabled || _fixedDigits.Length != Crypto.FixedCodeDigits || _serverCts == null) { _fixedSecret = null; return; }
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(_serverCts.Token);
+            _fixedCts = cts;
+            string digits = _fixedDigits;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var secret = await Task.Run(() => Crypto.PairingSecretFromFixedCode(digits), cts.Token);
+                    if (cts.IsCancellationRequested) return;
+                    _fixedSecret = secret;
+                    for (int i = 0; i < 180 && CurrentServerAddress == null && !cts.IsCancellationRequested; i++) await Task.Delay(1000, cts.Token);
+                    SessionLog.Write("CODICE FISSO in ascolto sui broker MQTT per nuovi client");
+                    await PairingRendezvous.ServerListenAsync(secret, PairInfo, o => OnPairOfferAsync(o, secret, cts.Token),
+                        _s.MqttBrokers, (c, t) => SessionLog.Write($"CODICE FISSO {c} {t}"), cts.Token);
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex) { SessionLog.Write("CODICE FISSO ascolto interrotto: " + ex.Message); }
+            });
+        }
+
+        // =================================================================== server abbinati (client)
+
+        public IReadOnlyList<ServerEntry> Servers => _s.Servers;
+        public ServerEntry? ActiveServer => _s.Servers.FirstOrDefault(x => x.Id == _s.ActiveServerId);
+
+        /// <summary>Identificativo dell'abbinamento ricavato dalla chiave (non la rivela).</summary>
+        private static string KeyIdOf(byte[] master) =>
+            Convert.ToHexString(Crypto.Hkdf(master, Array.Empty<byte>(), "iptrx-server-id", 6)).ToLowerInvariant();
+
+        /// <summary>Chiave giusta per il ruolo: il server ha una chiave sola, il client quella del server in uso.</summary>
+        private void LoadKeyForRole()
+        {
+            MigrateLegacyKey();
+            if (_s.Role == NodeRole.Client)
+            {
+                var e = ActiveServer ?? _s.Servers.OrderByDescending(x => x.LastUsed).FirstOrDefault();
+                if (e != null && e.Id != _s.ActiveServerId) { _s.ActiveServerId = e.Id; _s.Save(); }
+                _master = e != null ? KeyStore.LoadMaster(e.Id) : null;
+                if (e != null) ApplyEntry(e);
+            }
+            else { LoadServerKeys(); _master = null; }
+            _rdv = _master != null && _s.Role == NodeRole.Client ? new Rendezvous(_master, _s.MqttBrokers) : null;
+        }
+
+        /// <summary>
+        /// Fino alla 0.2.x c'era una chiave sola: sul client diventa il primo server dell'elenco, sul server il
+        /// primo client. Si fa una volta; dopo la copia la chiave unica si cancella.
+        /// </summary>
+        private void MigrateLegacyKey()
+        {
+            if (_s.KeysMigratedV3) return;
+            try
+            {
+                var legacy = KeyStore.LoadMaster();
+                if (legacy != null)
+                {
+                    string id = KeyIdOf(legacy);
+                    if (_s.Role == NodeRole.Client)
+                    {
+                        if (_s.Servers.All(x => x.Id != id))
+                        {
+                            var e = new ServerEntry
+                            {
+                                Id = id,
+                                Name = _s.PeerCallsign.Length > 0 ? _s.PeerCallsign : "Server 1",
+                                Callsign = _s.PeerCallsign,
+                                Ip = _s.LastServerIp, ControlPort = _s.LastServerControlPort, AudioPort = _s.LastServerAudioPort,
+                                Lan = _s.LastServerLan, PairedAt = DateTime.Now, LastUsed = DateTime.Now
+                            };
+                            KeyStore.SaveMaster(legacy, id);
+                            if (KeyStore.LoadMaster(id) == null) return;   // copia non riuscita: la chiave unica resta
+                            _s.Servers.Add(e);
+                            _s.ActiveServerId = id;
+                            SessionLog.Write($"SERVER abbinamento precedente conservato come «{e.Name}» (id {id})");
+                        }
+                    }
+                    else if (_s.Clients.All(x => x.Id != id))
+                    {
+                        KeyStore.SaveMaster(legacy, "cli-" + id);
+                        if (KeyStore.LoadMaster("cli-" + id) == null) return;
+                        _s.Clients.Add(new ClientEntry
+                        {
+                            Id = id, Name = _s.PeerCallsign.Length > 0 ? _s.PeerCallsign : "Client 1", Callsign = _s.PeerCallsign,
+                            How = "abbinamento precedente", PairedAt = DateTime.Now, LastUsed = DateTime.Now
+                        });
+                        SessionLog.Write($"CLIENT abbinamento precedente conservato (id {id})");
+                    }
+                    KeyStore.DeleteMaster();
+                }
+                _s.KeysMigratedV3 = true;
+                _s.Save();
+            }
+            catch (Exception ex) { SessionLog.Write("ABBINAMENTO conversione della chiave precedente non riuscita: " + ex.Message); }
+        }
+
+        /// <summary>Indirizzi e nominativo del server scelto nei campi usati dal collegamento.</summary>
+        private void ApplyEntry(ServerEntry e)
+        {
+            _s.LastServerIp = e.Ip;
+            _s.LastServerControlPort = e.ControlPort;
+            _s.LastServerAudioPort = e.AudioPort;
+            _s.LastServerLan = e.Lan;
+            _s.PeerCallsign = e.Callsign;
+        }
+
+        /// <summary>Ultimo indirizzo e rete locale del server in uso, anche nel suo posto in elenco.</summary>
+        private void SyncActiveEntry()
+        {
+            if (_s.Role != NodeRole.Client || ActiveServer is not { } e) return;
+            e.Ip = _s.LastServerIp;
+            e.ControlPort = _s.LastServerControlPort;
+            e.AudioPort = _s.LastServerAudioPort;
+            e.Lan = _s.LastServerLan;
+            e.LastUsed = DateTime.Now;
+        }
+
+        /// <summary>
+        /// Client: passa a un altro server abbinato. Il collegamento in corso si chiude prima: il client
+        /// è collegato a un solo server per volta.
+        /// </summary>
+        public bool SwitchServer(string id)
+        {
+            if (_s.Role != NodeRole.Client) return false;
+            var e = _s.Servers.FirstOrDefault(x => x.Id == id);
+            if (e == null) return false;
+            if (e.Id == _s.ActiveServerId && _master != null) return true;
+            var key = KeyStore.LoadMaster(id);
+            if (key == null) { Notice?.Invoke($"La chiave del server «{e.Name}» non si legge: abbinalo di nuovo."); return false; }
+            Audio.Keyer.Stop();
+            SetPttLocal(false);
+            StopClient();
+            _s.ActiveServerId = id;
+            e.LastUsed = DateTime.Now;
+            ApplyEntry(e);
+            _master = key;
+            _rdv = new Rendezvous(key, _s.MqttBrokers);
+            _s.Save();
+            LastTelemetry = new RigTelemetry();
+            TelemetryChanged?.Invoke(LastTelemetry);
+            SessionLog.Write($"SERVER scelto: {e.Name} (id {id})");
+            ServersChanged?.Invoke();
+            _busyUntil = DateTime.MinValue;   // l'attesa per «server occupato» valeva per l'altro server
+            StartClient();
+            return true;
+        }
+
+        public void RenameServer(string id, string name)
+        {
+            var e = _s.Servers.FirstOrDefault(x => x.Id == id);
+            if (e == null || string.IsNullOrWhiteSpace(name)) return;
+            e.Name = name.Trim();
+            _s.Save();
+            ServersChanged?.Invoke();
+        }
+
+        /// <summary>Toglie un server dall'elenco e cancella la sua chiave; se era in uso passa al più recente.</summary>
+        public void DeleteServer(string id)
+        {
+            var e = _s.Servers.FirstOrDefault(x => x.Id == id);
+            if (e == null) return;
+            KeyStore.DeleteMaster(id);
+            _s.Servers.Remove(e);
+            SessionLog.Write($"SERVER tolto dall'elenco: {e.Name} (id {id})");
+            if (_s.ActiveServerId == id)
+            {
+                StopClient();
+                _master = null;
+                _rdv = null;
+                _s.ActiveServerId = "";
+                var next = _s.Servers.OrderByDescending(x => x.LastUsed).FirstOrDefault();
+                _s.Save();
+                if (next != null) { SwitchServer(next.Id); return; }
+                _s.LastServerIp = ""; _s.LastServerControlPort = 0; _s.LastServerAudioPort = 0; _s.LastServerLan = ""; _s.PeerCallsign = "";
+            }
+            _s.Save();
+            ServersChanged?.Invoke();
         }
 
         private void CloseChannels()

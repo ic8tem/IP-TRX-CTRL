@@ -340,13 +340,132 @@ namespace IpTrxCtrl.UI
 
             var brokers = new TextBox { Text = string.Join(Environment.NewLine, s.MqttBrokers), AcceptsReturn = true, Height = 90 };
 
-            var newPair = Ui.Btn("Nuovo abbinamento");
+            bool clientRole = s.Role == NodeRole.Client;
+            // client: elenco dei server; server: elenco dei client (un abbinamento nuovo non toglie gli altri)
+            var newPair = Ui.Btn(clientRole ? "Abbina un altro server" : "Abbina un nuovo client");
             newPair.Click += async (_, _) =>
             {
-                if (!await Dialogs.YesNo(this, "Cancello l'abbinamento attuale? Dovrai abbinare di nuovo i due PC con un codice.")) return;
-                node.ForgetPairing();
-                PairingReset = true;
+                PairingReset = true;   // la finestra di abbinamento si apre chiudendo le Impostazioni
+                await Dialogs.Info(this, clientRole ? "Chiudi le Impostazioni: si apre la finestra per il numero del nuovo server."
+                    : "Chiudi le Impostazioni: si apre la finestra con il numero di abbinamento per il nuovo client. I client già abbinati restano.");
             };
+
+            // ---- server: client abbinati
+            var cliList = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
+            var cliName = new TextBox { Watermark = "nome del client" };
+            var cliRename = Ui.Btn("Rinomina");
+            var cliDelete = Ui.Btn("Togli accesso");
+            var cliInfo = Ui.Sub("", 12);
+            List<ClientEntry> CliItems() => node.Clients.OrderByDescending(x => x.LastUsed).ToList();
+            void ShowCli()
+            {
+                if (cliList.SelectedItem is ClientEntry e)
+                {
+                    cliName.Text = e.Name;
+                    cliInfo.Text = $"Nominativo: {(e.Callsign.Length > 0 ? e.Callsign : "—")} · abbinato il {e.PairedAt:dd/MM/yyyy}"
+                                 + (e.How.Length > 0 ? $" con {e.How}" : "") + $" · ultimo uso {e.LastUsed:dd/MM/yyyy HH:mm}"
+                                 + (e.Id == node.SessionClientId ? " · COLLEGATO ORA" : "");
+                }
+                else { cliName.Text = ""; cliInfo.Text = "Nessun client abbinato."; }
+            }
+            void FillCli(string? keep)
+            {
+                var items = CliItems();
+                cliList.ItemsSource = items;
+                cliList.SelectedItem = items.FirstOrDefault(x => x.Id == keep) ?? items.FirstOrDefault();
+                ShowCli();
+            }
+            cliList.SelectionChanged += (_, _) => ShowCli();
+            FillCli(node.SessionClientId);
+            cliRename.Click += (_, _) =>
+            {
+                if (cliList.SelectedItem is not ClientEntry e || string.IsNullOrWhiteSpace(cliName.Text)) return;
+                node.RenameClient(e.Id, cliName.Text);
+                FillCli(e.Id);
+            };
+            cliDelete.Click += async (_, _) =>
+            {
+                if (cliList.SelectedItem is not ClientEntry e) return;
+                if (!await Dialogs.YesNo(this, $"Tolgo l'accesso a «{e.Name}»? Cancello la sua chiave: non potrà più collegarsi"
+                        + (e.Id == node.SessionClientId ? " e viene scollegato subito" : "") + ". Per farlo rientrare servirà un nuovo abbinamento.")) return;
+                node.RemoveClient(e.Id);
+                FillCli(null);
+            };
+            var cliNameRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,8,Auto,8,Auto") };
+            Grid.SetColumn(cliRename, 2); Grid.SetColumn(cliDelete, 4);
+            cliNameRow.Children.Add(cliName); cliNameRow.Children.Add(cliRename); cliNameRow.Children.Add(cliDelete);
+            var cliPanel = Ui.Col(6, Ui.Lbl("Client abbinati (ognuno con la sua chiave; si collega uno per volta, gli altri trovano il server occupato)"), cliList, cliNameRow, cliInfo);
+
+            // ---- server: codice fisso
+            var fixOn = new CheckBox { Content = "Accetta nuovi client con il codice fisso del server", IsChecked = node.FixedCodeEnabled };
+            var fixCode = Ui.Mono(node.FixedCode.Length > 0 ? node.FixedCode : "—", 22);
+            fixCode.FontWeight = FontWeight.Bold;
+            var fixCopy = Ui.Btn("Copia codice");
+            var fixNew = Ui.Btn("Cambia codice");
+            var fixNote = Ui.Sub("Il codice fisso (12 cifre) vale finché non lo cambi o non disattivi l'opzione: chi lo riceve si abbina quando vuole, "
+                + "anche dopo giorni, e poi entra nell'elenco dei client. È comodo ma meno sicuro del numero temporaneo: chi lo scopre può abbinarsi. "
+                + "Dallo solo a persone fidate, cambialo se è circolato troppo e togli dall'elenco i client che non devono più entrare. "
+                + "Cambiare il codice non toglie l'accesso ai client già abbinati.", 12);
+            fixNote.TextWrapping = TextWrapping.Wrap;
+            void ShowFix()
+            {
+                bool on = node.FixedCodeEnabled;
+                fixCode.Text = on && node.FixedCode.Length > 0 ? node.FixedCode : "disattivato";
+                fixCopy.IsEnabled = on; fixNew.IsEnabled = on;
+            }
+            ShowFix();
+            fixOn.IsCheckedChanged += (_, _) => { node.SetFixedCodeEnabled(fixOn.IsChecked == true); ShowFix(); };
+            fixCopy.Click += async (_, _) => await Dialogs.CopyText(this, node.FixedCode);
+            fixNew.Click += async (_, _) =>
+            {
+                if (!await Dialogs.YesNo(this, "Genero un codice fisso nuovo? Quello attuale smette subito di valere; i client già abbinati restano.")) return;
+                node.RegenerateFixedCode();
+                ShowFix();
+            };
+            var fixPanel = Ui.Inset(Ui.Col(8, fixOn, Ui.Row(12, fixCode, fixCopy, fixNew), fixNote));
+            var srvSidePanel = Ui.Col(12, cliPanel, fixPanel);
+            srvSidePanel.IsVisible = !clientRole;
+            var srvList = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, ItemsSource = node.Servers.OrderByDescending(x => x.LastUsed).ToList() };
+            var srvName = new TextBox { Watermark = "nome del server" };
+            var srvRename = Ui.Btn("Rinomina");
+            var srvDelete = Ui.Btn("Togli dall'elenco");
+            var srvInfo = Ui.Sub("", 12);
+            void ShowSrv()
+            {
+                if (srvList.SelectedItem is ServerEntry e)
+                {
+                    srvName.Text = e.Name;
+                    srvInfo.Text = $"Nominativo: {(e.Callsign.Length > 0 ? e.Callsign : "—")} · abbinato il {e.PairedAt:dd/MM/yyyy} · ultimo uso {e.LastUsed:dd/MM/yyyy HH:mm}"
+                                 + (e.Id == node.ActiveServer?.Id ? " · IN USO" : "");
+                }
+                else { srvName.Text = ""; srvInfo.Text = "Nessun server abbinato."; }
+            }
+            srvList.SelectionChanged += (_, _) => ShowSrv();
+            srvList.SelectedItem = node.ActiveServer is { } act ? ((List<ServerEntry>)srvList.ItemsSource!).FirstOrDefault(x => x.Id == act.Id) : null;
+            ShowSrv();
+            srvRename.Click += (_, _) =>
+            {
+                if (srvList.SelectedItem is not ServerEntry e || string.IsNullOrWhiteSpace(srvName.Text)) return;
+                node.RenameServer(e.Id, srvName.Text);
+                var keep = e.Id;
+                srvList.ItemsSource = node.Servers.OrderByDescending(x => x.LastUsed).ToList();
+                srvList.SelectedItem = ((List<ServerEntry>)srvList.ItemsSource).FirstOrDefault(x => x.Id == keep);
+            };
+            srvDelete.Click += async (_, _) =>
+            {
+                if (srvList.SelectedItem is not ServerEntry e) return;
+                if (!await Dialogs.YesNo(this, $"Tolgo «{e.Name}» dall'elenco e cancello la sua chiave? Per usarlo di nuovo servirà un nuovo numero di abbinamento.")) return;
+                node.DeleteServer(e.Id);
+                srvList.ItemsSource = node.Servers.OrderByDescending(x => x.LastUsed).ToList();
+                srvList.SelectedItem = node.ActiveServer is { } a2 ? ((List<ServerEntry>)srvList.ItemsSource).FirstOrDefault(x => x.Id == a2.Id) : null;
+                ShowSrv();
+                if (!node.IsPaired) PairingReset = true;
+            };
+            var srvNameRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,8,Auto,8,Auto") };
+            Grid.SetColumn(srvRename, 2); Grid.SetColumn(srvDelete, 4);
+            srvNameRow.Children.Add(srvName); srvNameRow.Children.Add(srvRename); srvNameRow.Children.Add(srvDelete);
+            var srvPanel = Ui.Col(6, Ui.Lbl("Server abbinati (il client si collega a uno per volta: si sceglie nella finestra principale)"), srvList, srvNameRow, srvInfo);
+            srvPanel.IsVisible = clientRole;
             var export = Ui.Btn("Esporta chiavi per le autorità");
             export.Click += async (_, _) => await ExportAsync(s);
             var lic = Ui.Btn("Informazioni e licenze");
@@ -454,7 +573,8 @@ namespace IpTrxCtrl.UI
                         Ui.Col(0, Ui.Lbl("Broker MQTT (uno per riga, host:porta)"), brokers),
                         fwBtn, fwNote)),
                     Ui.Panel(Ui.Col(10, Ui.H2("ABBINAMENTO E REGISTRI"),
-                        Ui.Sub("Impronta dell'abbinamento: " + (node.IsPaired ? node.Fingerprint : "nessun abbinamento"), 13),
+                        Ui.Sub("Impronta dell'abbinamento" + (clientRole ? " in uso" : "") + ": " + (node.IsPaired ? node.Fingerprint : "nessun abbinamento"), 13),
+                        srvPanel, srvSidePanel,
                         Ui.Row(8, newPair, export, folder, lic))),
                     bottom
                 }
@@ -464,8 +584,19 @@ namespace IpTrxCtrl.UI
 
         private async Task ExportAsync(AppSettings s)
         {
-            byte[]? master = KeyStore.LoadMaster();
-            if (master == null) { await Dialogs.Info(this, "Non c'è ancora un abbinamento da esportare."); return; }
+            // client: le chiavi di tutti i server abbinati; server: quelle di tutti i client abbinati
+            var keys = new List<(string label, byte[] key)>();
+            if (s.Role == NodeRole.Client)
+            {
+                foreach (var e in s.Servers)
+                    if (KeyStore.LoadMaster(e.Id) is { } k) keys.Add(($"{e.Name}" + (e.Callsign.Length > 0 ? $" ({e.Callsign})" : "") + $" · id {e.Id}", k));
+            }
+            else
+            {
+                foreach (var e in s.Clients)
+                    if (KeyStore.LoadMaster("cli-" + e.Id) is { } k) keys.Add(($"client {e.Name}" + (e.Callsign.Length > 0 && e.Callsign != e.Name ? $" ({e.Callsign})" : "") + $" · id {e.Id}", k));
+            }
+            if (keys.Count == 0) { await Dialogs.Info(this, "Non c'è ancora un abbinamento da esportare."); return; }
             var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = "Esporta chiavi e registro per le autorità",
@@ -480,9 +611,13 @@ namespace IpTrxCtrl.UI
             sb.AppendLine($"Stazione: {s.Callsign}   Peer: {s.PeerCallsign}   Ruolo attuale: {s.Role}");
             sb.AppendLine($"Esportato il: {DateTime.Now:yyyy-MM-dd HH:mm:ss} (ora locale)");
             sb.AppendLine();
-            sb.AppendLine("CHIAVE MASTER DELL'ABBINAMENTO (256 bit, esadecimale):");
-            sb.AppendLine(Convert.ToHexString(master));
-            sb.AppendLine("Impronta: " + Crypto.Fingerprint(master));
+            foreach (var (label, key) in keys)
+            {
+                sb.AppendLine($"CHIAVE MASTER DELL'ABBINAMENTO · {label} (256 bit, esadecimale):");
+                sb.AppendLine(Convert.ToHexString(key));
+                sb.AppendLine("Impronta: " + Crypto.Fingerprint(key));
+                sb.AppendLine();
+            }
             sb.AppendLine();
             sb.AppendLine("COME DECIFRARE IL TRAFFICO REGISTRATO");
             sb.AppendLine("- Due connessioni TCP: canale 1 = controllo/CAT, canale 2 = audio.");
@@ -571,9 +706,27 @@ RUOLI
 Server = il PC collegato alla radio (audio, CAT con Hamlib o TCI, PTT).
 Client = il PC dell'operatore. «Inverti ruoli» scambia i ruoli tra i due PC collegati.
 
-ABBINAMENTO (una sola volta)
-Il server mostra un codice, il client lo scrive e preme «Abbina». La finestra mostra il dialogo con i broker MQTT
-e con il server: ▶ inviato, ◀ ricevuto, ✗ errore, ✓ completato. «Copia registro» mette il testo negli appunti.
+ABBINAMENTO (una sola volta per server)
+Il server mostra un NUMERO DI 10 CIFRE (es. 482 913 0571), valido 10 minuti e una sola volta: il client lo scrive
+e preme «Abbina». Il numero non contiene l'indirizzo del server: il client lo riceve cifrato (AES-256-GCM) dal
+broker MQTT, quindi per abbinare serve almeno un broker raggiungibile. Il calcolo della chiave dal numero è
+volutamente lento (qualche secondo sul client) e cambia ogni 10 minuti: provare tutti i numeri non serve.
+La finestra mostra il dialogo con i broker MQTT e con il server: ▶ inviato, ◀ ricevuto, ✗ errore, ✓ completato.
+«Copia registro» mette il testo negli appunti.
+SERVER ABBINATI (client): ogni server abbinato resta in un elenco con la sua chiave. Nel riquadro del server della
+finestra principale si sceglie a quale collegarsi (uno solo per volta: scegliendone un altro il collegamento in
+corso si chiude); «Abbina nuovo…» aggiunge un server. In Impostazioni › Abbinamento si rinomina o si toglie un
+server.
+CLIENT ABBINATI (server): anche il server tiene un elenco di client, ognuno con la sua chiave; un abbinamento nuovo
+non toglie gli altri. Si collega un client per volta: un secondo client trova «server occupato» con il nominativo
+di chi opera e riprova da solo ogni 30 secondi. In Impostazioni › Abbinamento si rinomina un client o gli si
+toglie l'accesso (chiave cancellata, scollegato subito se è collegato).
+CODICE FISSO DEL SERVER: opzione delle Impostazioni (disattivata all'installazione). Un codice di 12 cifre che vale
+finché non lo cambi: chi lo riceve si abbina quando vuole, scrivendolo al posto del numero. Comodo ma meno sicuro
+del numero temporaneo: dallo solo a persone fidate e cambialo se è circolato troppo. Cambiarlo non toglie
+l'accesso ai client già abbinati.
+INDIRIZZI CIFRATI: l'indirizzo IP del server passa solo cifrato sui broker MQTT (abbinamento e riconnessioni) e
+nei codici di riserva; i nomi dei canali MQTT sono impronte che non rivelano nulla.
 
 PTT
 Pulsante «premi e tieni» o barra spaziatrice. Il server manda in trasmissione la radio con il metodo scelto:
@@ -652,6 +805,7 @@ Server e client devono avere versioni dello stesso «protocollo». La versione d
   Versioni          Protocollo   Compatibili con
   0.1.0 – 0.1.3     1            solo 0.1.x
   0.2.0 – 0.2.8     2            tutte le 0.2.x
+  0.3.0             3            solo 0.3.x (numero a 10 cifre, codice fisso, più client)
 Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   scelta delle schede audio del server dal client ......... 0.2.1 o successiva
   server senza UPnP e collegamento sulla rete locale ...... 0.2.2 o successiva
@@ -660,6 +814,8 @@ Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   protezione ROS (avviso e blocco della trasmissione) ..... 0.2.4 o successiva
   CAT e audio del server via TCI ......................... 0.2.5 sul server
   ciclo delle porte anche nell'abbinamento ............... 0.2.7 su entrambi i PC
+  numero a 10 cifre ed elenco dei server sul client ....... 0.3.0 su entrambi i PC
+  più client sul server e codice fisso del server ......... 0.3.0 su entrambi i PC
 Dalla 0.2.3 i due PC si scambiano la versione (sul broker MQTT durante l'abbinamento e all'inizio di ogni
 collegamento). Se il protocollo è diverso l'abbinamento si ferma e compare una finestra; se l'altro PC è
 più vecchio compare un avviso. La versione dell'altro PC si vede nella riga della sua rete.

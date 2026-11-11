@@ -209,6 +209,11 @@
                 <TextBlock x:Name="TxtLed" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource B.Muted}" VerticalAlignment="Center" Text="RX" />
               </StackPanel>
             </Grid>
+            <!-- client: server abbinati, uno collegato per volta -->
+            <Grid x:Name="PanelServerPick" ColumnDefinitions="*,8,Auto">
+              <ComboBox x:Name="CmbServer" HorizontalAlignment="Stretch" ToolTip.Tip="Server abbinati: scegliendone un altro, il collegamento in corso si chiude" />
+              <Button x:Name="BtnNewServer" Grid.Column="2" Content="Abbina nuovo…" ToolTip.Tip="Abbina un altro server con il suo numero di 10 cifre; quelli già abbinati restano nell'elenco" />
+            </Grid>
             <Grid ColumnDefinitions="130,*" RowDefinitions="25,25,25,25,25,Auto,Auto">
               <TextBlock Text="Nominativo" Classes="sub" VerticalAlignment="Center" />
               <TextBlock x:Name="TxtPeerCall" Grid.Column="1" Classes="mono" FontWeight="SemiBold" VerticalAlignment="Center" Text="—" />

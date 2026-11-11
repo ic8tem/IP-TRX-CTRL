@@ -30,6 +30,7 @@ namespace IpTrxCtrl.Net
         public const byte SetServerDevices = 0x2E; // str ingresso | str uscita: il client sceglie le schede audio del server
         public const byte SwrUnlock = 0x2F;        // client -> server: sblocca la trasmissione bloccata per ROS alto
         public const byte SetSwrProtection = 0x32; // client -> server: u8 attiva | f32 soglia avviso | f32 soglia blocco
+        public const byte Busy = 0x33;             // server -> client: str operatore collegato (server occupato, riprova più tardi)
         public const byte RigTunnelOpen = 0x60;    // i32 id: il client apre un collegamento rigctld
         public const byte RigTunnelData = 0x61;    // i32 id | dati
         public const byte RigTunnelClose = 0x62;   // i32 id
