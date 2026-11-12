@@ -256,6 +256,7 @@ namespace IpTrxCtrl.UI
         public bool DigitalChanged { get; private set; }
         public bool SerialInputChanged { get; private set; }
         public bool PanChanged { get; private set; }
+        public bool WebChanged { get; private set; }
 
         public SettingsWindow(AppSettings s, Node node)
         {
@@ -531,6 +532,30 @@ namespace IpTrxCtrl.UI
             var panRows = Ui.Row(12, Ui.Col(0, Ui.Lbl("Porta CI-V"), panCom), Ui.Col(0, Ui.Lbl("Velocità"), panBaud), Ui.Col(0, Ui.Lbl("Indirizzo"), panAddr));
             panRows.IsVisible = !s.CatViaTci;
 
+            // ---- accesso dal browser (server) e pagina «Trova il server» (tutti)
+            var webOn = new CheckBox { Content = "Accesso dal browser: pagina web HTTPS della stazione (si entra con il codice fisso)", IsChecked = s.WebEnabled };
+            var webPort = new TextBox { Text = s.WebPort.ToString(CultureInfo.InvariantCulture), Width = 80 };
+            var webRouter = new CheckBox { Content = "Apri la porta anche sul router (UPnP): accesso da internet senza VPN", IsChecked = s.WebOpenRouter };
+            var webRx = new CheckBox { Content = "Il browser parte in solo ascolto (poi si abilita nell'elenco dei client)", IsChecked = s.WebRxOnly };
+            var webInfo = Ui.Sub(node.WebInfo() + (node.FixedCode.Length > 0 ? $" · Codice di accesso: {node.FixedCode}" : ""), 12);
+            webInfo.TextWrapping = TextWrapping.Wrap;
+            var webNote = Ui.Sub("Dal browser di telefono, tablet o PC, senza installare niente. La pagina «Trova il server» (si salva qui sotto e si tiene come file) "
+                + "chiede l'indirizzo ai broker MQTT con il codice fisso: arriva cifrato. Da fuori casa il browser raggiunge il server con una VPN (Tailscale, WireGuard…) "
+                + "o con la porta aperta sul router; dietro CGNAT solo con la VPN. La prima volta il browser avvisa del certificato: si confronta l'impronta e si accetta. "
+                + "Sulla rete di casa la pagina si scarica anche da https://<indirizzo del server>:<porta>/trova-server.html.", 12);
+            webNote.TextWrapping = TextWrapping.Wrap;
+            var finder = Ui.Btn("Salva la pagina «Trova il server»…");
+            finder.Click += async (_, _) =>
+            {
+                var page = Node.FinderPage();
+                if (page == null) return;
+                var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions { Title = "Salva la pagina «Trova il server»", SuggestedFileName = "trova-server.html", DefaultExtension = "html" });
+                string? path = file?.TryGetLocalPath();
+                if (path == null) return;
+                try { File.WriteAllBytes(path, page); await Dialogs.Info(this, "Salvata. Copiala sul telefono o sul PC e aprila con il browser: chiede il codice fisso del server e trova l'indirizzo."); }
+                catch (Exception ex) { await Dialogs.Info(this, "Non riesco a salvarla: " + ex.Message); }
+            };
+
             // ---- rapporto per segnalare un problema
             var report = Ui.Btn("Rapporto per un problema…");
             report.Click += async (_, _) => await ReportAsync(s);
@@ -598,6 +623,10 @@ namespace IpTrxCtrl.UI
                     if (!byte.TryParse(pa.Replace("0X", "").Replace("H", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _)) pa = s.PanCivAddr;
                     PanChanged = (panOn.IsChecked == true) != s.PanEnabled || pc != s.PanCom || pb != s.PanBaud || pa != s.PanCivAddr;
                     s.PanEnabled = panOn.IsChecked == true; s.PanCom = pc; s.PanBaud = pb; s.PanCivAddr = pa;
+                    // accesso dal browser
+                    int wp = int.TryParse(webPort.Text, out int wpp) ? Math.Clamp(wpp, 1024, 65535) : s.WebPort;
+                    WebChanged = (webOn.IsChecked == true) != s.WebEnabled || wp != s.WebPort || (webRouter.IsChecked == true) != s.WebOpenRouter;
+                    s.WebEnabled = webOn.IsChecked == true; s.WebPort = wp; s.WebOpenRouter = webRouter.IsChecked == true; s.WebRxOnly = webRx.IsChecked == true;
                     node.Rig.PushTelemetry();
                 }
                 var list = (brokers.Text ?? "").Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
@@ -659,6 +688,10 @@ namespace IpTrxCtrl.UI
                     srvRole
                         ? Ui.Panel(Ui.Col(8, Ui.H2("PANADAPTER DELLA RADIO (SERVER)"), panOn, panRows, panNote))
                         : new Control(),
+                    srvRole
+                        ? Ui.Panel(Ui.Col(8, Ui.H2("ACCESSO DAL BROWSER (SERVER)"), webOn, Ui.Row(8, Ui.Sub("Porta HTTPS", 13), webPort), webRouter, webRx, webInfo, webNote, finder))
+                        : Ui.Panel(Ui.Col(8, Ui.H2("ACCESSO DAL BROWSER"),
+                            Ui.Sub("Si attiva sul server. Da qui puoi salvare la pagina «Trova il server» da tenere sul telefono o su un altro PC.", 13), finder)),
                     Ui.Panel(Ui.Col(10, Ui.H2("RETE E AUDIO"), prefillTxt, prefill,
                         Ui.Col(0, Ui.Lbl("Broker MQTT (uno per riga, host:porta)"), brokers),
                         fwBtn, fwNote)),
@@ -912,6 +945,16 @@ Fonti: Icom CI-V Reference Guide IC-9700 e IC-7300MK2 (comandi 27 00, 27 10, 27 
   Manuale di rigctl (funzioni NR, NB, ANF, COMP; livelli ATT, PREAMP, AGC, SQL, ALC)
   https://hamlib.sourceforge.net/html/rigctl.1.html
 
+ACCESSO DAL BROWSER (server, dalla 0.3.1)
+Impostazioni › Accesso dal browser: il server serve una pagina HTTPS (porta 8443) per telefono, tablet e PC, senza
+installare niente. Si entra con il codice fisso del server: il codice non passa in rete (sfida e risposta).
+La pagina «Trova il server» (Impostazioni › «Salva la pagina…», da tenere come file sul telefono o sul PC) chiede
+l'indirizzo ai broker MQTT con il codice fisso: arriva cifrato insieme all'impronta del certificato. Prova prima
+la VPN, poi la rete di casa, poi l'IP pubblico. Da fuori casa serve una VPN (Tailscale, WireGuard…) o la porta
+aperta sul router; dietro CGNAT solo la VPN. La prima volta il browser avvisa del certificato fatto dal server:
+si confronta l'impronta e si accetta (iPhone: si installa il certificato come profilo). Il browser compare
+nell'elenco dei client come «Browser»: lì si sceglie se può trasmettere. Un operatore per volta, come sempre.
+
 RAPPORTO PER UN PROBLEMA E VERSIONE NUOVA (dalla 0.3.0)
 Impostazioni › Abbinamento e registri › «Rapporto per un problema…»: salva un file con versione, sistema,
 impostazioni principali e gli ultimi registri, con gli indirizzi IP pubblici sostituiti da [IP-1], [IP-2]…; poi
@@ -991,7 +1034,7 @@ Server e client devono avere versioni dello stesso «protocollo». La versione d
   Versioni          Protocollo   Compatibili con
   0.1.0 – 0.1.3     1            solo 0.1.x
   0.2.0 – 0.2.8     2            tutte le 0.2.x
-  0.3.0             3            solo 0.3.x (numero a 10 cifre, codice fisso, più client, sicurezza TX, panadapter)
+  0.3.0 - 0.3.1     3            solo 0.3.x (numero a 10 cifre, codice fisso, più client, sicurezza TX, panadapter; 0.3.1 browser)
 Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   scelta delle schede audio del server dal client ......... 0.2.1 o successiva
   server senza UPnP e collegamento sulla rete locale ...... 0.2.2 o successiva
@@ -1003,6 +1046,7 @@ Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   numero a 10 cifre ed elenco dei server sul client ....... 0.3.0 su entrambi i PC
   più client sul server e codice fisso del server ......... 0.3.0 su entrambi i PC
   sicurezza in trasmissione, comandi radio, panadapter .... 0.3.0 su entrambi i PC
+  accesso dal browser (pagina web HTTPS) .................. 0.3.1 sul server
 Dalla 0.2.3 i due PC si scambiano la versione (sul broker MQTT durante l'abbinamento e all'inizio di ogni
 collegamento). Se il protocollo è diverso l'abbinamento si ferma e compare una finestra; se l'altro PC è
 più vecchio compare un avviso. La versione dell'altro PC si vede nella riga della sua rete.

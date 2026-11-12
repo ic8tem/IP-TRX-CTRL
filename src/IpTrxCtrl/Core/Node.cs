@@ -53,7 +53,7 @@ namespace IpTrxCtrl.Core
         public RigTelemetry LastTelemetry { get; private set; } = new();
         public DeviceStateInfo DeviceState { get; private set; } = new();
         public NodeRole Role => _s.Role;
-        public bool IsPaired => IsServer ? ClientCount > 0 : _master != null;
+        public bool IsPaired => IsServer ? ClientCount > 0 || _s.WebEnabled : _master != null;   // col browser attivo non serve un abbinamento
         public string Fingerprint => _master != null ? Crypto.Fingerprint(_master)
             : IsServer && ClientCount > 0 ? $"{ClientCount} client abbinati" : "";
 
@@ -90,7 +90,7 @@ namespace IpTrxCtrl.Core
         /// <summary>Registro del dialogo di abbinamento (simbolo, testo).</summary>
         public event MqttLog? PairingLog;
 
-        private SecureChannel? _control, _audio;
+        private IMsgChannel? _control, _audio;
 
         // server
         private PortManager? _ports;
@@ -307,6 +307,7 @@ namespace IpTrxCtrl.Core
             _ = Task.Run(() => PublishLoopAsync(ct));
             _ = Task.Run(() => ReverseLoopAsync(ct));
             RestartFixedListener();
+            RestartWeb();
 
             if (_ports.CgnatSuspected)
                 Notice?.Invoke("Il tuo operatore sembra usare il CGNAT: il server potrebbe non essere raggiungibile da internet.");
@@ -579,6 +580,9 @@ namespace IpTrxCtrl.Core
 
         private async Task StopServerAsync(bool closeChannels = true)
         {
+            _webCts?.Cancel();
+            _webCts = null;
+            Web?.Stop();
             _serverCts?.Cancel();
             _serverCts = null;
             try { _ctlListener?.Stop(); } catch { }
@@ -977,7 +981,7 @@ namespace IpTrxCtrl.Core
             FallbackCodeChanged?.Invoke(anyOk || recent.key == null ? null : Crypto.MakeFallbackCode(recent.key, addr.Value));
         }
 
-        private async Task ReplaceAudioPortAsync(SecureChannel control, CancellationToken ct)
+        private async Task ReplaceAudioPortAsync(IMsgChannel control, CancellationToken ct)
         {
             if (_ports == null) return;
             try { _audListener?.Stop(); } catch { }
@@ -1555,14 +1559,14 @@ namespace IpTrxCtrl.Core
 
         // =================================================================== messaggi
 
-        private async Task SendHelloAsync(SecureChannel ch)
+        private async Task SendHelloAsync(IMsgChannel ch)
         {
             try { await ch.SendAsync(new MsgWriter(Msg.Hello).Str(_s.Callsign).Str(Stats.LocalNet).Str(AppVersion.Tag).Build()); } catch { }
         }
 
         private bool IsServer => _s.Role == NodeRole.Server;
 
-        private async Task ReceiveLoopAsync(SecureChannel ch, CancellationToken ct)
+        private async Task ReceiveLoopAsync(IMsgChannel ch, CancellationToken ct)
         {
             try
             {
@@ -1750,6 +1754,7 @@ namespace IpTrxCtrl.Core
                         case Msg.NewAudioPort:
                             _newAudioPortTcs?.TrySetResult(r.I32()); break;
                         case Msg.SwapRequest:
+                            if (IsServer && _sessionClientId == WebClientId) { SendNotice("Dalla pagina web non si scambiano i ruoli."); break; }
                             if (IsServer && !ClientMayTransmit()) { SendNotice("Un client in solo ascolto non può chiedere lo scambio dei ruoli."); break; }
                             SwapRequested?.Invoke(accepted => _ = AnswerSwapAsync(accepted)); break;
                         case Msg.SwapAnswer:
@@ -1833,6 +1838,7 @@ namespace IpTrxCtrl.Core
             _lastSeq = seq;
             Stats.LossPercent = _expected > 0 ? 100.0 * _lost / _expected : 0;
             if (IsServer && Rig.TxBlocked) return;   // ROS alto: niente audio verso la radio (anche col PTT a VOX)
+            if (IsServer && !Stats.PeerTx) return;   // il microfono remoto arriva alla radio solo durante la SUA trasmissione permessa
             Audio.Playback.Write(pcm, 0, pcm.Length);
         }
 
@@ -2162,6 +2168,139 @@ namespace IpTrxCtrl.Core
         }
 
         public void ClearLocalLock() => Rig.ClearLocalLock("dal server");
+
+        // =================================================================== accesso dal browser (dalla 0.3.1)
+
+        public const string WebClientId = "web";
+        public WebServer? Web { get; private set; }
+        private volatile byte[]? _webSecret;
+        private CancellationTokenSource? _webCts;
+        public int WebBrokersOk { get; private set; }
+
+        /// <summary>
+        /// Server: pagina web HTTPS per il browser. Si entra con il codice fisso del server (creato qui se manca);
+        /// gli indirizzi del server vanno cifrati sui broker MQTT per la pagina «Trova il server».
+        /// </summary>
+        public void RestartWeb()
+        {
+            _webCts?.Cancel();
+            _webCts = null;
+            Web?.Stop();
+            _webSecret = null;
+            if (!IsServer || !_s.WebEnabled || _serverCts == null) return;
+            if (_fixedDigits.Length != Crypto.FixedCodeDigits) NewFixedCode();
+            Web ??= new WebServer(_s, ServeWebAsync, () => _webSecret is { } k ? WebRendezvous.LoginKey(k) : null, () => AppVersion.Tag);
+            int port = Math.Clamp(_s.WebPort, 1024, 65535);
+            if (!Web.Start(port)) return;
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(_serverCts.Token);
+            _webCts = cts;
+            string digits = _fixedDigits;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var secret = await Task.Run(() => Crypto.PairingSecretFromFixedCode(digits), cts.Token);
+                    _webSecret = secret;
+                    for (int i = 0; i < 120 && _ports == null && !cts.IsCancellationRequested; i++) await Task.Delay(1000, cts.Token);
+                    if (_s.WebOpenRouter && _ports != null)
+                    {
+                        bool ok = false;
+                        try { ok = await _ports.OpenFixedAsync(Open.Nat.Protocol.Tcp, port, port, "IP-TRX-CTRL pagina web"); } catch { }
+                        SessionLog.Write(ok ? $"WEB porta {port} aperta sul router (UPnP)" : $"WEB porta {port} NON aperta sul router");
+                    }
+                    while (!cts.IsCancellationRequested)
+                    {
+                        await PublishWebAsync(secret, port, cts.Token);
+                        await Task.Delay(TimeSpan.FromMinutes(10), cts.Token);
+                    }
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex) { SessionLog.Write("WEB pubblicazione degli indirizzi interrotta: " + ex.Message); }
+            });
+        }
+
+        private async Task PublishWebAsync(byte[] secret, int port, CancellationToken ct)
+        {
+            var w = Web;
+            if (w == null) return;
+            string pub = _s.WebOpenRouter && _ports?.ExternalIp != null ? _ports.ExternalIp.ToString() : "";
+            var vpn = WebServer.VpnAddresses();
+            string lan = WebServer.LanAddress();
+            var info = new
+            {
+                c = _s.Callsign, v = AppVersion.Text, p = port, vpn, lan, pub,
+                cgnat = _ports?.CgnatSuspected == true, fp = w.Fingerprint,
+                t = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            };
+            WebBrokersOk = await WebRendezvous.PublishAsync(secret, info, _s.MqttBrokers, ct);
+            SessionLog.Write($"WEB indirizzi per la pagina «Trova il server» pubblicati cifrati su {WebBrokersOk} broker MQTT"
+                + $" · VPN {(vpn.Count > 0 ? string.Join(", ", vpn) : "nessuna")} · rete locale {(lan.Length > 0 ? lan : "—")}");
+        }
+
+        /// <summary>Riga di stato per le Impostazioni.</summary>
+        public string WebInfo()
+        {
+            if (!_s.WebEnabled) return "Spento.";
+            var w = Web;
+            if (w == null || !w.Running) return w?.Status ?? "In avvio…";
+            var vpn = WebServer.VpnAddresses();
+            string lan = WebServer.LanAddress();
+            return $"Attivo sulla porta {w.Port}. Indirizzi: "
+                 + (vpn.Count > 0 ? $"VPN {string.Join(", ", vpn)} · " : "")
+                 + (lan.Length > 0 ? $"rete locale {lan}" : "rete locale —")
+                 + $". Pubblicati su {WebBrokersOk} broker. Impronta del certificato: {w.Fingerprint}";
+        }
+
+        /// <summary>Il browser compare nell'elenco dei client: lì si sceglie se può trasmettere.</summary>
+        private ClientEntry EnsureWebClient(string name)
+        {
+            var e = _s.Clients.FirstOrDefault(x => x.Id == WebClientId);
+            if (e == null)
+            {
+                e = new ClientEntry { Id = WebClientId, Name = "Browser", How = "pagina web", PairedAt = DateTime.Now, CanTransmit = !_s.WebRxOnly };
+                _s.Clients.Add(e);
+                _s.Save();
+                ClientsChanged?.Invoke();
+            }
+            if (name.Length > 0 && e.Callsign != name) { e.Callsign = name; _s.Save(); ClientsChanged?.Invoke(); }
+            return e;
+        }
+
+        /// <summary>Server: sessione dalla pagina web. Il WebSocket fa da canale di controllo e da canale audio.</summary>
+        private async Task ServeWebAsync(IMsgChannel ch, string name, CancellationToken ct)
+        {
+            var e = EnsureWebClient(name);
+            if (_control != null && _sessionClientId.Length > 0 && _sessionClientId != WebClientId)
+            {
+                string who = _s.PeerCallsign.Length > 0 ? _s.PeerCallsign : ClientName(_sessionClientId);
+                SessionLog.Write($"SESSIONE rifiutata alla pagina web ({name}): è collegato {who}");
+                try { await ch.SendAsync(new MsgWriter(Msg.Busy).Str(who).Build(), ct); await Task.Delay(500, ct); } catch { }
+                ch.Dispose();
+                return;
+            }
+            StopUdp();
+            _master = null;
+            _sessionClientId = WebClientId;
+            e.LastUsed = DateTime.Now;
+            _s.Save();
+            Interlocked.Exchange(ref _control, ch)?.Dispose();
+            var oldAud = Interlocked.Exchange(ref _audio, ch);
+            if (oldAud != null && !ReferenceEquals(oldAud, ch)) oldAud.Dispose();
+            ResetAudioStats();
+            OnConnected();
+            SessionLog.Write($"SESSIONE dalla pagina web ({name}) da {ch.Remote.Address}");
+            await SendHelloAsync(ch);
+            try { await ch.SendAsync(new MsgWriter(Msg.PeerInfo).Str(ch.Remote.Address.ToString()).Build(), ct); } catch { }
+            Stats.ClientEndpoint = ch.Remote.Address + " (browser)";
+            _ = SendDeviceStateAsync();
+            SendServerMemories();
+            _spectrumWanted = false;
+            _remotePttRefusedNotified = false;
+            await ReceiveLoopAsync(ch, ct);
+        }
+
+        /// <summary>Pagina «Trova il server» da salvare su file e aprire sul telefono o sul PC.</summary>
+        public static byte[]? FinderPage() => WebServer.ReadWebFile("trova-server.html");
 
         // =================================================================== memorie
 
@@ -2501,6 +2640,7 @@ namespace IpTrxCtrl.Core
         {
             NewFixedCode();
             RestartFixedListener();
+            RestartWeb();   // anche il browser entra con il codice fisso
             return FixedCode;
         }
 

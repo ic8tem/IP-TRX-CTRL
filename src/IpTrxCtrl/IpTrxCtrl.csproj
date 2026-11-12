@@ -44,6 +44,8 @@
     <AvaloniaResource Include="Assets\**" />
     <EmbeddedResource Include="..\..\THIRD-PARTY-NOTICES.txt" LogicalName="notices/THIRD-PARTY-NOTICES.txt" />
     <EmbeddedResource Include="..\..\LICENSE" LogicalName="notices/LICENSE" />
+    <!-- pagina web (accesso dal browser): servita dal server; «trova-server.html» si salva anche su file -->
+    <EmbeddedResource Include="web\**\*" LogicalName="web/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- Hamlib per Windows (rigctld, rigctl, DLL, licenze): la cartella hamlib viene preparata dalla compilazione -->

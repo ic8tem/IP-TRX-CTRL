@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0F1B2D">
+<title>IP-TRX-CTRL Web</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<link rel="stylesheet" href="app.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+
+<!-- ===================================================== accesso -->
+<main id="login">
+  <div class="brand">
+    <div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 20v-8"/><path d="M8.5 8.5a5 5 0 0 1 7 0"/><path d="M5.5 5.5a9 9 0 0 1 13 0"/><circle cx="12" cy="12" r="1.2"/></svg></div>
+    <div><div class="title">IP-TRX-CTRL Web</div><div class="sub" id="loginSub">pagina della stazione</div></div>
+  </div>
+  <form class="card form" id="loginForm" autocomplete="off">
+    <span class="label-cap">ENTRA NELLA STAZIONE</span>
+    <label class="field" for="code">Codice fisso del server (12 cifre)</label>
+    <input class="code" id="code" inputmode="numeric" placeholder="4829 1305 7712" maxlength="16">
+    <label class="field" for="opname">Il tuo nominativo</label>
+    <input class="text" id="opname" maxlength="20" placeholder="es. IC8TEM/P">
+    <label class="check"><input type="checkbox" id="remember" checked> Ricorda su questo dispositivo</label>
+    <button class="btn primary" id="btnEnter" type="submit">Entra</button>
+    <span class="muted hint">Il codice non passa in rete: il server manda una sfida e la pagina risponde con una prova ricavata dal codice. Serve per microfono e audio: tocca «Entra».</span>
+  </form>
+  <div class="log" id="loginLog" aria-live="polite"></div>
+</main>
+
+<!-- ===================================================== stazione -->
+<main id="station" hidden>
+  <div class="phone-head phone-only">
+    <button class="who" id="who" type="button" aria-label="Impostazioni">
+      <span class="dot off" id="dot"></span><span class="call" id="call">—</span><span class="net" id="net">—</span>
+    </button>
+    <div class="lock"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>HTTPS</div>
+  </div>
+
+  <div class="pc-head pc-only">
+    <div><div class="t">IP-TRX-CTRL Web</div><div class="st" id="pcSub">—</div></div>
+    <div class="chips">
+      <span class="chip off" id="pcConn">Non collegato</span>
+      <span class="chip acc">BROWSER</span>
+      <button class="btn" id="btnSettings" type="button">Impostazioni</button>
+      <button class="btn" id="btnLogout" type="button">Esci</button>
+    </div>
+  </div>
+
+  <div class="notice" id="notice" hidden></div>
+
+  <div class="grid3">
+    <!-- radio -->
+    <section class="col radio">
+      <span class="label-cap pc-only" id="rigTitle">RADIO REMOTA</span>
+      <div class="qrg" id="qrg" title="Clic per scrivere la frequenza · rotella = un passo">
+        <div class="row head"><span>VFO A</span><span class="pb" id="modePb">— · —</span></div>
+        <span class="freq" id="freq">--.---.---</span>
+        <input class="freq-in" id="freqIn" hidden inputmode="decimal" aria-label="Nuova frequenza in kHz">
+        <span class="unit" id="unit">MHz · —</span>
+        <div class="row foot"><span id="vfoBShort">B —</span><span id="stepShort">passo —</span></div>
+      </div>
+      <div class="tune phone-only">
+        <button class="btn" id="stepDown" type="button" aria-label="Giù di un passo">−</button>
+        <select class="btn" id="modeSel" aria-label="Modo"></select>
+        <button class="btn" id="stepUp" type="button" aria-label="Su di un passo">+</button>
+      </div>
+      <div class="bands" id="bands"></div>
+      <div class="steprow pc-only">
+        <b>Passo</b>
+        <button class="btn" id="stepDownPc" type="button" aria-label="Giù di un passo">◀</button>
+        <select class="stepval" id="stepSel" aria-label="Passo di sintonia"></select>
+        <button class="btn" id="stepUpPc" type="button" aria-label="Su di un passo">▶</button>
+        <select class="stepval" id="modeSelPc" aria-label="Modo"></select>
+        <b class="ml12">VFO B</b>
+        <span class="vfob" id="vfoB">—</span>
+        <button class="btn" id="btnAB" type="button">A/B</button>
+        <button class="btn" id="btnSplit" type="button">SPLIT</button>
+      </div>
+      <div class="ctl" id="ctl">
+        <button class="btn" id="cNR" type="button">NR</button>
+        <button class="btn" id="cNB" type="button">NB</button>
+        <button class="btn" id="cANF" type="button">NOTCH</button>
+        <button class="btn pc-only" id="cCOMP" type="button">COMP</button>
+        <button class="btn" id="cATT" type="button">ATT —</button>
+        <button class="btn pc-only" id="cPRE" type="button">PRE —</button>
+        <button class="btn pc-only" id="cAGC" type="button">AGC —</button>
+        <label class="power pc-only">Potenza <input type="range" id="power" min="0" max="100" value="50" aria-label="Potenza"> <span id="powerTxt">—</span></label>
+      </div>
+    </section>
+
+    <!-- strumenti e PTT -->
+    <section class="col instr">
+      <span class="label-cap pc-only">STRUMENTI E PTT</span>
+      <div class="meters">
+        <span class="name">S</span><div class="bar s"><i id="bS"></i></div><span class="val" id="vS">—</span>
+        <span class="name">Po</span><div class="bar po"><i id="bPo"></i></div><span class="val" id="vPo">—</span>
+        <span class="name">ROS</span><div class="bar swr" id="barSwr"><i id="bSwr"></i></div><span class="val" id="vSwr">—</span>
+        <span class="name">ALC</span><div class="bar alc"><i id="bAlc"></i></div><span class="val" id="vAlc">—</span>
+      </div>
+      <button class="ptt" id="ptt" type="button">PTT · PREMI E TIENI</button>
+      <span class="txline" id="txline">—</span>
+    </section>
+
+    <!-- audio e collegamento -->
+    <section class="col audio pc-only">
+      <span class="label-cap">AUDIO E COLLEGAMENTO</span>
+      <label for="micSel">Microfono del browser</label>
+      <select id="micSel"></select>
+      <label for="spkSel">Altoparlante</label>
+      <select id="spkSel"></select>
+      <div class="vol"><span>Volume</span><input type="range" id="volPc" min="0" max="100" value="70" aria-label="Volume"><span class="mono" id="volPcTxt">70%</span></div>
+      <div class="kv">
+        <span class="muted">Indirizzo</span><span class="mono" id="kvAddr">—</span>
+        <span class="muted">Jitter</span><span class="mono" id="kvJit">—</span>
+        <span class="muted">Persi</span><span class="mono" id="kvLoss">—</span>
+      </div>
+    </section>
+  </div>
+
+  <div class="vol phone-only">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
+    <input type="range" id="vol" min="0" max="100" value="70" aria-label="Volume">
+    <span class="mono" id="volTxt">70%</span>
+  </div>
+
+  <section class="pan pc-only" id="pan" hidden>
+    <div class="head"><span class="label-cap">PANADAPTER DELLA RADIO</span><span class="muted" id="panInfo">—</span></div>
+    <canvas id="panCanvas" aria-label="Panadapter della radio: clic per sintonizzare"></canvas>
+  </section>
+</main>
+
+<dialog id="dlg">
+  <h2>Impostazioni</h2>
+  <div class="form">
+    <label class="field" for="micSel2">Microfono</label>
+    <select id="micSel2"></select>
+    <label class="field" for="spkSel2">Altoparlante</label>
+    <select id="spkSel2"></select>
+    <span class="muted hint" id="dlgInfo">—</span>
+  </div>
+  <div class="rowbtn">
+    <button class="btn small" id="btnForget" type="button">Dimentica il codice qui</button>
+    <button class="btn small" id="btnLogout2" type="button">Esci</button>
+    <button class="btn small" id="btnClose" type="button">Chiudi</button>
+  </div>
+</dialog>
+</body>
+</html>

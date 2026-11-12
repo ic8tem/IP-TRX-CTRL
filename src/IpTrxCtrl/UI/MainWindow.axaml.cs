@@ -543,6 +543,7 @@ namespace IpTrxCtrl.UI
                 if (w.DigitalChanged) _node.StartDigital();
                 if (w.SerialInputChanged) StartSerialInput();
                 if ((w.PanChanged || w.RigChanged) && _s.Role == NodeRole.Server) _node.RestartPanadapter();
+                if (w.WebChanged && _s.Role == NodeRole.Server) _node.RestartWeb();
                 ApplyOptionalParts();
                 FillMemories();
                 if (w.PairingReset) ShowPairing();

@@ -116,6 +116,11 @@ namespace IpTrxCtrl.Core
         public string PanCom { get; set; } = "";
         public int PanBaud { get; set; } = 115200;
         public string PanCivAddr { get; set; } = "94";
+        // accesso dal browser (pagina web HTTPS servita dal server, dalla 0.3.1): si entra con il codice fisso
+        public bool WebEnabled { get; set; }
+        public int WebPort { get; set; } = 8443;
+        public bool WebOpenRouter { get; set; }             // apre la porta anche sul router (UPnP)
+        public bool WebRxOnly { get; set; }                  // il browser parte in solo ascolto
 
         // ---------------- Audio
         public string InputDeviceServer { get; set; } = "";

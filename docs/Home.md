@@ -20,6 +20,7 @@ I ruoli si scelgono al primo avvio e si possono invertire in qualsiasi momento.
 - Pedale PTT e tasto CW meccanico su una porta seriale del client.
 - Ciclo delle porte tra server e client (UPnP verificato dall'esterno, collegamento inverso, 20 giri) e audio su UDP quando possibile: vedi [Porte e collegamento](Porte-e-collegamento.md).
 - Dalla 0.3.0: sicurezza in trasmissione (tempo massimo, niente cambi di frequenza in trasmissione, precedenza a chi è alla radio, client in solo ascolto), comandi della radio (NR, NB, Notch, ATT, preamplificatore, AGC, compressore, squelch, ALC), bande, passo e memorie, [panadapter della radio](Panadapter.md), rapporto per segnalare un problema e avviso di versione nuova. Vedi [Radio, split e potenza](Radio-split-e-potenza.md) e [Finestra principale](Finestra-principale.md).
+- Dalla 0.3.1: [accesso dal browser](Accesso-dal-browser.md) di telefono, tablet e PC, con la pagina «Trova il server».
 - Sei temi di colore: Chiaro, Notte, Nero, Blu, Viola, Verde.
 
 Prima di aggiornare uno dei due PC guarda le [Versioni compatibili](Versioni-compatibili.md).

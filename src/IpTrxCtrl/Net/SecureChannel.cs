@@ -14,10 +14,24 @@ namespace IpTrxCtrl.Net
     public enum ChannelKind : byte { Control = 1, Audio = 2 }
 
     /// <summary>
+    /// Canale di messaggi tra server e operatore: TCP cifrato (programma client) oppure WebSocket su HTTPS
+    /// (pagina web, dalla 0.3.1). Stessi messaggi binari in tutti e due i casi.
+    /// </summary>
+    public interface IMsgChannel : IDisposable
+    {
+        ChannelKind Kind { get; }
+        IPEndPoint Remote { get; }
+        IPEndPoint? Local { get; }
+        Task SendAsync(byte[] plain, CancellationToken ct = default);
+        /// <summary>Restituisce null quando la connessione si chiude.</summary>
+        Task<byte[]?> ReceiveAsync(CancellationToken ct);
+    }
+
+    /// <summary>
     /// Canale TCP cifrato AES-256-GCM. Ogni frame: lunghezza(4, big endian) | nonce(12) | tag(16) | dati.
     /// Handshake di sessione autenticato con la chiave master (HMAC-SHA256) e chiave di sessione derivata con HKDF.
     /// </summary>
-    public sealed class SecureChannel : IDisposable
+    public sealed class SecureChannel : IMsgChannel
     {
         private static readonly byte[] Magic = Encoding.ASCII.GetBytes("AAL1");
         private const byte KindPairing = 0, KindSession = 1;

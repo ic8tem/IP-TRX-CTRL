@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0F1B2D">
+<title>Trova il server · IP-TRX-CTRL</title>
+<!--
+  IP-TRX-CTRL · pagina «Trova il server» (dalla 0.3.1).
+  Si tiene come file sul telefono o sul PC: non serve né l'app del computer né un sito.
+  Con il codice fisso del server chiede ai broker MQTT pubblici (WebSocket sicuro) l'indirizzo del server,
+  che arriva cifrato (AES-256-GCM) e si legge solo con il codice; poi apre la pagina della stazione in HTTPS.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;700&amp;display=swap">
+<style>
+:root { --bg: #F2F4F8; --card: #FFFFFF; --line: #D9DEE7; --ink: #172033; --muted: #4A5568; --accent: #1F5FBF; --qrg-bg: #0F1B2D;
+        --ok: #1E7A46; --ok-bg: #E3F5EA; --warn: #8A4B00; --warn-bg: #FFF3E0; --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+a { color: var(--accent); } a:hover { color: #174A94; }
+[hidden] { display: none !important; }
+main { max-width: 420px; margin: 0 auto; padding: 22px 18px; display: flex; flex-direction: column; gap: 14px; min-height: 100vh; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.logo { width: 36px; height: 36px; border-radius: 9px; background: var(--accent); display: flex; align-items: center; justify-content: center; }
+.title { font-size: 17px; font-weight: 700; } .sub { font-size: 12px; color: var(--muted); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.cap { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: var(--muted); }
+label.field { font-size: 13px; font-weight: 600; }
+input.code { font-family: var(--mono); font-size: 22px; font-weight: 700; padding: 10px 12px; border: 1.5px solid var(--accent); border-radius: 10px; color: var(--ink); background: #FFFFFF; width: 100%; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; } .check input { width: 18px; height: 18px; }
+.btn { min-height: 46px; border: none; border-radius: 10px; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer; text-decoration: none; display: flex; align-items: center; justify-content: center; }
+.btn.primary { background: var(--accent); color: #FFFFFF; } .btn.dark { background: var(--ink); color: #FFFFFF; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.note { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.log { background: var(--qrg-bg); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 5px; font-family: var(--mono); font-size: 11.5px; color: #C9D4E5; }
+.log .s { color: #7FB3FF; } .log .r { color: #6FD49A; } .log .e { color: #FF8A80; }
+.head { display: flex; justify-content: space-between; align-items: center; }
+.head .name { font-size: 15px; font-weight: 700; }
+.badge { font-size: 11px; font-weight: 700; color: var(--ok); background: var(--ok-bg); border-radius: 10px; padding: 3px 8px; }
+.badge.old { color: var(--warn); background: var(--warn-bg); }
+.kv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; font-size: 12.5px; }
+.kv .k { color: var(--muted); } .kv .v { font-family: var(--mono); word-break: break-all; } .kv .v.b { font-weight: 700; }
+.warn { font-size: 12px; color: var(--warn); background: var(--warn-bg); border-radius: 8px; padding: 8px 10px; line-height: 1.4; }
+.alt { font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.back { font-size: 13px; text-decoration: none; display: flex; align-items: center; gap: 6px; background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font-family: inherit; }
+.h1 { font-size: 22px; font-weight: 700; line-height: 1.25; }
+.lead { font-size: 14px; color: var(--muted); line-height: 1.5; }
+.fp { font-family: var(--mono); font-size: 15px; font-weight: 700; line-height: 1.6; word-break: break-all; }
+.steps { display: flex; flex-direction: column; gap: 10px; }
+.step { display: flex; gap: 12px; align-items: flex-start; font-size: 14px; line-height: 1.45; }
+.num { flex: none; width: 26px; height: 26px; border-radius: 13px; background: var(--accent); color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.grow { flex: 1; }
+</style>
+</head>
+<body>
+
+<!-- ======================== 1 · trova il server ======================== -->
+<main id="find">
+  <div class="brand">
+    <div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 20v-8"/><path d="M8.5 8.5a5 5 0 0 1 7 0"/><path d="M5.5 5.5a9 9 0 0 1 13 0"/><circle cx="12" cy="12" r="1.2"/></svg></div>
+    <div><div class="title">IP-TRX-CTRL Web</div><div class="sub">pagina aperta da questo dispositivo</div></div>
+  </div>
+
+  <form class="card" id="form" autocomplete="off">
+    <span class="cap">TROVA IL SERVER</span>
+    <label class="field" for="code">Codice fisso del server (12 cifre)</label>
+    <input class="code" id="code" inputmode="numeric" placeholder="4829 1305 7712" maxlength="16">
+    <label class="check"><input type="checkbox" id="remember" checked> Ricorda su questo dispositivo</label>
+    <button class="btn primary" id="go" type="submit">Trova il server</button>
+    <span class="note">Nessuna app del computer: la pagina chiede l'indirizzo ai broker MQTT. Arriva cifrato e si legge solo con il codice.</span>
+  </form>
+
+  <div class="log" id="log" hidden aria-live="polite"></div>
+
+  <div class="card" id="result" hidden>
+    <div class="head"><span class="name" id="rName">—</span><span class="badge" id="rBadge">IN LINEA</span></div>
+    <div class="kv">
+      <span class="k">VPN</span><span class="v b" id="rVpn">—</span>
+      <span class="k">Rete locale</span><span class="v" id="rLan">—</span>
+      <span class="k">IP pubblico</span><span class="v" id="rPub">—</span>
+      <span class="k">Certificato</span><span class="v" id="rFp">—</span>
+    </div>
+    <div class="warn" id="rWarn" hidden></div>
+    <button class="btn dark" id="open" type="button">Apri la stazione (HTTPS)</button>
+    <div class="alt" id="alt"></div>
+  </div>
+</main>
+
+<!-- ======================== 2 · prima volta: certificato ======================== -->
+<main id="cert" hidden>
+  <button class="back" id="back" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Indietro</button>
+  <span class="h1">Prima volta su questo dispositivo</span>
+  <span class="lead">Il server usa un certificato HTTPS fatto da lui. Il browser avvisa una volta sola: controlla che l'impronta sia la stessa, poi accettala.</span>
+  <div class="card" style="gap: 8px">
+    <span class="cap">IMPRONTA ATTESA (SHA-256)</span>
+    <span class="fp" id="cFp">—</span>
+    <span class="note">Arriva cifrata insieme all'indirizzo: chi non ha il codice non può falsificarla.</span>
+  </div>
+  <div class="steps">
+    <div class="step"><span class="num">1</span><span>Il browser mostra «La connessione non è privata».</span></div>
+    <div class="step"><span class="num">2</span><span>Apri i dettagli del certificato e confronta l'impronta con quella qui sopra.</span></div>
+    <div class="step"><span class="num">3</span><span>Se è uguale: «Avanzate» › «Procedi». Se è diversa: non entrare.</span></div>
+  </div>
+  <div class="warn">iPhone: va installato il certificato come profilo (Impostazioni › Generali › Info › Attendibilità certificati). <a id="cCer" href="#">Scarica il certificato</a>, installalo da Impostazioni › Profilo scaricato e attivalo.</div>
+  <div class="grow"></div>
+  <a class="btn dark" id="cOpen" href="#">Ho controllato: apri la stazione</a>
+</main>
+
+<script>
+'use strict';
+(() => {
+  // broker pubblici con MQTT su WebSocket sicuro (gli stessi a cui il server lascia l'indirizzo)
+  const BROKERS = [
+    ['broker.hivemq.com', 'wss://broker.hivemq.com:8884/mqtt'],
+    ['broker.emqx.io', 'wss://broker.emqx.io:8084/mqtt'],
+    ['test.mosquitto.org', 'wss://test.mosquitto.org:8081/mqtt']
+  ];
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('iptrx.finder.' + k); return v === null ? d : v; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('iptrx.finder.' + k, v); } catch { } },
+    del(k) { try { localStorage.removeItem('iptrx.finder.' + k); } catch { } }
+  };
+  let digits = '', info = null, target = '';
+
+  function log(cls, sym, text) {
+    const l = $('log'); l.hidden = false;
+    const d = document.createElement('span'), s = document.createElement('span');
+    s.className = cls; s.textContent = sym + ' ';
+    d.appendChild(s); d.appendChild(document.createTextNode(text)); l.appendChild(d);
+  }
+
+  // ---------------- chiavi (come il server: PBKDF2 600 000 passaggi, poi HKDF-SHA256)
+  async function secretOf(d) {
+    const base = await crypto.subtle.importKey('raw', enc.encode(d), 'PBKDF2', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode('IP-TRX-CTRL codice fisso del server v3'), iterations: 600000 }, base, 256));
+  }
+  async function hkdf(secret, infoText, len) {
+    const k = await crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: enc.encode(infoText) }, k, len * 8));
+  }
+  const hex = (u) => [...u].map((b) => b.toString(16).padStart(2, '0')).join('');
+
+  // messaggio del server: nonce(12) | tag(16) | testo cifrato
+  async function open(key, payload) {
+    const nonce = payload.subarray(0, 12), tag = payload.subarray(12, 28), ct = payload.subarray(28);
+    const data = new Uint8Array(ct.length + 16); data.set(ct); data.set(tag, ct.length);
+    const k = await crypto.subtle.importKey('raw', key, 'AES-GCM', false, ['decrypt']);
+    return JSON.parse(dec.decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce }, k, data)));
+  }
+
+  // ---------------- MQTT 3.1.1 minimo su WebSocket: CONNECT, SUBSCRIBE, PUBLISH ricevuti (messaggio «retained»)
+  function str(s) { const b = enc.encode(s); return [b.length >> 8, b.length & 255, ...b]; }
+  function packet(type, body) {
+    const len = []; let n = body.length;
+    do { let x = n & 127; n >>= 7; if (n) x |= 128; len.push(x); } while (n);
+    return new Uint8Array([type, ...len, ...body]);
+  }
+  function ask(url, topic, ms) {
+    return new Promise((resolve) => {
+      let ws, done = false, buf = new Uint8Array(0);
+      const finish = (v) => { if (done) return; done = true; clearTimeout(t); try { ws.close(); } catch { } resolve(v); };
+      const t = setTimeout(() => finish(null), ms);
+      try { ws = new WebSocket(url, ['mqtt']); } catch { finish(null); return; }
+      ws.binaryType = 'arraybuffer';
+      ws.onerror = () => finish(null);
+      ws.onclose = () => finish(null);
+      ws.onopen = () => {
+        const id = 'iptrx-web-' + Math.random().toString(36).slice(2, 10);
+        ws.send(packet(0x10, [...str('MQTT'), 4, 0x02, 0, 30, ...str(id)]));
+      };
+      ws.onmessage = (ev) => {
+        const add = new Uint8Array(ev.data), nb = new Uint8Array(buf.length + add.length);
+        nb.set(buf); nb.set(add, buf.length); buf = nb;
+        while (buf.length >= 2) {
+          let len = 0, mul = 1, i = 1, b;
+          do { if (i >= buf.length) return; b = buf[i++]; len += (b & 127) * mul; mul *= 128; } while (b & 128);
+          if (buf.length < i + len) return;
+          const first = buf[0], type = first >> 4, body = buf.subarray(i, i + len);
+          buf = buf.subarray(i + len);
+          if (type === 2) ws.send(packet(0x82, [0, 1, ...str(topic), 0]));                // CONNACK → SUBSCRIBE
+          else if (type === 3) {                                                           // PUBLISH
+            const qos = (first >> 1) & 3;
+            const tl = (body[0] << 8) | body[1];
+            const p = 2 + tl + (qos > 0 ? 2 : 0);
+            finish(body.subarray(p).slice());
+          }
+        }
+      };
+    });
+  }
+
+  // ---------------- ricerca
+  async function find() {
+    digits = ($('code').value || '').replace(/\D/g, '');
+    $('log').textContent = ''; $('result').hidden = true;
+    if (digits.length !== 12) { log('e', '✗', 'Servono le 12 cifre del codice fisso del server.'); return; }
+    if (!window.crypto || !crypto.subtle) { log('e', '✗', 'Questo browser non permette la crittografia su questa pagina: aprila con Chrome, Firefox, Edge o Safari aggiornati.'); return; }
+    if ($('remember').checked) store.set('code', digits); else store.del('code');
+    $('go').disabled = true;
+    try {
+      log('s', '▶', 'chiave dal codice (PBKDF2) …');
+      const secret = await secretOf(digits);
+      const topic = 'iptrxweb/' + hex(await hkdf(secret, 'iptrx-web-topic', 16));
+      const key = await hkdf(secret, 'iptrx-web-address', 32);
+      log('s', '▶', 'ok · ' + BROKERS.map((b) => b[0]).join(' · '));
+      const got = await Promise.all(BROKERS.map((b) => ask(b[1], topic, 9000)));
+      let best = null, okCount = 0;
+      for (const p of got) {
+        if (!p || p.length < 29) continue;
+        try { const i = await open(key, p); okCount++; if (!best || (i.t || 0) > (best.t || 0)) best = i; } catch { }
+      }
+      if (!best) {
+        log('e', '✗', 'Nessun server con questo codice: controlla le cifre, che il server sia acceso e che abbia attivo l\'accesso dal browser.');
+        return;
+      }
+      log('r', '◀', `indirizzo cifrato ricevuto (${okCount} broker)`);
+      log('r', '✓', `server ${best.c || '—'} trovato · ${best.v || ''}`);
+      show(best);
+    } catch (e) {
+      log('e', '✗', 'Errore: ' + (e && e.message ? e.message : e));
+    } finally { $('go').disabled = false; }
+  }
+
+  function show(i) {
+    info = i;
+    const port = i.p || 8443;
+    const vpn = (i.vpn || [])[0] || '', lan = i.lan || '', pub = i.pub || '';
+    $('rName').textContent = i.c || 'Server';
+    const age = Date.now() / 1000 - (i.t || 0);
+    $('rBadge').textContent = age < 1800 ? 'IN LINEA' : 'AGGIORNATO ' + new Date((i.t || 0) * 1000).toLocaleString();
+    $('rBadge').className = 'badge' + (age < 1800 ? '' : ' old');
+    $('rVpn').textContent = vpn ? `${vpn}:${port}` : 'nessuna';
+    $('rLan').textContent = lan ? `${lan}:${port}` : '—';
+    $('rPub').textContent = pub ? `${pub}:${port}` : (i.cgnat ? 'dietro CGNAT' : 'porta non aperta');
+    const fp = (i.fp || '').split(':');
+    $('rFp').textContent = fp.length > 4 ? `${fp[0]}:${fp[1]}:…:${fp[fp.length - 2]}:${fp[fp.length - 1]}` : (i.fp || '—');
+    const w = $('rWarn');
+    if (!pub && i.cgnat) { w.textContent = 'IP pubblico dietro CGNAT: da fuori casa si entra solo dalla VPN.'; w.hidden = false; }
+    else if (!pub && !vpn) { w.textContent = 'Il server non ha una VPN né una porta aperta sul router: si entra solo dalla stessa rete di casa.'; w.hidden = false; }
+    else w.hidden = true;
+    // ordine dei tentativi: VPN, rete locale, IP pubblico
+    const list = [];
+    if (vpn) list.push(['VPN', `${vpn}:${port}`]);
+    if (lan) list.push(['rete locale', `${lan}:${port}`]);
+    if (pub) list.push(['IP pubblico', `${pub}:${port}`]);
+    target = list.length ? list[0][1] : '';
+    $('open').disabled = !target;
+    const alt = $('alt'); alt.textContent = '';
+    if (list.length > 1) {
+      alt.appendChild(document.createTextNode('Oppure:'));
+      for (const [name, addr] of list.slice(1)) {
+        const a = document.createElement('a'); a.href = '#'; a.textContent = `${name} ${addr}`;
+        a.addEventListener('click', (e) => { e.preventDefault(); target = addr; go(); });
+        alt.appendChild(a);
+      }
+    }
+    $('result').hidden = false;
+  }
+
+  function stationUrl(addr) {
+    const h = new URLSearchParams({ c: digits, r: $('remember').checked ? '1' : '0' });
+    return `https://${addr}/#${h.toString()}`;
+  }
+
+  function go() {
+    if (!target || !info) return;
+    // la prima volta per questo indirizzo e questo certificato: spiega l'avviso del browser
+    if (store.get('ok.' + target, '') === info.fp) { location.href = stationUrl(target); return; }
+    $('cFp').textContent = (info.fp || '—').replace(/((?:[0-9A-F]{2}:){7}[0-9A-F]{2}):/g, '$1 ');
+    $('cCer').href = `https://${target}/certificato.cer`;
+    $('cOpen').href = stationUrl(target);
+    $('find').hidden = true; $('cert').hidden = false;
+    window.scrollTo(0, 0);
+  }
+
+  $('form').addEventListener('submit', (e) => { e.preventDefault(); find(); });
+  $('open').addEventListener('click', go);
+  $('back').addEventListener('click', () => { $('cert').hidden = true; $('find').hidden = false; });
+  $('cOpen').addEventListener('click', () => { if (info) store.set('ok.' + target, info.fp); });
+  $('code').value = store.get('code', '');
+})();
+</script>
+</body>
+</html>
