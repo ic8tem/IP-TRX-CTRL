@@ -76,10 +76,11 @@
 
       <!-- avviso di versione nuova -->
       <Border x:Name="BarUpdate" Classes="inset" Padding="12,6" IsVisible="False">
-        <Grid ColumnDefinitions="*,Auto,Auto">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto">
           <TextBlock x:Name="TxtUpdate" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" />
-          <Button x:Name="BtnUpdateOpen" Grid.Column="1" Classes="small accent" Content="Apri la pagina" Margin="8,0" />
-          <Button x:Name="BtnUpdateClose" Grid.Column="2" Classes="small" Content="Chiudi" />
+          <Button x:Name="BtnUpdateNow" Grid.Column="1" Classes="small accent" Content="Aggiorna adesso" Margin="8,0,0,0" IsVisible="False" />
+          <Button x:Name="BtnUpdateOpen" Grid.Column="2" Classes="small" Content="Apri la pagina" Margin="8,0" />
+          <Button x:Name="BtnUpdateClose" Grid.Column="3" Classes="small" Content="Chiudi" />
         </Grid>
       </Border>
 

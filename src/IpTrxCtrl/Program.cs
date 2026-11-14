@@ -11,6 +11,9 @@ namespace IpTrxCtrl
         public static void Main(string[] args)
         {
             AppDomain.CurrentDomain.UnhandledException += (_, e) => LogError(e.ExceptionObject?.ToString());
+            if (Array.IndexOf(args, "--versione") >= 0) { Console.WriteLine($"IP-TRX-CTRL {AppVersion.Text} ({Updater.Rid})"); return; }
+            // dopo un aggiornamento automatico: aspetta l'uscita della versione vecchia (porte, radio) e toglie i suoi resti
+            Updater.AfterRestart(args);
             try
             {
                 BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);

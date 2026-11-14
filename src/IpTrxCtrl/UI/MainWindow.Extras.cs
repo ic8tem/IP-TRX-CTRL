@@ -146,7 +146,8 @@ namespace IpTrxCtrl.UI
             };
 
             // versione nuova
-            BtnUpdateOpen.Click += (_, _) => OpenUrl(Support.ReleasesUrl);
+            BtnUpdateOpen.Click += (_, _) => OpenUrl(_updateRel?.PageUrl ?? Support.ReleasesUrl);
+            BtnUpdateNow.Click += (_, _) => UpdateNowClicked();
             BtnUpdateClose.Click += (_, _) =>
             {
                 BarUpdate.IsVisible = false;
@@ -386,22 +387,150 @@ namespace IpTrxCtrl.UI
 
         // ================================================================ versione nuova
 
-        private string _updateVersion = "";
+        // Controllo all'avvio e poi ogni 6 ore. Con l'aggiornamento automatico (di partenza, dove il pacchetto lo
+        // consente) la versione nuova si scarica subito, ma si installa e il programma si riavvia solo quando non
+        // c'è una sessione in corso e non si trasmette: un server non resta mai a metà di un collegamento.
 
-        private async void CheckUpdatesAsync()
+        private string _updateVersion = "";
+        private Updater.Release? _updateRel;
+        private Updater.Staged? _updateStaged;
+        private DispatcherTimer? _updateTimer;
+        private DateTime _updateLastCheck = DateTime.MinValue;
+        private bool _updateBusy;
+
+        private bool UpdateSessionBusy => _node.Connected || _node.LocalPtt || _tel.Transmitting || _manualPtt;
+
+        private void CheckUpdatesAsync()
         {
-            if (!_s.CheckUpdates) return;
+            if (_updateTimer == null)
+            {
+                _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
+                _updateTimer.Tick += (_, _) => UpdateTick(false);
+                _updateTimer.Start();
+                Closing += (_, _) => _updateTimer?.Stop();
+            }
+            UpdateTick(true);
+        }
+
+        private async void UpdateTick(bool now)
+        {
+            if (_updateBusy || !_s.CheckUpdates) return;
+            bool self = Updater.CanSelfUpdate(out _);
+
+            // versione già scaricata: si installa appena la stazione è libera
+            if (_updateStaged != null)
+            {
+                if (_s.AutoUpdate && self && !UpdateSessionBusy) InstallStaged(true);
+                return;
+            }
+            if (!now && DateTime.UtcNow - _updateLastCheck < TimeSpan.FromHours(6)) return;
+            _updateLastCheck = DateTime.UtcNow;
+
+            _updateBusy = true;
+            Updater.Release? rel;
             try
             {
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-                string? v = await Support.CheckNewerAsync(cts.Token);
-                if (v == null || v == _s.UpdateSeen) return;
-                _updateVersion = v;
-                SessionLog.Write($"AGGIORNAMENTI è disponibile la versione {v} (questa è la {AppVersion.Text})");
-                TxtUpdate.Text = $"È disponibile IP-TRX-CTRL {v} (questa è la {AppVersion.Text}). Ricorda di aggiornare anche l'altro PC: guarda la tabella delle versioni compatibili.";
+                rel = await Updater.GetLatestAsync(cts.Token);
+            }
+            finally { _updateBusy = false; }
+            if (rel == null || !Support.IsNewer(rel.Version, AppVersion.Text)) return;
+            bool first = _updateVersion != rel.Version;
+            _updateRel = rel;
+            _updateVersion = rel.Version;
+            if (first) SessionLog.Write($"AGGIORNAMENTI è disponibile la versione {rel.Version} (questa è la {AppVersion.Text})");
+
+            if (_s.AutoUpdate && self && rel.AssetUrl != null)
+            {
+                await DownloadUpdateAsync(rel);
+                if (_updateStaged != null && !UpdateSessionBusy) InstallStaged(true);
+                return;
+            }
+            if (rel.Version == _s.UpdateSeen) return;
+            ShowUpdateBar(self && rel.AssetUrl != null);
+        }
+
+        private void ShowUpdateBar(bool canInstall)
+        {
+            Updater.CanSelfUpdate(out string why);
+            TxtUpdate.Text = $"È disponibile IP-TRX-CTRL {_updateVersion} (questa è la {AppVersion.Text}). "
+                + (canInstall ? "«Aggiorna adesso» la installa e riavvia il programma."
+                              : (why.Length > 0 ? char.ToUpper(why[0]) + why.Substring(1) + "." : ""))
+                + " Ricorda di aggiornare anche l'altro PC.";
+            BtnUpdateNow.IsVisible = canInstall;
+            BtnUpdateNow.IsEnabled = true;
+            BarUpdate.IsVisible = true;
+        }
+
+        private async Task DownloadUpdateAsync(Updater.Release rel)
+        {
+            if (_updateBusy) return;
+            _updateBusy = true;
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(20));
+                _updateStaged = await Updater.DownloadAsync(rel, p => Dispatcher.UIThread.Post(() =>
+                {
+                    if (BarUpdate.IsVisible && p >= 0) TxtUpdate.Text = $"Scarico IP-TRX-CTRL {rel.Version}: {p}%";
+                }), cts.Token);
+                SessionLog.Write($"AGGIORNAMENTI scaricata la versione {rel.Version} ({rel.AssetName}{(rel.Sha256 != null ? ", impronta SHA-256 controllata" : "")})");
+                if (UpdateSessionBusy)
+                {
+                    TxtUpdate.Text = $"IP-TRX-CTRL {rel.Version} è pronta: si installa da sola e il programma si riavvia appena finisce la sessione.";
+                    BtnUpdateNow.IsVisible = true;
+                    BtnUpdateNow.IsEnabled = true;
+                    BarUpdate.IsVisible = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                _updateStaged = null;
+                SessionLog.Write("AGGIORNAMENTI scaricamento non riuscito: " + ex.Message);
+                if (BarUpdate.IsVisible) TxtUpdate.Text = $"Aggiornamento a {rel.Version} non riuscito: {ex.Message}. Riprovo più tardi, oppure scaricalo dalla pagina.";
+            }
+            finally { _updateBusy = false; }
+        }
+
+        /// <summary>Clic su «Aggiorna adesso».</summary>
+        private async void UpdateNowClicked()
+        {
+            if (_updateBusy || _updateRel == null) return;
+            if (UpdateSessionBusy && !await Dialogs.YesNo(this, "C'è una sessione in corso: aggiornando, il programma si riavvia e il collegamento si interrompe per qualche secondo. Aggiorno adesso?"))
+                return;
+            BtnUpdateNow.IsEnabled = false;
+            BarUpdate.IsVisible = true;
+            if (_updateStaged == null)
+            {
+                TxtUpdate.Text = $"Scarico IP-TRX-CTRL {_updateRel.Version}…";
+                await DownloadUpdateAsync(_updateRel);
+            }
+            if (_updateStaged != null) InstallStaged(false);
+            else BtnUpdateNow.IsEnabled = true;
+        }
+
+        private void InstallStaged(bool automatic)
+        {
+            var st = _updateStaged;
+            if (st == null) return;
+            _updateBusy = true;
+            try
+            {
+                var psi = Updater.Install(st);
+                SessionLog.Write($"AGGIORNAMENTI installata la versione {st.Release.Version}{(automatic ? " (automatico)" : "")}: riavvio");
+                _updateStaged = null;
+                if (_manualPtt) SetManualPtt(false);
+                Process.Start(psi);
+                Close();
+            }
+            catch (Exception ex)
+            {
+                _updateStaged = null;
+                _updateBusy = false;
+                SessionLog.Write("AGGIORNAMENTI installazione non riuscita: " + ex.Message);
+                TxtUpdate.Text = $"Installazione di IP-TRX-CTRL {st.Release.Version} non riuscita: {ex.Message}. Scaricala dalla pagina delle release.";
+                BtnUpdateNow.IsVisible = false;
                 BarUpdate.IsVisible = true;
             }
-            catch { }
         }
 
         internal static void OpenUrl(string url)

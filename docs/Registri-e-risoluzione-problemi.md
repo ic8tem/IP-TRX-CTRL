@@ -36,11 +36,15 @@ Nel rapporto **gli indirizzi IP pubblici sono mascherati**: ognuno diventa `[IP-
 
 Senza il rapporto: apri la cartella dei dati e allega `errori.log` e `sessioni.log`, indicando sistema operativo, versione, ruolo e radio. `sessioni.log` contiene indirizzi IP e nominativi. Non allegare mai i file delle chiavi (`pairing-….key`).
 
-## Versione nuova
+## Versione nuova e aggiornamenti automatici
 
-Dalla 0.3.0 il programma, all'avvio, chiede a GitHub qual è l'ultima release pubblicata (`api.github.com/repos/ic8tem/IP-TRX-CTRL/releases/latest`, senza account). Se è più nuova compare una riga in alto con **Apri la pagina** (la pagina della release) e **Chiudi** (per quella versione non compare più). Ricorda di aggiornare **tutti e due i PC** (vedi *Versioni compatibili*).
+All'avvio e poi ogni 6 ore il programma chiede a GitHub qual è l'ultima release pubblicata (`api.github.com/repos/ic8tem/IP-TRX-CTRL/releases/latest`, senza account).
 
-Il controllo si spegne in *Impostazioni › Finestra principale*. GitHub vede l'indirizzo IP di chi chiede, come per qualunque pagina web; non viene mandato nient'altro. Il servizio è quello pubblico delle API di GitHub (limite di 60 richieste all'ora per indirizzo senza account: il programma ne fa una per avvio).
+Dalla **0.3.2**, se è più nuova, il programma si aggiorna da solo: scarica il pacchetto adatto al PC, ne controlla dimensione e impronta SHA-256 (quella che GitHub pubblica per ogni file) e si riavvia nella versione nuova, **solo quando non c'è una sessione in corso e non si trasmette**. Con la sessione aperta la versione nuova resta pronta e si installa appena finisce; la riga in alto lo dice e offre **Aggiorna adesso**. Nel registro `sessioni.log` ogni passo è scritto con il prefisso `AGGIORNAMENTI`.
+
+Si aggiornano da soli: Setup e zip portatile di Windows (dalla 0.3.2 il Setup rende scrivibile la cartella del programma per questo), tar.gz portatili (Linux, Raspberry Pi, Alpine), AppImage, IP-TRX-CTRL.app sul Mac in una cartella scrivibile. **Non** si aggiornano da soli i pacchetti di sistema **.deb, .rpm, Arch e Slackware**: compare la riga della versione nuova con **Apri la pagina**, e si installa il pacchetto nuovo con lo stesso comando della prima volta.
+
+Gli aggiornamenti automatici si spengono in **Impostazioni › Finestra principale**: resta la riga in alto con **Aggiorna adesso**, **Apri la pagina** e **Chiudi** (per quella versione non compare più). Se l'aggiornamento non riesce (rete, cartella non scrivibile) il programma continua con la versione in uso e riprova al controllo successivo.
 
 ## Problemi frequenti
 

@@ -1,5 +1,5 @@
 ; Installatore Windows di IP-TRX-CTRL (Inno Setup 6)
-; Uso: ISCC /DAppVersion=0.1.0 /DArch=x64|x86 /DSourceDir=<cartella con IP-TRX-CTRL.exe> /DOutDir=<uscita> IP-TRX-CTRL.iss
+; Uso: ISCC /DAppVersion=0.1.0 /DArch=x64|x86|arm64 /DSourceDir=<cartella con IP-TRX-CTRL.exe> /DOutDir=<uscita> IP-TRX-CTRL.iss
 
 #ifndef AppVersion
   #define AppVersion "0.1.0"
@@ -32,6 +32,10 @@ InfoBeforeFile=..\..\THIRD-PARTY-NOTICES.txt
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 #endif
+#if Arch == "arm64"
+ArchitecturesAllowed=arm64
+ArchitecturesInstallIn64BitMode=arm64
+#endif
 
 [Languages]
 Name: "italian"; MessagesFile: "compiler:Languages\Italian.isl"
@@ -42,6 +46,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 #if Arch == "x64"
 Name: "vbcable"; Description: "Installa il cavo audio virtuale VB-CABLE (VB-Audio, donationware), scaricato dal sito del produttore. Saltato se è già presente."; GroupDescription: "Programmi digitali sul client (WSJT-X, JTDX, fldigi…):"; Check: not VbCablePresent
 #endif
+
+[Dirs]
+; cartella del programma scrivibile dagli utenti: serve all'aggiornamento automatico (dalla 0.3.2), che
+; sostituisce IP-TRX-CTRL.exe sul posto senza chiedere la conferma di amministratore
+Name: "{app}"; Permissions: users-modify
 
 [Files]
 Source: "{#SourceDir}\IP-TRX-CTRL.exe"; DestDir: "{app}"; Flags: ignoreversion

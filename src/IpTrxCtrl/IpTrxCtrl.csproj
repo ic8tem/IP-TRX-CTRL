@@ -40,6 +40,11 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
+  <!-- codice della compilazione (win-arm64, linux-musl-x64…): l'aggiornamento automatico sceglie il pacchetto giusto -->
+  <ItemGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <AssemblyMetadata Include="Rid" Value="$(RuntimeIdentifier)" />
+  </ItemGroup>
+
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
     <EmbeddedResource Include="..\..\THIRD-PARTY-NOTICES.txt" LogicalName="notices/THIRD-PARTY-NOTICES.txt" />

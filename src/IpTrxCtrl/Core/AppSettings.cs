@@ -183,6 +183,7 @@ namespace IpTrxCtrl.Core
         public int PanIntensity { get; set; } = 50;
         public bool CheckUpdates { get; set; } = true;
         public string UpdateSeen { get; set; } = "";         // versione nuova già segnalata
+        public bool AutoUpdate { get; set; } = true;         // scarica e installa da solo la versione nuova (0.3.2), fuori dalle sessioni
 
         // ---------------- Porta seriale del client: PTT e tasto CW da hardware (o porta virtuale)
         public string InputCom { get; set; } = "";

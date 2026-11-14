@@ -15,6 +15,9 @@ PKG="$(mktemp -d)/ip-trx-ctrl_${VERSION}_${ARCH}"
 install -d "$PKG/DEBIAN" "$PKG/opt/ip-trx-ctrl" "$PKG/usr/bin" "$PKG/usr/share/applications" \
            "$PKG/usr/share/icons/hicolor/256x256/apps" "$PKG/usr/share/doc/ip-trx-ctrl"
 install -m 755 "$SRC/IP-TRX-CTRL" "$PKG/opt/ip-trx-ctrl/IP-TRX-CTRL"
+# segno del pacchetto di sistema: qui il programma non si aggiorna da solo (cartella di root), avvisa soltanto
+echo deb > "$PKG/opt/ip-trx-ctrl/PACCHETTO"
+chmod 644 "$PKG/opt/ip-trx-ctrl/PACCHETTO"
 ln -s /opt/ip-trx-ctrl/IP-TRX-CTRL "$PKG/usr/bin/ip-trx-ctrl"
 install -m 644 "$ROOT/src/IpTrxCtrl/Assets/icon.png" "$PKG/usr/share/icons/hicolor/256x256/apps/ip-trx-ctrl.png"
 { printf "IP-TRX-CTRL - Copyright (C) 2026 IC8TEM\nLicenza: GNU GPL 3.0 o successiva (/usr/share/common-licenses/GPL-3)\n\n"; cat "$ROOT/THIRD-PARTY-NOTICES.txt"; } > "$PKG/usr/share/doc/ip-trx-ctrl/copyright"

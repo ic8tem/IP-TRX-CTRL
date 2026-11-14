@@ -18,13 +18,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: windows-latest, rid: win-x64,     hamlib: w64, arch: x64 }
-          - { os: windows-latest, rid: win-x86,     hamlib: w32, arch: x86 }
-          - { os: ubuntu-latest,  rid: linux-x64 }
-          - { os: ubuntu-latest,  rid: linux-arm64 }
-          - { os: ubuntu-latest,  rid: linux-arm }
-          - { os: macos-latest,   rid: osx-arm64 }
-          - { os: macos-latest,   rid: osx-x64 }
+          - { os: windows-latest,   rid: win-x64,          hamlib: w64, arch: x64 }
+          - { os: windows-latest,   rid: win-x86,          hamlib: w32, arch: x86 }
+          # Windows su ARM (Snapdragon): rigctld a 64 bit per x64, eseguito dall'emulazione di Windows 11
+          - { os: windows-latest,   rid: win-arm64,        hamlib: w64, arch: arm64 }
+          - { os: ubuntu-latest,    rid: linux-x64 }
+          # ARM64 su un processore ARM vero: AppImage aarch64 e prova di avvio
+          - { os: ubuntu-24.04-arm, rid: linux-arm64 }
+          - { os: ubuntu-latest,    rid: linux-arm }
+          # Alpine e altri Linux con musl
+          - { os: ubuntu-latest,    rid: linux-musl-x64 }
+          - { os: ubuntu-24.04-arm, rid: linux-musl-arm64 }
+          - { os: macos-latest,     rid: osx-arm64 }
+          - { os: macos-latest,     rid: osx-x64 }
 
     steps:
       - uses: actions/checkout@v4
@@ -67,21 +73,48 @@ jobs:
           Copy-Item LICENSE dist/${{ matrix.rid }}/LICENSE.txt
           Compress-Archive -Path dist/${{ matrix.rid }}/IP-TRX-CTRL.exe, dist/${{ matrix.rid }}/THIRD-PARTY-NOTICES.txt, dist/${{ matrix.rid }}/LICENSE.txt -DestinationPath "out/IP-TRX-CTRL-$env:VERSION-${{ matrix.rid }}-portatile.zip"
           # versione di Hamlib inclusa: serve alla release per allegare i sorgenti giusti (GPL)
-          Copy-Item src/IpTrxCtrl/hamlib/VERSION.txt "out/hamlib-version-${{ matrix.hamlib }}.txt"
+          Copy-Item src/IpTrxCtrl/hamlib/VERSION.txt "out/hamlib-version-${{ matrix.rid }}.txt"
 
-      # ---------------------------------------------------------------- Linux e Raspberry: .deb + tar.gz portatile
+      # ---------------------------------------------------------------- Linux, Raspberry, Alpine
+      # tar.gz portatile (si aggiorna da solo) per tutti; .deb e .rpm per glibc; Arch, Slackware e AppImage per x86_64 e aarch64
       - name: Pacchetti Linux
         if: startsWith(matrix.rid, 'linux')
         shell: bash
         run: |
-          chmod +x packaging/linux/make-deb.sh
-          packaging/linux/make-deb.sh ${{ matrix.rid }} "$VERSION" dist/${{ matrix.rid }} out
-          mkdir -p pkg/IP-TRX-CTRL
-          cp dist/${{ matrix.rid }}/IP-TRX-CTRL pkg/IP-TRX-CTRL/
+          set -e
+          RID=${{ matrix.rid }}
+          mkdir -p out pkg/IP-TRX-CTRL
+          cp dist/$RID/IP-TRX-CTRL pkg/IP-TRX-CTRL/
           chmod +x pkg/IP-TRX-CTRL/IP-TRX-CTRL
           cp THIRD-PARTY-NOTICES.txt LICENSE src/IpTrxCtrl/Assets/icon.png pkg/IP-TRX-CTRL/
-          tar -czf "out/IP-TRX-CTRL-$VERSION-${{ matrix.rid }}-portatile.tar.gz" -C pkg IP-TRX-CTRL
-          dpkg-deb --info out/*.deb | head -20
+          tar -czf "out/IP-TRX-CTRL-$VERSION-$RID-portatile.tar.gz" -C pkg IP-TRX-CTRL
+          case "$RID" in linux-musl-*) exit 0 ;; esac
+          chmod +x packaging/linux/*.sh
+          packaging/linux/make-deb.sh $RID "$VERSION" dist/$RID out
+          DEB=$(ls out/*.deb)
+          dpkg-deb --info "$DEB" | head -20
+          sudo apt-get install -y -qq rpm >/dev/null
+          packaging/linux/make-rpm.sh $RID "$VERSION" "$DEB" out
+          if [ "$RID" != "linux-arm" ]; then
+            packaging/linux/make-txz.sh $RID "$VERSION" "$DEB" out
+            packaging/linux/make-arch.sh $RID "$VERSION" "$DEB" out
+            packaging/linux/make-appimage.sh $RID "$VERSION" dist/$RID out
+          fi
+          ls -la out
+
+      - name: Prova di avvio (Linux)
+        if: matrix.rid == 'linux-x64' || matrix.rid == 'linux-arm64'
+        shell: bash
+        run: |
+          ./dist/${{ matrix.rid }}/IP-TRX-CTRL --versione | tee prova.txt
+          grep -q "IP-TRX-CTRL $VERSION (${{ matrix.rid }})" prova.txt
+
+      - name: Prova di avvio in Alpine
+        if: startsWith(matrix.rid, 'linux-musl')
+        shell: bash
+        run: |
+          docker run --rm -v "$PWD/pkg/IP-TRX-CTRL:/p" alpine:latest sh -c "apk add -q libstdc++ libgcc >/dev/null; /p/IP-TRX-CTRL --versione" | tee prova.txt
+          grep -q "IP-TRX-CTRL $VERSION (${{ matrix.rid }})" prova.txt
 
       # ---------------------------------------------------------------- macOS: .dmg + .app zip
       - name: Pacchetti macOS
@@ -142,15 +175,23 @@ jobs:
           overwrite_files: true
           files: artifacts/*
           body: |
-            **Windows 64 bit**: `IP-TRX-CTRL-…-win-x64-setup.exe` · **Windows 32 bit**: `…-win-x86-setup.exe` (Hamlib incluso)
-            **Linux 64 bit**: `ip-trx-ctrl_…_amd64.deb`
+            Novità della 0.3.2: **aggiornamenti automatici** e nuovi pacchetti per Windows su ARM, Fedora/openSUSE (.rpm), Arch, Slackware, AppImage e Alpine.
+
+            **Windows 64 bit**: `IP-TRX-CTRL-…-win-x64-setup.exe` · **32 bit**: `…-win-x86-setup.exe` · **ARM (Snapdragon)**: `…-win-arm64-setup.exe` (Hamlib incluso); oppure lo zip `-portatile`
+            **Debian, Ubuntu, Mint**: `ip-trx-ctrl_…_amd64.deb`, con `sudo apt install ./ip-trx-ctrl_…deb` (installa anche Hamlib)
             **Raspberry Pi**: `ip-trx-ctrl_…_arm64.deb` (Raspberry Pi OS 64 bit) · `ip-trx-ctrl_…_armhf.deb` (32 bit)
-            **macOS**: `IP-TRX-CTRL-…-osx-arm64.dmg` (Apple Silicon) · `…-osx-x64.dmg` (Intel); al primo avvio clic destro › Apri
+            **Fedora, openSUSE**: `ip-trx-ctrl-….x86_64.rpm` (o `.aarch64.rpm`, `.armv7hl.rpm`), con `sudo dnf install ./ip-trx-ctrl-…rpm` o `sudo zypper install ./ip-trx-ctrl-…rpm`
+            **Arch, Manjaro, EndeavourOS, Arch Linux ARM**: `ip-trx-ctrl-…-x86_64.pkg.tar.zst` (o `-aarch64`), con `sudo pacman -U ./ip-trx-ctrl-…pkg.tar.zst`
+            **Slackware** (x86_64 e ARM64): da root `installpkg ip-trx-ctrl-…-x86_64-1_ic8tem.txz` (o `-aarch64-`); Hamlib da SlackBuilds.org
+            **Qualsiasi Linux**: `IP-TRX-CTRL-…-x86_64.AppImage` (o `-aarch64`): rendilo eseguibile e avvialo; Hamlib quello del sistema
+            **Alpine Linux** (musl): `IP-TRX-CTRL-…-linux-musl-x64-portatile.tar.gz` (o `-linux-musl-arm64-`), con `apk add libstdc++ fontconfig libx11 libice libsm alsa-lib hamlib`
+            **Altri Linux** (anche ARM: Slackware ARM64, schede armv7l): `IP-TRX-CTRL-…-linux-x64-portatile.tar.gz` (o `-linux-arm64-`, `-linux-arm-`)
+            **macOS**: `IP-TRX-CTRL-…-osx-arm64.dmg` (Apple Silicon) · `…-osx-x64.dmg` (Intel); al primo avvio clic destro › Apri; Hamlib con `brew install hamlib`
 
-            Linux e Raspberry: `sudo apt install ./ip-trx-ctrl_…deb` installa anche Hamlib. Per usare la porta seriale della radio: `sudo usermod -aG dialout $USER`.
-            macOS: Hamlib con `brew install hamlib`.
-            Le versioni *portatile* non richiedono installazione.
+            **Aggiornamenti automatici** (dalla 0.3.2, attivi di partenza, si spengono nelle Impostazioni): all'avvio e ogni 6 ore il programma guarda l'ultima release, scarica il pacchetto, ne controlla l'impronta SHA-256 e si riavvia da solo nella versione nuova, **solo quando non c'è una sessione in corso e non si trasmette**. Valgono per l'installatore e lo zip di Windows, i tar.gz portatili (Linux, Raspberry Pi, Alpine), l'AppImage e IP-TRX-CTRL.app sul Mac (spostato in Applicazioni o in un'altra cartella scrivibile). **Non valgono** per i pacchetti dei gestori di sistema (.deb, .rpm, Arch, Slackware): lì il programma avvisa soltanto, e la versione nuova si installa con lo stesso comando della prima volta. La 0.3.0 e la 0.3.1 non si aggiornano da sole: la 0.3.2 va installata a mano, le successive no.
 
-            **Compatibilità**: server e client devono essere entrambi 0.2.x (protocollo 2); le 0.1.x non sono compatibili. Tabella completa: [Versioni compatibili](https://github.com/ic8tem/IP-TRX-CTRL/blob/main/docs/Versioni-compatibili.md).
+            Per usare la porta seriale della radio su Linux: `sudo usermod -aG dialout $USER`. Le versioni *portatile* non richiedono installazione.
+
+            **Compatibilità**: server e client devono essere entrambi 0.3.x (protocollo 3); le 0.2.x e precedenti non sono compatibili. Tabella completa: [Versioni compatibili](https://github.com/ic8tem/IP-TRX-CTRL/blob/main/docs/Versioni-compatibili.md).
 
             `hamlib-…-sorgenti.tar.gz`: sorgenti di Hamlib (GPL 2 / LGPL 2.1), la stessa versione di rigctld inclusa negli installatori Windows.

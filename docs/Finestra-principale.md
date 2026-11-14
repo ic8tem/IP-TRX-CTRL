@@ -2,13 +2,13 @@
 
 Dalla 0.3.0 la finestra è più piccola: si apre a **1080 × 760** punti (prima 1240 × 816) e si può stringere fino a 900 × 520; se il contenuto non entra compare la barra di scorrimento. È organizzata così:
 
-1. **Intestazione** su una riga: nome del programma, stato del collegamento, LED UPnP, ruolo (CLIENT o SERVER), colori, **Impostazioni**, **Inverti ruoli**, **Help**. Sotto, quando c'è, la riga della **versione nuova** (vedi *Registri e risoluzione dei problemi*).
+1. **Intestazione** su una riga: nome del programma, stato del collegamento, LED UPnP, ruolo (CLIENT o SERVER), colori, **Impostazioni**, **Inverti ruoli**, **Help**. Sotto, quando c'è, la riga della **versione nuova** con **Aggiorna adesso** (vedi *Registri e risoluzione dei problemi*).
 2. **Tre colonne**: radio · strumenti e PTT · l'altro PC.
 3. **Panadapter della radio**, se attivo (vedi *Panadapter*).
 4. **Schede** in basso: **Keyer**, **CW** (solo in modo CW), **Audio**, **Collegamento**.
 5. Riga degli **avvisi** (server occupato, trasmissione non permessa, tempo massimo…).
 
-Le parti nuove si nascondono da **Impostazioni › Finestra principale**: pulsanti delle bande e passo, comandi della radio, memorie, strumento ALC, panadapter, controllo della versione nuova. Così la finestra resta ancora più bassa.
+Le parti nuove si nascondono da **Impostazioni › Finestra principale**: pulsanti delle bande e passo, comandi della radio, memorie, strumento ALC, panadapter, controllo della versione nuova e aggiornamenti automatici. Così la finestra resta ancora più bassa.
 
 ## Radio
 

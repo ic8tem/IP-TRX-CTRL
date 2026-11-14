@@ -6,7 +6,7 @@ Server e client devono avere versioni dello stesso **protocollo**. Il protocollo
 |---|---|---|
 | 0.1.0 – 0.1.3 | 1 | solo le 0.1.x |
 | 0.2.0 – 0.2.8 | 2 | tutte le 0.2.x |
-| 0.3.0 – 0.3.1 | 3 | solo le 0.3.x (numero a 10 cifre, codice fisso del server, più client sul server, sicurezza in trasmissione, panadapter; dalla 0.3.1 accesso dal browser) |
+| 0.3.0 – 0.3.2 | 3 | solo le 0.3.x (numero a 10 cifre, codice fisso del server, più client sul server, sicurezza in trasmissione, panadapter; dalla 0.3.1 accesso dal browser; dalla 0.3.2 aggiornamenti automatici) |
 
 Una 0.1.x e una 0.2.x **non** vanno usate insieme, e nemmeno una 0.2.x e una 0.3.x: aggiorna tutti e due i PC. La 0.3.0 cambia anche il formato della telemetria e aggiunge messaggi nuovi, per questo non parla con le versioni precedenti. La 0.3.0 cambia l'abbinamento (numero a 10 cifre al posto del codice lungo); le chiavi già scambiate restano valide e passano da sole nell'elenco dei server del client e nell'elenco dei client del server.
 
@@ -26,6 +26,11 @@ Una 0.1.x e una 0.2.x **non** vanno usate insieme, e nemmeno una 0.2.x e una 0.3
 | Più client sul server (uno collegato per volta, «server occupato»), codice fisso del server | 0.3.0 su entrambi i PC |
 | Sicurezza in trasmissione (tempo massimo, niente QSY in trasmissione, precedenza a chi è alla radio, solo ascolto), comandi della radio, memorie del server, panadapter | 0.3.0 su entrambi i PC |
 | Accesso dal browser (pagina web HTTPS, pagina «Trova il server») | 0.3.1 sul server; il client 0.3.0 continua a funzionare |
+| Aggiornamenti automatici | 0.3.2 su ciascun PC: ognuno si aggiorna per sé (non con i pacchetti .deb, .rpm, Arch e Slackware) |
+
+## Aggiornamenti automatici (dalla 0.3.2)
+
+Dalla 0.3.2 ogni PC si aggiorna da solo all'ultima release, all'avvio o entro 6 ore, e solo quando non c'è una sessione in corso: se un giorno uscirà una versione con un protocollo nuovo, server e client si allineano da soli senza restare a lungo su protocolli diversi. Fanno eccezione i pacchetti di sistema (.deb, .rpm, Arch, Slackware), che vanno aggiornati a mano su tutti e due i PC. Dettagli nel [README](../README.md#aggiornamenti-automatici).
 
 ## Controllo automatico (dalla 0.2.3)
 

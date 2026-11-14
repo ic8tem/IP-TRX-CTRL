@@ -501,8 +501,16 @@ namespace IpTrxCtrl.UI
             var optMem = new CheckBox { Content = "Memorie (di questo PC e del server)", IsChecked = s.ShowMemories };
             var optAlc = new CheckBox { Content = "Strumento ALC", IsChecked = s.ShowAlc };
             var optPan = new CheckBox { Content = "Panadapter della radio (se il server lo fornisce)", IsChecked = s.ShowPanadapter };
-            var optUpd = new CheckBox { Content = "All'avvio controlla se su GitHub c'è una versione nuova", IsChecked = s.CheckUpdates };
-            var optUpdNote = Ui.Sub("Il controllo legge la pagina pubblica delle release (api.github.com), senza account: GitHub vede l'indirizzo IP di chi chiede, come per qualunque pagina web. Nient'altro viene mandato.", 12);
+            var optUpd = new CheckBox { Content = "Controlla se su GitHub c'è una versione nuova (all'avvio e ogni 6 ore)", IsChecked = s.CheckUpdates };
+            bool selfUpd = Updater.CanSelfUpdate(out string selfWhy);
+            var optAuto = new CheckBox
+            {
+                Content = new TextBlock { Text = "Aggiornamenti automatici: scarica e installa da solo la versione nuova e riavvia il programma, solo quando non c'è una sessione in corso e non si trasmette", TextWrapping = TextWrapping.Wrap },
+                IsChecked = s.AutoUpdate && selfUpd, IsEnabled = selfUpd && s.CheckUpdates
+            };
+            optUpd.IsCheckedChanged += (_, _) => optAuto.IsEnabled = selfUpd && optUpd.IsChecked == true;
+            var optUpdNote = Ui.Sub((selfUpd ? "" : "Aggiornamenti automatici non disponibili su questo PC: " + selfWhy + ". ")
+                + "Il controllo legge la pagina pubblica delle release (api.github.com) e scarica il pacchetto da GitHub, senza account: GitHub vede l'indirizzo IP di chi chiede, come per qualunque pagina web. Nient'altro viene mandato. Impostazioni, chiavi e abbinamenti non si toccano.", 12);
 
             // ---- sicurezza in trasmissione (server)
             bool srvRole = s.Role == NodeRole.Server;
@@ -603,7 +611,7 @@ namespace IpTrxCtrl.UI
                 s.DigitalEnabled = newDig; s.DigitalToProgram = newTo; s.DigitalFromProgram = newFrom; s.RigctlPort = newRp;
                 // finestra principale
                 s.ShowBands = optBands.IsChecked == true; s.ShowRadioControls = optCtl.IsChecked == true; s.ShowMemories = optMem.IsChecked == true;
-                s.ShowAlc = optAlc.IsChecked == true; s.ShowPanadapter = optPan.IsChecked == true; s.CheckUpdates = optUpd.IsChecked == true;
+                s.ShowAlc = optAlc.IsChecked == true; s.ShowPanadapter = optPan.IsChecked == true; s.CheckUpdates = optUpd.IsChecked == true; if (selfUpd) s.AutoUpdate = optAuto.IsChecked == true;
                 if (srvRole)
                 {
                     // sicurezza in trasmissione
@@ -679,7 +687,7 @@ namespace IpTrxCtrl.UI
                         : Ui.Panel(Ui.Col(10, Ui.H2("PROGRAMMI DIGITALI (CLIENT)"), Ui.Sub("Non disponibili nella versione per Windows 32 bit.", 13))),
                     Ui.Panel(Ui.Col(8, Ui.H2("FINESTRA PRINCIPALE"),
                         Ui.Sub("Le parti nuove si possono nascondere per tenere la finestra più piccola.", 12),
-                        optBands, optCtl, optMem, optAlc, optPan, optUpd, optUpdNote)),
+                        optBands, optCtl, optMem, optAlc, optPan, optUpd, optAuto, optUpdNote)),
                     srvRole
                         ? Ui.Panel(Ui.Col(8, Ui.H2("SICUREZZA IN TRASMISSIONE (SERVER)"),
                             Ui.Row(8, totOn, totSec, Ui.Sub("secondi", 13)), qsyLock, Ui.Row(8, locOn, locMin, Ui.Sub("minuti", 13)), fixRx, safeNote))
@@ -959,8 +967,19 @@ RAPPORTO PER UN PROBLEMA E VERSIONE NUOVA (dalla 0.3.0)
 Impostazioni › Abbinamento e registri › «Rapporto per un problema…»: salva un file con versione, sistema,
 impostazioni principali e gli ultimi registri, con gli indirizzi IP pubblici sostituiti da [IP-1], [IP-2]…; poi
 «Apri la pagina delle segnalazioni» apre le Issue su GitHub, dove si allega il file.
-All'avvio il programma chiede a GitHub l'ultima release (api.github.com, senza account): se è più nuova compare
-una riga in alto. Si spegne in Impostazioni › Finestra principale.
+All'avvio e ogni 6 ore il programma chiede a GitHub l'ultima release (api.github.com, senza account).
+
+AGGIORNAMENTI AUTOMATICI (dalla 0.3.2)
+Se la release è più nuova, il programma scarica il pacchetto adatto a questo PC, ne controlla dimensione e impronta
+SHA-256 e si riavvia nella versione nuova, solo quando non c'è una sessione in corso e non si trasmette: con la
+sessione aperta la versione nuova resta pronta e si installa appena finisce. Il server riparte da solo con le stesse
+impostazioni; impostazioni, chiavi, abbinamenti e registri non si toccano.
+Si aggiornano da soli: Setup e zip di Windows, tar.gz portatili (Linux, Raspberry Pi, Alpine), AppImage,
+IP-TRX-CTRL.app sul Mac (in Applicazioni o in un'altra cartella scrivibile).
+NON si aggiornano da soli i pacchetti di sistema .deb, .rpm, Arch e Slackware (installati da root in /opt): compare
+solo la riga della versione nuova; si installa il pacchetto nuovo con lo stesso comando della prima volta.
+Con gli aggiornamenti automatici spenti (Impostazioni › Finestra principale) resta la riga in alto con «Aggiorna
+adesso». La 0.3.0 e la 0.3.1 non si aggiornano da sole: la 0.3.2 si installa a mano una volta.
 
 KEYER (solo client)
 SSB: F1..F8 trasmettono messaggi WAV (pulsante «File WAV…»). Filtro, compressore e volume come in WavPTT.
@@ -1034,7 +1053,8 @@ Server e client devono avere versioni dello stesso «protocollo». La versione d
   Versioni          Protocollo   Compatibili con
   0.1.0 – 0.1.3     1            solo 0.1.x
   0.2.0 – 0.2.8     2            tutte le 0.2.x
-  0.3.0 - 0.3.1     3            solo 0.3.x (numero a 10 cifre, codice fisso, più client, sicurezza TX, panadapter; 0.3.1 browser)
+  0.3.0 - 0.3.2     3            solo 0.3.x (numero a 10 cifre, codice fisso, più client, sicurezza TX, panadapter; 0.3.1 browser;
+                                 0.3.2 aggiornamenti automatici)
 Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   scelta delle schede audio del server dal client ......... 0.2.1 o successiva
   server senza UPnP e collegamento sulla rete locale ...... 0.2.2 o successiva
@@ -1047,6 +1067,7 @@ Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   più client sul server e codice fisso del server ......... 0.3.0 su entrambi i PC
   sicurezza in trasmissione, comandi radio, panadapter .... 0.3.0 su entrambi i PC
   accesso dal browser (pagina web HTTPS) .................. 0.3.1 sul server
+  aggiornamenti automatici ............................... 0.3.2 su ciascun PC (ognuno si aggiorna per sé)
 Dalla 0.2.3 i due PC si scambiano la versione (sul broker MQTT durante l'abbinamento e all'inizio di ogni
 collegamento). Se il protocollo è diverso l'abbinamento si ferma e compare una finestra; se l'altro PC è
 più vecchio compare un avviso. La versione dell'altro PC si vede nella riga della sua rete.
