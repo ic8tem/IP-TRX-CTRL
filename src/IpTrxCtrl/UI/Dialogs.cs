@@ -24,6 +24,7 @@ namespace IpTrxCtrl.UI
                 CanResize = false,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
             };
+            Schermo.Adatta(w);
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 18, 0, 0) };
             if (yesNo)
             {

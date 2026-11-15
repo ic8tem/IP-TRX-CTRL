@@ -66,7 +66,7 @@
             <Border Background="{DynamicResource B.Accent}" CornerRadius="12" Padding="10,4" VerticalAlignment="Center">
               <TextBlock x:Name="TxtRoleBadge" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource B.AccentText}" Text="CLIENT" />
             </Border>
-            <ComboBox x:Name="CmbTheme" Width="112" MinHeight="30" FontSize="12" VerticalAlignment="Center" ToolTip.Tip="Colori" />
+            <ComboBox x:Name="CmbTheme" Width="170" MinHeight="30" FontSize="12" VerticalAlignment="Center" ToolTip.Tip="Colori" />
             <Button x:Name="BtnSettings" Classes="small" Content="Impostazioni" />
             <Button x:Name="BtnSwap" Classes="small" Content="Inverti ruoli" />
             <Button x:Name="BtnHelp" Classes="small" Content="Help" />

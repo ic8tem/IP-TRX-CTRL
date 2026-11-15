@@ -245,6 +245,7 @@ namespace IpTrxCtrl.UI
             if (IsClient) { panel.Children.Add(onPc); panel.Children.Add(onSrv); }
             panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Children = { cancel, ok } });
             var w = new Window { Title = "Salva memoria", SizeToContent = SizeToContent.WidthAndHeight, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = panel };
+            Schermo.Adatta(w);
             bool saved = false;
             ok.Click += (_, _) => { saved = true; w.Close(); };
             cancel.Click += (_, _) => w.Close();

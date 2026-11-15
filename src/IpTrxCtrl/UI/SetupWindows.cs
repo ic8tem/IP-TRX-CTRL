@@ -735,6 +735,7 @@ namespace IpTrxCtrl.UI
                          + "Gli indirizzi IP pubblici diventano [IP-1], [IP-2]…; restano solo gli indirizzi di rete locale. Prima di allegarlo puoi aprirlo e leggerlo.", 13),
                     desc, Ui.Row(8, saveBtn, issue, close), result)
             };
+            Schermo.Adatta(w);
             if (w.Content is Control c) c.Margin = new Thickness(24);
             saveBtn.Click += async (_, _) =>
             {

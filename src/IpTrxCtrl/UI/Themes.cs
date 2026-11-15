@@ -11,11 +11,51 @@ namespace IpTrxCtrl.UI
         string QrgBg, string Qrg, string Ok, string Bar, string Track, string Tx, string TxDim,
         string LogBg, string LogText, string LogSend, string LogRecv, string LogErr, string LogMuted);
 
-    /// <summary>I sei temi: Chiaro, Notte, Nero, Blu, Viola, Verde.</summary>
+    /// <summary>
+    /// I 18 temi, come E-LAYER ANALYZER (armonizzazione del 15/11/2026): Chiaro, Notte e Nero di YA-MS, gli otto pastelli
+    /// (tinte di YAEC), Scia meteorica, poi i sei temi originali di IP-TRX-CTRL (Chiaro, Notte, Nero, Blu, Viola, Verde).
+    /// Le chiavi dei sei originali non cambiano, quindi le impostazioni gia' salvate restano valide.
+    /// </summary>
     public static class Themes
     {
         public static readonly List<Theme> All = new()
         {
+            new("ms-chiaro", "Chiaro (YA-MS)", false, "#F0F0F0", "#FFFFFF", "#E6E8F0", "#D5DCEA", "#FFFFFF", "#000000", "#6D6D6D",
+                "#FFFFFF", "#F0F0F0", "#000000", "#D5DCEA", "#1F6FD1", "#FFFFFF", "#1E293B", "#F5B942", "#139650", "#2E9E55", "#E1E4EB", "#B22222", "#E9C1C1",
+                "#141A22", "#D7DEE8", "#7FB3FF", "#8EE0A6", "#FF8A80", "#8C97A6"),
+            new("ms-notte", "Notte (YA-MS)", true, "#0B1220", "#121B2E", "#060B16", "#24314F", "#121B2E", "#DBE4F5", "#7F8DB0",
+                "#333F57", "#1C2842", "#FFFFFF", "#495570", "#5FA8FF", "#0B1220", "#060B16", "#FFD166", "#3DDC84", "#30AA6B", "#1A2640", "#FF6E64", "#603238",
+                "#060B16", "#CDD7EB", "#5FA8FF", "#3DDC84", "#FF9A92", "#7F8DB0"),
+            new("ms-nero", "Nero (YA-MS)", true, "#000000", "#121212", "#0C0C0C", "#343434", "#121212", "#EBEBEB", "#8C8C8C",
+                "#383838", "#202020", "#FFFFFF", "#595959", "#50B4FF", "#000000", "#0C0C0C", "#FFD148", "#3CEB82", "#2DB062", "#222222", "#FF5F55", "#59211E",
+                "#0C0C0C", "#DDDDDD", "#50B4FF", "#3CEB82", "#FF8F88", "#8C8C8C"),
+            new("azzurro", "Azzurro pastello", false, "#D3E6F9", "#F0F7FD", "#C0DBF6", "#C8E0F8", "#F6FAFE", "#000000", "#6D6D6D",
+                "#F0F7FD", "#DEECFA", "#000000", "#C8E0F8", "#1F6FD1", "#FFFFFF", "#1E293B", "#F5B942", "#139650", "#2E9E55", "#D6E8FA", "#B22222", "#E9C1C1",
+                "#141A22", "#D7DEE8", "#7FB3FF", "#8EE0A6", "#FF8A80", "#8C97A6"),
+            new("arancio", "Arancio pastello", false, "#FBE3CE", "#FEF6EF", "#FAD8B9", "#FADCC2", "#FEF9F5", "#000000", "#6D6D6D",
+                "#FEF6EF", "#FCEADA", "#000000", "#FADCC2", "#1F6FD1", "#FFFFFF", "#1E293B", "#F5B942", "#139650", "#2E9E55", "#FCE6D2", "#B22222", "#E9C1C1",
+                "#141A22", "#D7DEE8", "#7FB3FF", "#8EE0A6", "#FF8A80", "#8C97A6"),
+            new("acquamarina", "Acquamarina pastello", false, "#CBEDEB", "#EEF9F8", "#B6E6E2", "#BEE8E6", "#F4FBFB", "#000000", "#6D6D6D",
+                "#EEF9F8", "#D8F2F0", "#000000", "#BEE8E6", "#1F6FD1", "#FFFFFF", "#1E293B", "#F5B942", "#139650", "#2E9E55", "#D0EEEC", "#B22222", "#E9C1C1",
+                "#141A22", "#D7DEE8", "#7FB3FF", "#8EE0A6", "#FF8A80", "#8C97A6"),
+            new("pverde", "Verde pastello", false, "#D5EBD7", "#F1F8F2", "#C4E2C7", "#CAE6CE", "#F6FBF7", "#000000", "#6D6D6D",
+                "#F1F8F2", "#E0F0E1", "#000000", "#CAE6CE", "#1F6FD1", "#FFFFFF", "#1E293B", "#F5B942", "#139650", "#2E9E55", "#D8ECDB", "#B22222", "#E9C1C1",
+                "#141A22", "#D7DEE8", "#7FB3FF", "#8EE0A6", "#FF8A80", "#8C97A6"),
+            new("rosa", "Rosa pastello", false, "#F9DCE8", "#FDF3F7", "#F6CEDF", "#F8D4E2", "#FEF8FA", "#000000", "#6D6D6D",
+                "#FDF3F7", "#FAE5EE", "#000000", "#F8D4E2", "#1F6FD1", "#FFFFFF", "#1E293B", "#F5B942", "#139650", "#2E9E55", "#FADFEA", "#B22222", "#E9C1C1",
+                "#141A22", "#D7DEE8", "#7FB3FF", "#8EE0A6", "#FF8A80", "#8C97A6"),
+            new("lilla", "Lilla pastello", false, "#E8DFF4", "#F7F4FB", "#DFD1F0", "#E2D6F2", "#FAF8FD", "#000000", "#6D6D6D",
+                "#F7F4FB", "#EEE7F7", "#000000", "#E2D6F2", "#1F6FD1", "#FFFFFF", "#1E293B", "#F5B942", "#139650", "#2E9E55", "#EAE1F5", "#B22222", "#E9C1C1",
+                "#141A22", "#D7DEE8", "#7FB3FF", "#8EE0A6", "#FF8A80", "#8C97A6"),
+            new("indaco", "Indaco pastello", false, "#D5D7EF", "#F1F2FA", "#C4C7E9", "#CACEEC", "#F6F7FC", "#000000", "#6D6D6D",
+                "#F1F2FA", "#E0E1F3", "#000000", "#CACEEC", "#1F6FD1", "#FFFFFF", "#1E293B", "#F5B942", "#139650", "#2E9E55", "#D8DBF1", "#B22222", "#E9C1C1",
+                "#141A22", "#D7DEE8", "#7FB3FF", "#8EE0A6", "#FF8A80", "#8C97A6"),
+            new("marrone", "Marrone pastello", false, "#E6DBD3", "#F7F3F0", "#DBCCC0", "#E0D2C8", "#FAF8F6", "#000000", "#6D6D6D",
+                "#F7F3F0", "#ECE4DE", "#000000", "#E0D2C8", "#1F6FD1", "#FFFFFF", "#1E293B", "#F5B942", "#139650", "#2E9E55", "#E8DED6", "#B22222", "#E9C1C1",
+                "#141A22", "#D7DEE8", "#7FB3FF", "#8EE0A6", "#FF8A80", "#8C97A6"),
+            new("scia", "Scia meteorica", true, "#161230", "#1C1740", "#0E0B22", "#3A3270", "#161230", "#EEEBFA", "#B3ADD6",
+                "#423972", "#2B2160", "#FFFFFF", "#5E578C", "#38BDF8", "#161230", "#0E0B22", "#FDE047", "#86EFAC", "#6AB88D", "#221C47", "#F87171", "#653347",
+                "#0E0B22", "#E5E2F5", "#38BDF8", "#86EFAC", "#FA9C9C", "#B3ADD6"),
             new("chiaro", "Chiaro", false, "#F5F7FA", "#FFFFFF", "#F0F2F5", "#D5DAE1", "#FFFFFF", "#1B1F24", "#555D68",
                 "#FDFEFF", "#E3E7ED", "#1B1F24", "#B9C0CA", "#1F6FEB", "#FFFFFF", "#141A22", "#F5B942", "#1E7A3C", "#2E9E55", "#DDE1E7", "#D92D20", "#F3C2BD",
                 "#141A22", "#D7DEE8", "#7FB3FF", "#8EE0A6", "#FF8A80", "#8C97A6"),
@@ -36,9 +76,9 @@ namespace IpTrxCtrl.UI
                 "#08180F", "#E1F2E7", "#E8F5A0", "#A6E35F", "#FF9E94", "#86A893"),
         };
 
-        public static Theme Current { get; private set; } = All[0];
+        public static Theme Current { get; private set; } = All.Find(t => t.Key == "chiaro")!;
 
-        public static Theme Get(string key) => All.Find(t => t.Key == key) ?? All[0];
+        public static Theme Get(string key) => All.Find(t => t.Key == key) ?? All.Find(t => t.Key == "chiaro")!;
 
         public static Color C(string hex) => Color.Parse(hex);
         public static IBrush B(string hex) => new SolidColorBrush(Color.Parse(hex));

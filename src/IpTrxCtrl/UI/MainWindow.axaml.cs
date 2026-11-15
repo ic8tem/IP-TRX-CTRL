@@ -115,6 +115,7 @@ namespace IpTrxCtrl.UI
             _wfTimer.Start();
 
             Opened += OnOpened;
+            Schermo.Adatta(this);
             Closing += (_, _) => OnClosingWindow();
             Deactivated += (_, _) => { if (_manualPtt) SetManualPtt(false); };
             AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
@@ -1288,6 +1289,7 @@ namespace IpTrxCtrl.UI
                     }
                 }
             };
+            Schermo.Adatta(w);
             exit.Click += (_, _) => w.Close();
             await w.ShowDialog(this);
             Close();
@@ -1364,6 +1366,7 @@ namespace IpTrxCtrl.UI
                     }
                 }
             };
+            Schermo.Adatta(w);
             ok.Click += (_, _) => w.Close();
             try { await w.ShowDialog(this); } finally { _upnpPopupOpen = false; }
         }
@@ -1427,6 +1430,7 @@ namespace IpTrxCtrl.UI
                     }
                 }
             };
+            Schermo.Adatta(w);
             unlock.Click += (_, _) => { _node.UnlockSwr(); w.Close(); };
             keep.Click += (_, _) => w.Close();
             w.Closed += (_, _) => _swrWindow = null;
@@ -1463,6 +1467,7 @@ namespace IpTrxCtrl.UI
                     }
                 }
             };
+            Schermo.Adatta(w);
             ok.Click += (_, _) => w.Close();
             await w.ShowDialog(this);
         }
@@ -1496,6 +1501,7 @@ namespace IpTrxCtrl.UI
                     }
                 }
             };
+            Schermo.Adatta(w);
             ok.Click += (_, _) => w.Close();
             if (IsVisible) await w.ShowDialog(this); else w.Show();
         }
