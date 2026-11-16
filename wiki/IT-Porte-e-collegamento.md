@@ -68,6 +68,22 @@ All'avvio il client prova quali porte escono dalla sua rete collegandosi a **por
 
 Servono **due** porte in uscita: se la rete del client ne lascia passare una sola, il collegamento da quella rete non è possibile e il registro lo dice. Serve UPnP sul router del server (o un inoltro manuale di quelle porte). Tutto è scritto in `sessioni.log` con il prefisso `PORTE`.
 
+## Porte scelte da te e doppio NAT (dalla 0.3.4)
+
+**Porte aperte a mano.** In Impostazioni › **PORTE APERTE SUL ROUTER** si scrivono due porte: **Controllo** (TCP) e **Audio** (TCP e UDP). Vanno inoltrate sul router principale verso il PC, con lo stesso numero dentro e fuori; poi si preme **Usa queste porte**.
+
+- Il **server** le usa al posto delle porte casuali, che cambiano a ogni avvio. Con UPnP chiede anche al router di aprirle. Le verifica da internet e le tiene comunque, perché valgono anche in rete locale.
+- Il **client** le propone al server per il collegamento inverso, anche se il suo router non ha UPnP.
+- Sotto i campi compare l'**elenco delle due porte da aprire**, con l'indirizzo del PC e il pulsante **Copia l'elenco**. Senza porte scelte mostra quelle automatiche in uso. **Porte automatiche** toglie la scelta.
+
+**UPnP dall'apparecchio sbagliato.** In alcune case all'UPnP non risponde il router che porta a internet ma un altro apparecchio della rete: un ripetitore o nodo mesh in modo router, un decoder, un router in cascata. Si riconosce perché il suo «IP esterno» sta nella stessa rete del PC (per esempio PC 192.168.1.186, «router» 192.168.1.157). Le porte aperte lì non arrivano da internet. Il programma cerca allora un altro router UPnP; se non lo trova non usa quell'apparecchio e lo scrive nel registro. Il rimedio: UPnP sul router principale, DMZ, oppure le due porte scelte e inoltrate a mano.
+
+**Doppio NAT o CGNAT.** Se l'IP esterno del router non è quello che vede internet, il programma prova **una sola porta** invece di 6: le altre sarebbero bloccate allo stesso modo dal router davanti, e troppe verifiche fanno rispondere ifconfig.co con «429». Il registro distingue il **doppio NAT** di casa (router con IP privato, per esempio 192.168.x.x: si risolve sul router davanti) dal **CGNAT** dell'operatore (IP 100.64–100.127: serve l'altro PC o una VPN).
+
+**Porte che rispondono ma non sono del programma.** Se i servizi di verifica trovano la porta aperta ma al programma non arriva nessun collegamento, a rispondere è un altro apparecchio (spesso la pagina del router sulla porta 80 o 443): la porta si considera chiusa.
+
+**STUN.** Per l'audio su UDP il tipo di NAT si legge con due server STUN di gestori diversi (Google e Cloudflare). Due server con lo stesso indirizzo non valgono come due prove: prima un NAT simmetrico poteva sembrare «a cono».
+
 ## Audio su UDP
 
 A collegamento fatto i due PC provano a passare l'audio su **UDP**, che soffre meno dei ritardi di TCP:

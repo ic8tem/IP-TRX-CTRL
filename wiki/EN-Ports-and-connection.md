@@ -68,6 +68,22 @@ At start-up the client tests which ports get out of its network by connecting to
 
 **Two** outgoing ports are needed: if the client's network lets only one through, connecting from that network is not possible and the log says so. UPnP is needed on the server's router (or a manual forward of those ports). Everything is written in `sessioni.log` with the prefix `PORTE`.
 
+## Ports you choose and double NAT (since 0.3.4)
+
+**Ports opened by hand.** In Settings › **PORTE APERTE SUL ROUTER** (ports open on the router) you type two ports: **Controllo** (control, TCP) and **Audio** (TCP and UDP). Forward them on the main router to the PC, with the same number inside and outside, then press **Usa queste porte** (use these ports).
+
+- The **server** uses them instead of the random ports, which change at every start. With UPnP it also asks the router to open them. It checks them from the internet and keeps them anyway, because they also work on the local network.
+- The **client** offers them to the server for the reverse connection, even if its router has no UPnP.
+- Below the fields you see the **list of the two ports to open**, with the PC's address and the **Copia l'elenco** (copy the list) button. With no ports chosen it shows the automatic ones in use. **Porte automatiche** (automatic ports) removes the choice.
+
+**UPnP from the wrong device.** In some homes UPnP is answered not by the router that leads to the internet but by another device on the network: a repeater or mesh node in router mode, a set-top box, a cascaded router. You can tell because its "external IP" is on the same network as the PC (for example PC 192.168.1.186, "router" 192.168.1.157). Ports opened there do not arrive from the internet. The program then looks for another UPnP router; if it finds none, it does not use that device and says so in the log. The fix: UPnP on the main router, DMZ, or the two chosen ports forwarded by hand.
+
+**Double NAT or CGNAT.** If the router's external IP is not the one the internet sees, the program tries **a single port** instead of 6: the others would be blocked the same way by the router in front, and too many checks make ifconfig.co answer «429». The log tells the home **double NAT** (router with a private IP, for example 192.168.x.x: fix it on the router in front) from the operator's **CGNAT** (IP 100.64–100.127: the other PC or a VPN is needed).
+
+**Ports that answer but are not the program.** If the checking services find the port open but no connection reaches the program, another device answered (often the router's own page on port 80 or 443): the port is treated as closed.
+
+**STUN.** For UDP audio the NAT type is read with two STUN servers from different providers (Google and Cloudflare). Two servers with the same address do not count as two tests: before, a symmetric NAT could look like a "cone" NAT.
+
 ## Audio over UDP
 
 Once connected, the two PCs try to carry the audio over **UDP**, which suffers less from TCP's delays:

@@ -68,6 +68,22 @@ Au démarrage, le client teste quels ports sortent de son réseau en se connecta
 
 Il faut **deux** ports sortants : si le réseau du client n'en laisse passer qu'un, la connexion depuis ce réseau n'est pas possible et le journal le dit. Il faut UPnP sur le routeur du serveur (ou une redirection manuelle de ces ports). Tout est écrit dans `sessioni.log` avec le préfixe `PORTE`.
 
+## Ports choisis par vous et double NAT (depuis la 0.3.4)
+
+**Ports ouverts à la main.** Dans Réglages › **PORTE APERTE SUL ROUTER** (ports ouverts sur le routeur) on saisit deux ports : **Controllo** (contrôle, TCP) et **Audio** (TCP et UDP). Il faut les rediriger sur le routeur principal vers le PC, avec le même numéro dedans et dehors, puis appuyer sur **Usa queste porte** (utiliser ces ports).
+
+- Le **serveur** les utilise à la place des ports aléatoires, qui changent à chaque démarrage. Avec l'UPnP il demande aussi au routeur de les ouvrir. Il les vérifie depuis internet et les garde quand même, car ils valent aussi en réseau local.
+- Le **client** les propose au serveur pour la connexion inverse, même si son routeur n'a pas l'UPnP.
+- Sous les cases apparaît la **liste des deux ports à ouvrir**, avec l'adresse du PC et le bouton **Copia l'elenco** (copier la liste). Sans ports choisis elle montre les ports automatiques en service. **Porte automatiche** (ports automatiques) annule le choix.
+
+**UPnP du mauvais appareil.** Dans certaines maisons, ce n'est pas le routeur de sortie vers internet qui répond à l'UPnP mais un autre appareil du réseau : un répéteur ou nœud mesh en mode routeur, un décodeur, un routeur en cascade. On le reconnaît parce que son « IP externe » est dans le même réseau que le PC (par exemple PC 192.168.1.186, « routeur » 192.168.1.157). Les ports ouverts là n'arrivent pas depuis internet. Le programme cherche alors un autre routeur UPnP ; s'il n'en trouve pas, il n'utilise pas cet appareil et l'écrit dans le journal. Le remède : UPnP sur le routeur principal, DMZ, ou les deux ports choisis et redirigés à la main.
+
+**Double NAT ou CGNAT.** Si l'IP externe du routeur n'est pas celle que voit internet, le programme essaie **un seul port** au lieu de 6 : les autres seraient bloqués de la même façon par le routeur de devant, et trop de vérifications font répondre ifconfig.co par « 429 ». Le journal distingue le **double NAT** de la maison (routeur avec une IP privée, par exemple 192.168.x.x : cela se règle sur le routeur de devant) du **CGNAT** de l'opérateur (IP 100.64–100.127 : il faut l'autre PC ou un VPN).
+
+**Ports qui répondent mais ne sont pas le programme.** Si les services de vérification trouvent le port ouvert mais qu'aucune connexion n'arrive au programme, c'est un autre appareil qui a répondu (souvent la page du routeur sur le port 80 ou 443) : le port est considéré comme fermé.
+
+**STUN.** Pour l'audio en UDP le type de NAT se lit avec deux serveurs STUN de fournisseurs différents (Google et Cloudflare). Deux serveurs à la même adresse ne comptent pas comme deux essais : avant, un NAT symétrique pouvait sembler « à cône ».
+
 ## Audio en UDP
 
 Une fois connectés, les deux PC essaient de faire passer l'audio en **UDP**, qui souffre moins des retards de TCP :
