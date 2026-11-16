@@ -2,7 +2,7 @@
 
 A video course of about 13 minutes on IP-TRX-CTRL **0.3.3**, with real screenshots of the program: a server and a client paired over the internet, a simulated radio (Hamlib Dummy) and the browser page. English captions, no voice. The program's interface is in Italian: the captions give the English meaning of each label.
 
-[![Video course](https://raw.githubusercontent.com/ic8tem/IP-TRX-CTRL/video-corso/poster-en.jpg)](https://raw.githubusercontent.com/ic8tem/IP-TRX-CTRL/video-corso/IP-TRX-CTRL-video-course-en.mp4)
+https://github.com/user-attachments/assets/ffbe27bf-5f1c-41ae-8a33-e891993dfe61
 
 **[Download the video (MP4, 1920×1080)](https://raw.githubusercontent.com/ic8tem/IP-TRX-CTRL/video-corso/IP-TRX-CTRL-video-course-en.mp4)**
 

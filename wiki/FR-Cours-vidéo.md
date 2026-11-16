@@ -2,7 +2,7 @@
 
 Un cours vidéo d'environ 13 minutes sur IP-TRX-CTRL **0.3.3**, avec de vraies captures du programme : un serveur et un client appairés via internet, une radio simulée (Hamlib Dummy) et la page du navigateur. Légendes en français, sans voix. L'interface du programme est en italien : les légendes donnent la signification de chaque libellé.
 
-[![Cours vidéo](https://raw.githubusercontent.com/ic8tem/IP-TRX-CTRL/video-corso/poster-fr.jpg)](https://raw.githubusercontent.com/ic8tem/IP-TRX-CTRL/video-corso/IP-TRX-CTRL-video-course-fr.mp4)
+https://github.com/user-attachments/assets/4dae24ef-4b1c-47fa-a388-37e24d18d101
 
 **[Télécharger la vidéo (MP4, 1920×1080)](https://raw.githubusercontent.com/ic8tem/IP-TRX-CTRL/video-corso/IP-TRX-CTRL-video-course-fr.mp4)**
 

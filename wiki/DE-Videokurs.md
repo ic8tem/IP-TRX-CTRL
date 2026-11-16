@@ -2,7 +2,7 @@
 
 Ein Videokurs von etwa 13 Minuten über IP-TRX-CTRL **0.3.3**, mit echten Aufnahmen des Programms: ein Server und ein Client, über das Internet gekoppelt, ein simuliertes Funkgerät (Hamlib Dummy) und die Browserseite. Deutsche Untertitel, ohne Sprecher. Die Oberfläche des Programms ist italienisch: die Untertitel nennen die Bedeutung jeder Beschriftung.
 
-[![Videokurs](https://raw.githubusercontent.com/ic8tem/IP-TRX-CTRL/video-corso/poster-de.jpg)](https://raw.githubusercontent.com/ic8tem/IP-TRX-CTRL/video-corso/IP-TRX-CTRL-video-course-de.mp4)
+https://github.com/user-attachments/assets/15518b5c-129a-4a56-9c0b-0e2c31ec9b9a
 
 **[Video herunterladen (MP4, 1920×1080)](https://raw.githubusercontent.com/ic8tem/IP-TRX-CTRL/video-corso/IP-TRX-CTRL-video-course-de.mp4)**
 
