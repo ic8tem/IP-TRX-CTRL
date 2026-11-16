@@ -314,7 +314,7 @@ namespace IpTrxCtrl.UI
             var mpList = new SelectableTextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap };
             var mpNote = Ui.Sub("Servono quando il router non apre le porte da solo (UPnP spento, doppio NAT, ripetitore o nodo mesh che risponde al posto del router): "
                               + "inoltra sul router principale queste due porte verso questo PC, stesso numero dentro e fuori, poi premi «Usa queste porte». "
-                              + (node.IsServer ? "Il server le usa al posto delle porte automatiche, che cambiano a ogni avvio."
+                              + (s.Role == NodeRole.Server ? "Il server le usa al posto delle porte automatiche, che cambiano a ogni avvio."
                                          : "Il client le propone al server per il collegamento inverso (il server si collega a questo PC)."), 12);
             mpNote.TextWrapping = TextWrapping.Wrap;
             string MpText()
