@@ -175,7 +175,9 @@ jobs:
           overwrite_files: true
           files: artifacts/*
           body: |
-            Novità della 0.3.2: **aggiornamenti automatici** e nuovi pacchetti per Windows su ARM, Fedora/openSUSE (.rpm), Arch, Slackware, AppImage e Alpine.
+            Novità della 0.3.3 (correzioni): su **Linux, Raspberry Pi e Mac** la prima configurazione, le Impostazioni e la finestra delle licenze si bloccavano mentre il programma leggeva la versione di Hamlib; ora si aprono subito. Nella finestra principale le etichette degli strumenti (ROS, Gain) non sono più coperte dalle barre e la casella dello scostamento del VFO B non esce dal riquadro. Chi ha la 0.3.2 la riceve con l'aggiornamento automatico.
+
+            Dalla 0.3.2: **aggiornamenti automatici** e pacchetti per Windows su ARM, Fedora/openSUSE (.rpm), Arch, Slackware, AppImage e Alpine.
 
             **Windows 64 bit**: `IP-TRX-CTRL-…-win-x64-setup.exe` · **32 bit**: `…-win-x86-setup.exe` · **ARM (Snapdragon)**: `…-win-arm64-setup.exe` (Hamlib incluso); oppure lo zip `-portatile`
             **Debian, Ubuntu, Mint**: `ip-trx-ctrl_…_amd64.deb`, con `sudo apt install ./ip-trx-ctrl_…deb` (installa anche Hamlib)
