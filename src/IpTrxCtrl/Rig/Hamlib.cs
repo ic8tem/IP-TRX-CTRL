@@ -216,7 +216,10 @@ namespace IpTrxCtrl.Rig
 
         private static string RunSync(string exe, string args, int timeoutMs)
         {
-            try { return RunAsync(exe, args, timeoutMs).GetAwaiter().GetResult(); } catch { return ""; }
+            // su un thread del pool: chiamato dal thread dell'interfaccia, l'attesa diretta di RunAsync si bloccherebbe
+            // per sempre (la continuazione aspetta proprio quel thread). Succedeva su Linux, Raspberry e Mac, dove
+            // Hamlib non è incluso: Impostazioni, prima configurazione e licenze restavano bloccate.
+            try { return Task.Run(() => RunAsync(exe, args, timeoutMs)).GetAwaiter().GetResult(); } catch { return ""; }
         }
 
         private static async Task<string> RunAsync(string exe, string args, int timeoutMs)
