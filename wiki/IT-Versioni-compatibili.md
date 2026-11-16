@@ -1,0 +1,50 @@
+# Versioni compatibili
+
+Server e client devono avere versioni dello stesso **protocollo**. Il protocollo cambia solo quando i due PC vanno aggiornati insieme; dentro lo stesso protocollo le versioni si parlano.
+
+| Versioni | Protocollo | Compatibili con |
+|---|---|---|
+| 0.1.0 – 0.1.3 | 1 | solo le 0.1.x |
+| 0.2.0 – 0.2.8 | 2 | tutte le 0.2.x |
+| 0.3.0 – 0.3.3 | 3 | solo le 0.3.x (numero a 10 cifre, codice fisso del server, più client sul server, sicurezza in trasmissione, panadapter; dalla 0.3.1 accesso dal browser; dalla 0.3.2 aggiornamenti automatici) |
+
+Una 0.1.x e una 0.2.x **non** vanno usate insieme, e nemmeno una 0.2.x e una 0.3.x: aggiorna tutti e due i PC. La 0.3.0 cambia anche il formato della telemetria e aggiunge messaggi nuovi, per questo non parla con le versioni precedenti. La 0.3.0 cambia l'abbinamento (numero a 10 cifre al posto del codice lungo); le chiavi già scambiate restano valide e passano da sole nell'elenco dei server del client e nell'elenco dei client del server.
+
+## Funzioni che richiedono una versione minima su entrambi i PC
+
+| Funzione | Server e client almeno |
+|---|---|
+| Programmi digitali, pedale/tasto CW, ciclo delle porte, audio UDP | 0.2.0 |
+| Scelta delle schede audio del server dal client | 0.2.1 |
+| Server senza UPnP, collegamento sulla rete locale | 0.2.2 |
+| Scambio della versione e controllo automatico di compatibilità | 0.2.3 |
+| Il client comunica al server le porte che escono dalla sua rete (reti filtrate) | 0.2.4 |
+| Protezione ROS: barra lampeggiante, blocco della trasmissione e finestra sul client | 0.2.4 |
+| CAT e audio del server via TCI (ExpertSDR, Thetis e altri SDR) | 0.2.5 (basta sul server) |
+| Ciclo delle porte anche nell'abbinamento (20 giri, porte sempre nuove, collegamento inverso) | 0.2.7 su entrambi i PC |
+| Numero di abbinamento a 10 cifre, elenco dei server sul client | 0.3.0 su entrambi i PC |
+| Più client sul server (uno collegato per volta, «server occupato»), codice fisso del server | 0.3.0 su entrambi i PC |
+| Sicurezza in trasmissione (tempo massimo, niente QSY in trasmissione, precedenza a chi è alla radio, solo ascolto), comandi della radio, memorie del server, panadapter | 0.3.0 su entrambi i PC |
+| Accesso dal browser (pagina web HTTPS, pagina «Trova il server») | 0.3.1 sul server; il client 0.3.0 continua a funzionare |
+| Aggiornamenti automatici | 0.3.2 su ciascun PC: ognuno si aggiorna per sé (non con i pacchetti .deb, .rpm, Arch e Slackware) |
+
+## Aggiornamenti automatici (dalla 0.3.2)
+
+Dalla 0.3.2 ogni PC si aggiorna da solo all'ultima release, all'avvio o entro 6 ore, e solo quando non c'è una sessione in corso: se un giorno uscirà una versione con un protocollo nuovo, server e client si allineano da soli senza restare a lungo su protocolli diversi. Fanno eccezione i pacchetti di sistema (.deb, .rpm, Arch, Slackware), che vanno aggiornati a mano su tutti e due i PC. Dettagli nel [README](https://github.com/ic8tem/IP-TRX-CTRL#aggiornamenti-automatici).
+
+## Controllo automatico (dalla 0.2.3)
+
+I due PC si scambiano la versione in tre momenti:
+
+- **abbinamento**: il server la manda, cifrata, sul broker MQTT insieme a indirizzo e porte; il client la confronta prima di collegarsi. Se il protocollo è diverso l'abbinamento si ferma e lo dice nel registro della finestra;
+- **indirizzo sul broker MQTT**: il server la pubblica insieme al suo indirizzo, a ogni aggiornamento;
+- **inizio di ogni collegamento**: nel saluto sul canale cifrato.
+
+Se l'altro PC ha un protocollo diverso compare la finestra **«Versioni non compatibili»**; se ha una versione più vecchia dello stesso protocollo compare un avviso che dice quali funzioni mancano. Le versioni fino alla 0.2.2 non mandano la loro versione: compaiono come «0.2.2 o precedente».
+
+La versione dell'altro PC si vede nella riga della sua rete nella finestra principale; ogni confronto è scritto in `sessioni.log` con il prefisso `VERSIONE`. La versione di questo PC è nella finestra «Informazioni e licenze».
+
+
+---
+
+[Indice](Italiano) · Altre lingue: [English](EN-Compatible-versions) · [Español](ES-Versiones-compatibles) · [Français](FR-Versions-compatibles) · [Deutsch](DE-Kompatible-Versionen)

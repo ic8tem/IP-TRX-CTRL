@@ -1,8 +1,13 @@
-# IP-TRX-CTRL wiki
+# IP-TRX-CTRL
 
-IP-TRX-CTRL lets you operate an HF station from anywhere over the internet: a **server** runs on the PC connected to the radio, a **client** on the operator's PC, with encrypted audio, CAT, PTT, keyer and CW. Optionally you can also use the station from a browser or a phone.
+[![IP-TRX-CTRL](https://raw.githubusercontent.com/ic8tem/IP-TRX-CTRL/video-corso/wiki-images/main.png)](English)
 
-- **[Video course (English)](Video-course)** · 13 minutes, chapter by chapter
-- Downloads: [Releases](https://github.com/ic8tem/IP-TRX-CTRL/releases/latest)
-- Manuals (Italian): [docs folder](https://github.com/ic8tem/IP-TRX-CTRL/tree/main/docs)
-- Questions and problems: [Issues](https://github.com/ic8tem/IP-TRX-CTRL/issues)
+| | | |
+|---|---|---|
+| **[Italiano](Italiano)** | [Video corso](IT-Video-corso) | Manuale di IP-TRX-CTRL in italiano. |
+| **[English](English)** | [Video course](EN-Video-course) | IP-TRX-CTRL manual in English. |
+| **[Español](Español)** | [Videocurso](ES-Videocurso) | Manual de IP-TRX-CTRL en español. |
+| **[Français](Français)** | [Cours vidéo](FR-Cours-vidéo) | Manuel d'IP-TRX-CTRL en français. |
+| **[Deutsch](Deutsch)** | [Videokurs](DE-Videokurs) | Handbuch von IP-TRX-CTRL auf Deutsch. |
+
+https://github.com/ic8tem/IP-TRX-CTRL · [Releases](https://github.com/ic8tem/IP-TRX-CTRL/releases/latest) · [Issues](https://github.com/ic8tem/IP-TRX-CTRL/issues) · [Ko-fi](https://ko-fi.com/ic8tem)
