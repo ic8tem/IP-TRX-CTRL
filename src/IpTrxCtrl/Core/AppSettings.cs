@@ -208,6 +208,9 @@ namespace IpTrxCtrl.Core
         // server: client abbinati e codice fisso (le cifre stanno nel deposito sicuro, non qui)
         public List<ClientEntry> Clients { get; set; } = new();
         public bool FixedCodeEnabled { get; set; }
+        // 0.3.4: due porte aperte a mano sul router (controllo TCP, audio TCP e UDP), stesso numero dentro e fuori; 0 = automatiche
+        public int ManualControlPort { get; set; }
+        public int ManualAudioPort { get; set; }
         // 0.3.0: la chiave unica delle 0.2.x è già passata negli elenchi
         public bool KeysMigratedV3 { get; set; }   // IP di rete locale del server (stessa rete del client)
         public List<string> MqttBrokers { get; set; } = new() { "broker.hivemq.com:1883", "test.mosquitto.org:1883", "broker.emqx.io:1883" };

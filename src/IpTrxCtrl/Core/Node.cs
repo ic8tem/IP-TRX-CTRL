@@ -331,7 +331,11 @@ namespace IpTrxCtrl.Core
         private async Task<(int port, TcpListener? listener)> OpenVerifiedPortAsync(PortManager pm, string desc, ChannelKind kind, bool clientSide, CancellationToken ct)
         {
             bool upnp = pm.UpnpAvailable;
-            int tries = upnp ? 6 : 1;
+            // 0.3.4: doppio NAT o CGNAT, il router di casa apre la porta ma quello davanti la blocca. Provare altre
+            // porte non serve (e fa rifiutare le verifiche esterne per troppe richieste): una sola.
+            bool doubleNat = upnp && pm.CgnatSuspected;
+            int tries = upnp && !doubleNat ? 6 : 1;
+            if (doubleNat) PortLog($"PORTE {desc}: {pm.NatNote()}: provo una sola porta (le altre sarebbero bloccate allo stesso modo)");
             for (int i = 1; i <= tries && !ct.IsCancellationRequested; i++)
             {
                 int p = upnp ? await pm.OpenRandomPortAsync(desc, ct) : pm.PickLocalPort();
@@ -352,7 +356,7 @@ namespace IpTrxCtrl.Core
                 if (clientSide) _ = Task.Run(() => ClientAcceptLoopAsync(l, kind, ct));
                 else _ = Task.Run(() => AcceptLoopAsync(l, kind, ct));
                 if (kind == ChannelKind.Audio) await pm.OpenUdpAsync(p, desc + " (UDP)");
-                bool? reach = await PortProbe.TcpReachableAsync(p, PortLog, ct);
+                bool? reach = await ProbeOwnAsync(p, PortLog, ct);
                 if (reach != false) return (p, l);
                 // il server tiene comunque l'ultima porta: serve ai PC della stessa rete locale
                 if (!clientSide && i == tries)
@@ -368,11 +372,93 @@ namespace IpTrxCtrl.Core
             return (0, null);
         }
 
+        private int _accepted;   // collegamenti TCP arrivati a questo programma (per riconoscere chi risponde alle verifiche)
+
+        /// <summary>
+        /// Verifica esterna della porta, controllando che a rispondere sia davvero questo programma (0.3.4, come
+        /// IP-DESK-CTRL 0.5.17): se i servizi di verifica dicono «sì» ma qui non è arrivato nessun collegamento,
+        /// ha risposto un altro apparecchio (spesso la pagina del router sulla porta 80 o 443) e la porta in
+        /// realtà non porta a questo PC.
+        /// </summary>
+        private async Task<bool?> ProbeOwnAsync(int port, Action<string> log, CancellationToken ct)
+        {
+            int before = Volatile.Read(ref _accepted);
+            bool? r = await PortProbe.TcpReachableAsync(port, log, ct);
+            if (r != true) return r;
+            for (int i = 0; i < 15 && Volatile.Read(ref _accepted) == before; i++)
+            {
+                try { await Task.Delay(100, ct); } catch { return r; }
+            }
+            if (Volatile.Read(ref _accepted) != before) return true;
+            log($"PORTE la porta {port} risponde da internet, ma non è questo programma (forse la pagina del router): la considero chiusa");
+            return false;
+        }
+
+        // ---------------- porte scelte dall'utente (0.3.4)
+
+        /// <summary>Porte aperte a mano sul router (Impostazioni › PORTE APERTE SUL ROUTER): 0 = automatiche.</summary>
+        public int ManualControlPort => _s.ManualControlPort;
+        public int ManualAudioPort => _s.ManualAudioPort;
+        public bool ManualPortsSet => _s.ManualControlPort > 0 && _s.ManualAudioPort > 0;
+
+        /// <summary>Porte in uso adesso da questo PC: server le sue due, client quelle per il collegamento inverso (0 se nessuna).</summary>
+        public (int control, int audio) PortsInUse => IsServer ? (_ctlPort, _audPort) : (_cCtlPort, _cAudPort);
+        public string LanAddress => LanIp();
+        /// <summary>Spiegazione del tipo di NAT trovato (vuota se le porte arrivano da internet senza ostacoli).</summary>
+        public string NatNote => (IsServer ? _ports : _cports)?.NatNote() ?? "";
+
+        /// <summary>Nuove porte scelte dall'utente: si salvano e, sul server senza client collegato, si riaprono subito.</summary>
+        public void SetManualPorts(int control, int audio)
+        {
+            control = control is > 0 and < 65536 ? control : 0;
+            audio = audio is > 0 and < 65536 && audio != control ? audio : 0;
+            if (control == 0 || audio == 0) control = audio = 0;
+            _s.ManualControlPort = control; _s.ManualAudioPort = audio;
+            _s.Save();
+            SessionLog.Write(control > 0 ? $"PORTE porte scelte dall'utente: controllo TCP {control}, audio TCP e UDP {audio}"
+                                         : "PORTE porte scelte dall'utente tolte: si torna alle porte automatiche");
+            if (IsServer && !_portsBusy && _control == null) _ = StartServerAsync(true);
+        }
+
+        /// <summary>
+        /// Server: usa le due porte scelte dall'utente (stesso numero dentro e fuori). Con UPnP si chiede anche al
+        /// router di aprirle; senza, devono essere inoltrate a mano. Si tengono comunque: valgono anche in rete locale.
+        /// </summary>
+        private async Task<bool> OpenManualServerPortsAsync(CancellationToken ct)
+        {
+            var pm = _ports!;
+            int cp = _s.ManualControlPort, ap = _s.ManualAudioPort;
+            bool upnp = pm.UpnpAvailable;
+            TcpListener cl, al;
+            try { cl = new TcpListener(IPAddress.Any, cp); cl.Start(); }
+            catch { PortLog($"PORTE porta scelta {cp}: già usata da un altro programma di questo PC, torno alle porte automatiche"); return false; }
+            try { al = new TcpListener(IPAddress.Any, ap); al.Start(); }
+            catch { try { cl.Stop(); } catch { } PortLog($"PORTE porta scelta {ap}: già usata da un altro programma di questo PC, torno alle porte automatiche"); return false; }
+            bool mc = upnp && await pm.OpenFixedAsync(Open.Nat.Protocol.Tcp, cp, cp, "IP-TRX-CTRL controllo");
+            bool ma = upnp && await pm.OpenFixedAsync(Open.Nat.Protocol.Tcp, ap, ap, "IP-TRX-CTRL audio");
+            if (ma) await pm.OpenFixedAsync(Open.Nat.Protocol.Udp, ap, ap, "IP-TRX-CTRL audio (UDP)");
+            _ = Task.Run(() => AcceptLoopAsync(cl, ChannelKind.Control, ct));
+            _ = Task.Run(() => AcceptLoopAsync(al, ChannelKind.Audio, ct));
+            bool? rc = await ProbeOwnAsync(cp, PortLog, ct);
+            bool? ra = rc == false ? false : await ProbeOwnAsync(ap, PortLog, ct);
+            _ctlPort = cp; _ctlListener = cl;
+            _audPort = ap; _audListener = al; _audLocal = ap;
+            _keptUnreachable = rc == false || ra == false;
+            PortLog($"PORTE uso le porte scelte: controllo TCP {cp}, audio TCP e UDP {ap}" + (mc || ma ? " (aperte anche con UPnP)" : " (inoltro manuale sul router)")
+                    + (_keptUnreachable ? $" · da internet NON raggiungibili: controlla l'inoltro sul router verso {LanIp()}" : " · raggiungibili da internet"));
+            return true;
+        }
+
         /// <summary>Server: cerca le prime due porte utili (controllo e audio); poi verranno comunicate al broker MQTT.</summary>
         private async Task<bool> OpenServerPortsAsync(CancellationToken ct)
         {
             if (_ports == null) return false;
             _keptUnreachable = false;
+            if (ManualPortsSet && await OpenManualServerPortsAsync(ct))
+            {
+                if (_keptUnreachable) ShowUnreachable();
+                return true;
+            }
             if (_preferredPorts is { Count: >= 2 } pref && _ports.UpnpAvailable && await OpenPreferredPortsAsync(pref, ct)) return true;
             var c = await OpenVerifiedPortAsync(_ports, "IP-TRX-CTRL controllo", ChannelKind.Control, false, ct);
             var a = c.port > 0 ? await OpenVerifiedPortAsync(_ports, "IP-TRX-CTRL audio", ChannelKind.Audio, false, ct) : (0, null);
@@ -384,22 +470,32 @@ namespace IpTrxCtrl.Core
             }
             _ctlPort = c.port; _ctlListener = c.listener;
             _audPort = a.port; _audListener = a.listener; _audLocal = a.port;
-            if (_keptUnreachable)
-            {
-                string lan = LanIp();
-                PortsUnreachable?.Invoke(
-                    (_ports.UpnpAvailable
-                        ? "Il router ha accettato le porte con UPnP, ma da internet non si entra (spesso è l'IP condiviso dell'operatore, CGNAT)."
-                        : "Il router di questo PC non risponde con UPnP, quindi le porte non sono state aperte.")
-                    + $"\n\nPorte del server: controllo TCP {_ctlPort}, audio TCP e UDP {_audPort} · PC {lan} · IP pubblico {_ports.ExternalIp}."
-                    + "\n\nPer collegarti da fuori casa serve almeno una di queste:"
-                    + "\n• attivare UPnP sul router del server o su quello del client (allora apre le porte il client);"
-                    + $"\n• mettere in DMZ il PC {lan} sul router;"
-                    + $"\n• inoltrare a mano sul router le porte {_ctlPort} (TCP) e {_audPort} (TCP e UDP) verso {lan}."
-                    + "\n\nDalla stessa rete locale il collegamento funziona comunque.");
-            }
+            if (_keptUnreachable) ShowUnreachable();
             PortLog($"PORTE prime due porte utili del server: controllo TCP {_ctlPort}, audio TCP/UDP {_audPort} · le comunico al broker MQTT");
             return true;
+        }
+
+        /// <summary>Server: avviso con le due porte da aprire quando da internet non si entra.</summary>
+        private void ShowUnreachable()
+        {
+            var pm = _ports;
+            if (pm == null) return;
+            string lan = LanIp();
+            string why = pm.WrongUpnpDevice != null
+                ? $"All'UPnP non risponde il router che porta a internet ma un altro apparecchio della rete ({pm.WrongUpnpDevice}: ripetitore, nodo mesh, decoder o router in cascata), quindi le porte non sono state aperte sul router giusto."
+                : pm.UpnpAvailable
+                    ? "Il router ha accettato le porte con UPnP, ma da internet non si entra" + (pm.NatNote().Length > 0 ? $" ({pm.NatNote()})." : " (spesso è l'IP condiviso dell'operatore, CGNAT).")
+                    : "Il router di questo PC non risponde con UPnP, quindi le porte non sono state aperte.";
+            bool manual = ManualPortsSet && _ctlPort == _s.ManualControlPort;
+            PortsUnreachable?.Invoke(why
+                + $"\n\nPorte da aprire sul router principale verso questo PC ({lan}):"
+                + $"\n• {_ctlPort} TCP (controllo)"
+                + $"\n• {_audPort} TCP e UDP (audio)"
+                + $"\nIP pubblico {pm.ExternalIp}."
+                + (manual ? "\n\nSono le porte che hai scelto: controlla che l'inoltro sul router punti a questo PC."
+                          : "\n\nQueste porte cambiano a ogni avvio: per inoltrarle a mano scegline due fisse in Impostazioni › PORTE APERTE SUL ROUTER.")
+                + "\n\nIn alternativa: attivare UPnP sul router principale, mettere in DMZ il PC " + lan + ", oppure attivare UPnP sul router del client (allora apre le porte il client)."
+                + "\n\nDalla stessa rete locale il collegamento funziona comunque.");
         }
 
         /// <summary>
@@ -425,7 +521,7 @@ namespace IpTrxCtrl.Core
                 var kind = forAudio ? ChannelKind.Audio : ChannelKind.Control;
                 _ = Task.Run(() => AcceptLoopAsync(l, kind, ct));
                 if (forAudio) await _ports.OpenFixedAsync(Open.Nat.Protocol.Udp, ext, inner, desc + " (UDP)");
-                bool? reach = await PortProbe.TcpReachableAsync(ext, PortLog, ct);
+                bool? reach = await ProbeOwnAsync(ext, PortLog, ct);
                 if (reach == false)
                 {
                     PortLog($"PORTE porta esterna {ext} non raggiungibile da internet: provo la successiva");
@@ -667,7 +763,7 @@ namespace IpTrxCtrl.Core
             lock (_pairTriedSrv) _pairTriedSrv.Clear();
             _pairLastTicks = 0;
             if (_keptUnreachable)
-                Log('·', "le porte del server non sono raggiungibili da internet" + (_ports?.CgnatSuspected == true ? $" (router con IP {_ports.RouterIp}: CGNAT o doppio NAT)" : "")
+                Log('·', "le porte del server non sono raggiungibili da internet" + (_ports != null && _ports.NatNote().Length > 0 ? $" ({_ports.NatNote()})" : "")
                          + ": se il client non entra, si passa al ciclo delle porte con il collegamento inverso");
 
             _pairListenCts?.Cancel();
@@ -740,7 +836,7 @@ namespace IpTrxCtrl.Core
                 (ext, inner) = await pm.OpenDistinctTcpAsync(_pairTriedSrv, o.Restricted ? o.OutboundPorts : new List<int>(), o.Round % 2 == 0, "IP-TRX-CTRL abbinamento", ct);
                 await ClosePairRoundPortAsync();
                 string ip = (pm.ExternalIp ?? CurrentServerAddress?.Ip)?.ToString() ?? "";
-                string note = pm.CgnatSuspected ? $"router del server con IP {pm.RouterIp}: CGNAT o doppio NAT" : "";
+                string note = pm.NatNote().Length > 0 ? "server: " + pm.NatNote() : "";
                 if (ext == 0)
                 {
                     Log('✗', $"giro {o.Round} · il router del server non ha accettato una porta nuova");
@@ -756,7 +852,7 @@ namespace IpTrxCtrl.Core
                 }
                 _pairRoundPort = ext; _pairRoundListener = l;
                 _ = Task.Run(() => AcceptLoopAsync(l, ChannelKind.Control, sct));
-                bool? reach = await PortProbe.TcpReachableAsync(ext, SessionLog.Write, ct);
+                bool? reach = await ProbeOwnAsync(ext, SessionLog.Write, ct);
                 Log('▶', $"giro {o.Round} · nuova porta del server TCP {ext}" + (inner != ext ? $" (porta del PC {inner})" : "")
                          + $" · verifica da internet: {Esito(reach)}" + (note.Length > 0 ? " · " + note : ""));
                 if (reach == true) PromotePairRoundPort();
@@ -869,6 +965,7 @@ namespace IpTrxCtrl.Core
                 TcpClient tcp;
                 try { tcp = await listener.AcceptTcpClientAsync(ct); }
                 catch { break; }
+                Interlocked.Increment(ref _accepted);
                 _ = Task.Run(async () =>
                 {
                     try
@@ -1147,7 +1244,9 @@ namespace IpTrxCtrl.Core
             void PLog(string line) { SessionLog.Write(line); PairingLog?.Invoke('·', line.StartsWith("PORTE ") ? line[6..] : line); }
             var pm = new PortManager { Log = PLog };
             bool upnp = await pm.DiscoverAsync(ct);
-            if (!upnp) Log('·', "il router di questo PC non risponde con UPnP: uso porte del PC, che funzionano solo con DMZ o inoltro manuale");
+            if (!upnp) Log('·', ManualPortsSet
+                ? $"il router di questo PC non risponde con UPnP: uso le porte scelte in Impostazioni ({_s.ManualControlPort} TCP, {_s.ManualAudioPort} TCP e UDP), che devono essere inoltrate a mano verso {LanIp()}"
+                : "il router di questo PC non risponde con UPnP: uso porte del PC, che funzionano solo con DMZ o inoltro manuale. Per inoltrarle a mano scegli due porte fisse in Impostazioni › PORTE APERTE SUL ROUTER");
             _outbound ??= await OutboundProbe.RunAsync(SessionLog.Write, ct);
             if (_outbound.Known && _outbound.Restricted)
                 Log('·', $"da questa rete escono solo le porte {string.Join(", ", _outbound.Allowed)}: le comunico al server, che proverà quelle");
@@ -1167,7 +1266,17 @@ namespace IpTrxCtrl.Core
                     var tcs = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
                     TcpListener? l = null;
                     int ext = 0;
-                    var (e, inner) = await pm.OpenDistinctTcpAsync(tried, Array.Empty<int>(), round % 2 == 0, "IP-TRX-CTRL abbinamento client", ct);
+                    var (e, inner) = (0, 0);
+                    // 0.3.4: la porta di controllo scelta dall'utente (inoltrata a mano) si propone per prima
+                    if (ManualPortsSet)
+                    {
+                        tried.Add(_s.ManualControlPort);
+                        int mp = _s.ManualControlPort;
+                        if (pm.UpnpAvailable) await pm.OpenFixedAsync(Open.Nat.Protocol.Tcp, mp, mp, "IP-TRX-CTRL abbinamento client");
+                        (e, inner) = (mp, mp);
+                        if (round == 1) Log('·', $"uso la porta scelta in Impostazioni: TCP {mp} (a ogni giro)");
+                    }
+                    else (e, inner) = await pm.OpenDistinctTcpAsync(tried, Array.Empty<int>(), round % 2 == 0, "IP-TRX-CTRL abbinamento client", ct);
                     if (e > 0)
                     {
                         try
@@ -1183,7 +1292,7 @@ namespace IpTrxCtrl.Core
                     }
                     if (ext > 0)
                     {
-                        bool? reach = await PortProbe.TcpReachableAsync(ext, SessionLog.Write, ct);
+                        bool? reach = await ProbeOwnAsync(ext, SessionLog.Write, ct);
                         if (reach == true) anyMine = true;
                         Log('·', $"porta di questo PC TCP {ext}" + (inner != ext ? $" (PC {inner})" : "") + $" · verifica da internet: {Esito(reach)}");
                     }
@@ -1270,6 +1379,7 @@ namespace IpTrxCtrl.Core
             {
                 TcpClient tcp;
                 try { tcp = await l.AcceptTcpClientAsync(ct); } catch { break; }
+                Interlocked.Increment(ref _accepted);
                 _ = Task.Run(async () =>
                 {
                     try { tcs.TrySetResult(await SecureChannel.PairAsClientOnAsync(tcp, secret, ct)); }
@@ -1467,7 +1577,8 @@ namespace IpTrxCtrl.Core
                 if (!_cportsTried) { _cportsUpnp = await _cports.DiscoverAsync(ct); _cportsTried = true; }
                 await CloseClientPortsAsync();
                 _revCtlTcs = new TaskCompletionSource<SecureChannel>(TaskCreationOptions.RunContinuationsAsynchronously);
-                if (_cportsUpnp)
+                if (ManualPortsSet && await OpenManualClientPortsAsync(ct)) { }
+                else if (_cportsUpnp)
                 {
                     var c = await OpenVerifiedPortAsync(_cports, "IP-TRX-CTRL client controllo", ChannelKind.Control, true, ct);
                     var a = c.port > 0 ? await OpenVerifiedPortAsync(_cports, "IP-TRX-CTRL client audio", ChannelKind.Audio, true, ct) : (0, null);
@@ -1502,6 +1613,36 @@ namespace IpTrxCtrl.Core
             }
         }
 
+        /// <summary>
+        /// Client (0.3.4): per il collegamento inverso usa le due porte scelte dall'utente, inoltrate a mano sul router
+        /// (con UPnP si chiede anche al router di aprirle). Si propongono al server anche se la verifica non riesce.
+        /// </summary>
+        private async Task<bool> OpenManualClientPortsAsync(CancellationToken ct)
+        {
+            var pm = _cports!;
+            int cp = _s.ManualControlPort, ap = _s.ManualAudioPort;
+            TcpListener cl, al;
+            try { cl = new TcpListener(IPAddress.Any, cp); cl.Start(); }
+            catch { SessionLog.Write($"PORTE porta scelta {cp}: già usata da un altro programma di questo PC"); return false; }
+            try { al = new TcpListener(IPAddress.Any, ap); al.Start(); }
+            catch { try { cl.Stop(); } catch { } SessionLog.Write($"PORTE porta scelta {ap}: già usata da un altro programma di questo PC"); return false; }
+            bool mapped = false;
+            if (pm.UpnpAvailable)
+            {
+                mapped = await pm.OpenFixedAsync(Open.Nat.Protocol.Tcp, cp, cp, "IP-TRX-CTRL client controllo");
+                if (await pm.OpenFixedAsync(Open.Nat.Protocol.Tcp, ap, ap, "IP-TRX-CTRL client audio"))
+                    await pm.OpenFixedAsync(Open.Nat.Protocol.Udp, ap, ap, "IP-TRX-CTRL client audio (UDP)");
+            }
+            _ = Task.Run(() => ClientAcceptLoopAsync(cl, ChannelKind.Control, ct));
+            _ = Task.Run(() => ClientAcceptLoopAsync(al, ChannelKind.Audio, ct));
+            _cCtlPort = cp; _cCtlListener = cl;
+            _cAudPort = ap; _cAudListener = al;
+            bool? r = await ProbeOwnAsync(cp, SessionLog.Write, ct);
+            SessionLog.Write($"PORTE il client usa le porte scelte: controllo TCP {cp}, audio TCP e UDP {ap}" + (mapped ? " (aperte anche con UPnP)" : " (inoltro manuale sul router)")
+                             + $" · verifica da internet: {Esito(r)}");
+            return true;
+        }
+
         /// <summary>Client: il server si collega alle porte del client; l'handshake lo avvia comunque il client.</summary>
         private async Task ClientAcceptLoopAsync(TcpListener listener, ChannelKind kind, CancellationToken ct)
         {
@@ -1510,6 +1651,7 @@ namespace IpTrxCtrl.Core
                 TcpClient tcp;
                 try { tcp = await listener.AcceptTcpClientAsync(ct); }
                 catch { break; }
+                Interlocked.Increment(ref _accepted);
                 _ = Task.Run(async () =>
                 {
                     try

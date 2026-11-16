@@ -76,7 +76,7 @@ namespace IpTrxCtrl.Net
             L("ricerca del router: prima UPnP (2 tentativi da 8 s), poi NAT-PMP…");
             try
             {
-                _device = null; _isPmp = false; _switched = false;
+                _device = null; _isPmp = false; _switched = false; WrongUpnpDevice = null;
                 for (int i = 1; i <= 2 && _device == null && !ct.IsCancellationRequested; i++)
                 {
                     _device = await TryDiscoverAsync(PortMapper.Upnp, 8, ct);
@@ -93,6 +93,45 @@ namespace IpTrxCtrl.Net
                 RouterIp = ExternalIp;
                 CgnatSuspected = IsPrivateOrCgnat(ExternalIp);
                 L($"router trovato con {MapperName} · IP esterno dichiarato dal router: {ExternalIp}");
+
+                // 0.3.4 (come IP-DESK-CTRL 0.5.16): il «router» che risponde ha l'IP esterno nella stessa rete di
+                // questo PC, quindi non è il router che porta a internet ma un altro apparecchio della casa (ripetitore
+                // o nodo mesh in modo router, decoder, router in cascata). Le porte aperte lì restano dentro
+                // quell'apparecchio: inutile usarlo, e si cerca se in rete c'è un altro router UPnP giusto.
+                if (ExternalIp != null && OnLocalNetwork(ExternalIp))
+                {
+                    var wrong = ExternalIp;
+                    L($"l'UPnP l'ha dato un altro apparecchio della rete ({wrong}), non il router che porta a internet: le porte aperte lì non arrivano da fuori. Cerco un altro router UPnP…");
+                    NatDevice? other = null;
+                    try
+                    {
+                        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        cts.CancelAfter(TimeSpan.FromSeconds(6));
+                        var all = await new NatDiscoverer().DiscoverDevicesAsync(PortMapper.Upnp, cts);
+                        foreach (var d in all)
+                        {
+                            IPAddress? ip = null;
+                            try { ip = await d.GetExternalIPAsync(); } catch { }
+                            if (ip != null && !OnLocalNetwork(ip)) { other = d; ExternalIp = ip; break; }
+                        }
+                    }
+                    catch { }
+                    if (other == null)
+                    {
+                        WrongUpnpDevice = wrong;
+                        L($"nessun altro router UPnP: non uso l'apparecchio {wrong}. Attiva l'UPnP sul router principale (di solito 192.168.1.1 o 192.168.0.1), oppure scegli due porte in Impostazioni › PORTE APERTE SUL ROUTER e inoltrale a mano");
+                        LastError = $"UPnP solo su un altro apparecchio della rete ({wrong})";
+                        _device = null; _isPmp = false;
+                        RouterIp = wrong;
+                        CgnatSuspected = true;
+                        ExternalIp = await GetPublicIpAsync(ct);
+                        return false;
+                    }
+                    _device = other; _isPmp = false;
+                    RouterIp = ExternalIp;
+                    CgnatSuspected = IsPrivateOrCgnat(ExternalIp);
+                    L($"trovato il router giusto con UPnP · IP esterno dichiarato: {ExternalIp}");
+                }
 
                 // Controllo aggiuntivo: l'IP che vede internet deve coincidere con quello del router
                 IPAddress? pub = await GetPublicIpAsync(ct);
@@ -322,6 +361,53 @@ namespace IpTrxCtrl.Net
                 return true;
             }
             catch { return false; }
+        }
+
+        /// <summary>Apparecchio UPnP scartato perché sta nella rete di casa (non è il router di uscita).</summary>
+        public IPAddress? WrongUpnpDevice { get; private set; }
+
+        /// <summary>
+        /// Perché le porte potrebbero non arrivare da internet, in parole semplici: CGNAT dell'operatore
+        /// (IP 100.64-127.x) o doppio NAT dentro casa (un router con IP privato davanti a quello che apre le porte).
+        /// </summary>
+        public string NatNote()
+        {
+            if (WrongUpnpDevice != null) return $"UPnP solo su un altro apparecchio della rete ({WrongUpnpDevice}), non sul router principale";
+            if (!CgnatSuspected) return "";
+            var r = RouterIp;
+            if (r == null) return "CGNAT o doppio NAT";
+            byte[] b = r.MapToIPv4().GetAddressBytes();
+            if (b[0] == 100 && b[1] >= 64 && b[1] <= 127) return $"router con IP {r}: IP condiviso dell'operatore (CGNAT)";
+            if (IsPrivateOrCgnat(r)) return $"router con IP {r}: doppio NAT (davanti c'è un altro router)";
+            return $"router con IP {r} diverso da quello visto da internet: CGNAT o doppio NAT";
+        }
+
+        /// <summary>true se l'indirizzo sta in una delle reti locali di questo PC (stessa sottorete di una scheda di rete).</summary>
+        public static bool OnLocalNetwork(IPAddress ip)
+        {
+            if (ip.AddressFamily != AddressFamily.InterNetwork) return false;
+            byte[] a = ip.GetAddressBytes();
+            try
+            {
+                foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (nic.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                    foreach (var u in nic.GetIPProperties().UnicastAddresses)
+                    {
+                        if (u.Address.AddressFamily != AddressFamily.InterNetwork || IPAddress.IsLoopback(u.Address)) continue;
+                        byte[] me = u.Address.GetAddressBytes();
+                        byte[] mask;
+                        try { mask = u.IPv4Mask?.GetAddressBytes() ?? new byte[] { 255, 255, 255, 0 }; }
+                        catch { mask = new byte[] { 255, 255, 255, 0 }; }
+                        if (mask.Length != 4 || mask.All(x => x == 0)) mask = new byte[] { 255, 255, 255, 0 };
+                        bool same = true;
+                        for (int i = 0; i < 4; i++) if ((a[i] & mask[i]) != (me[i] & mask[i])) { same = false; break; }
+                        if (same) return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
         }
 
         public static bool IsPrivateOrCgnat(IPAddress? ip)

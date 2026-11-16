@@ -175,7 +175,7 @@ jobs:
           overwrite_files: true
           files: artifacts/*
           body: |
-            Novità della 0.3.3 (correzioni): su **Linux, Raspberry Pi e Mac** la prima configurazione, le Impostazioni e la finestra delle licenze si bloccavano mentre il programma leggeva la versione di Hamlib; ora si aprono subito. Nella finestra principale le etichette degli strumenti (ROS, Gain) non sono più coperte dalle barre e la casella dello scostamento del VFO B non esce dal riquadro. Chi ha la 0.3.2 la riceve con l'aggiornamento automatico.
+            Novità della 0.3.4 (rete): in **Impostazioni › PORTE APERTE SUL ROUTER** si scelgono due porte (controllo TCP, audio TCP e UDP) da inoltrare a mano sul router, con l'elenco delle porte da aprire e il pulsante «Copia l'elenco»: le usa il server al posto di quelle casuali e il client per il collegamento inverso. Se all'UPnP risponde un apparecchio della rete che non è il router (ripetitore, nodo mesh, router in cascata) il programma non lo usa e lo dice; con doppio NAT o CGNAT prova una porta sola invece di 6; una porta che risponde ma non porta al programma (per esempio la pagina del router) conta come chiusa; il tipo di NAT per l'audio UDP si legge con server STUN di due gestori diversi. Chi ha la 0.3.x la riceve con l'aggiornamento automatico.
 
             Dalla 0.3.2: **aggiornamenti automatici** e pacchetti per Windows su ARM, Fedora/openSUSE (.rpm), Arch, Slackware, AppImage e Alpine.
 

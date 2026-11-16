@@ -305,6 +305,48 @@ namespace IpTrxCtrl.UI
             fwBtn.IsVisible = fwNote.IsVisible = OperatingSystem.IsWindows();
             fwBtn.Click += async (_, _) => await Dialogs.Info(this, AllowInWindowsFirewall());
             prefill.ValueChanged += (_, e) => prefillTxt.Text = $"Jitter buffer (pre-riempimento): {(int)e.NewValue} ms";
+            // ---- 0.3.4: due porte aperte a mano sul router (controllo TCP, audio TCP e UDP)
+            var mpCtl = new TextBox { Text = node.ManualControlPort > 0 ? node.ManualControlPort.ToString(CultureInfo.InvariantCulture) : "", Width = 90, Watermark = "auto" };
+            var mpAud = new TextBox { Text = node.ManualAudioPort > 0 ? node.ManualAudioPort.ToString(CultureInfo.InvariantCulture) : "", Width = 90, Watermark = "auto" };
+            var mpUse = Ui.Btn("Usa queste porte", true);
+            var mpAuto = Ui.Btn("Porte automatiche");
+            var mpCopy = Ui.Btn("Copia l'elenco");
+            var mpList = new SelectableTextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap };
+            var mpNote = Ui.Sub("Servono quando il router non apre le porte da solo (UPnP spento, doppio NAT, ripetitore o nodo mesh che risponde al posto del router): "
+                              + "inoltra sul router principale queste due porte verso questo PC, stesso numero dentro e fuori, poi premi «Usa queste porte». "
+                              + (srvRole ? "Il server le usa al posto delle porte automatiche, che cambiano a ogni avvio."
+                                         : "Il client le propone al server per il collegamento inverso (il server si collega a questo PC)."), 12);
+            mpNote.TextWrapping = TextWrapping.Wrap;
+            string MpText()
+            {
+                var (uc, ua) = node.PortsInUse;
+                int c = node.ManualPortsSet ? node.ManualControlPort : uc, a = node.ManualPortsSet ? node.ManualAudioPort : ua;
+                string lan = node.LanAddress;
+                string head = node.ManualPortsSet ? "Porte scelte da aprire sul router" : "Porte automatiche in uso adesso (cambiano a ogni avvio)";
+                string body = c > 0 && a > 0
+                    ? $"{head}, verso questo PC {lan}:\n• {c} TCP (controllo)\n• {a} TCP e UDP (audio)"
+                    : $"{head}: nessuna in questo momento. Scegli due porte qui sopra (per esempio 47001 e 47002) e inoltrale sul router verso {lan}.";
+                string nat = node.NatNote;
+                return nat.Length > 0 ? body + $"\nRete di questo PC: {nat}." : body;
+            }
+            mpList.Text = MpText();
+            mpUse.Click += async (_, _) =>
+            {
+                bool okC = int.TryParse(mpCtl.Text?.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out int c) && c is >= 1024 and < 65536;
+                bool okA = int.TryParse(mpAud.Text?.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out int a) && a is >= 1024 and < 65536;
+                if (!okC || !okA || c == a)
+                {
+                    await Dialogs.Info(this, "Scrivi due porte diverse tra 1024 e 65535: la prima per il controllo (TCP), la seconda per l'audio (TCP e UDP).");
+                    return;
+                }
+                node.SetManualPorts(c, a);
+                mpList.Text = MpText();
+            };
+            mpAuto.Click += (_, _) => { node.SetManualPorts(0, 0); mpCtl.Text = mpAud.Text = ""; mpList.Text = MpText(); };
+            mpCopy.Click += async (_, _) =>
+            {
+                try { await Dialogs.CopyText(this, mpList.Text ?? ""); } catch { }
+            };
             // ---- client: porta seriale d'ingresso (pedale PTT, tasto CW meccanico, porta virtuale)
             var inPorts = new List<string> { "(nessuna)" };
             inPorts.AddRange(Hamlib.SerialPorts());
@@ -700,6 +742,9 @@ namespace IpTrxCtrl.UI
                         ? Ui.Panel(Ui.Col(8, Ui.H2("ACCESSO DAL BROWSER (SERVER)"), webOn, Ui.Row(8, Ui.Sub("Porta HTTPS", 13), webPort), webRouter, webRx, webInfo, webNote, finder))
                         : Ui.Panel(Ui.Col(8, Ui.H2("ACCESSO DAL BROWSER"),
                             Ui.Sub("Si attiva sul server. Da qui puoi salvare la pagina «Trova il server» da tenere sul telefono o su un altro PC.", 13), finder)),
+                    Ui.Panel(Ui.Col(8, Ui.H2("PORTE APERTE SUL ROUTER"), mpNote,
+                        Ui.Row(8, Ui.Sub("Controllo (TCP)", 13), mpCtl, Ui.Sub("Audio (TCP e UDP)", 13), mpAud),
+                        Ui.Row(8, mpUse, mpAuto, mpCopy), mpList)),
                     Ui.Panel(Ui.Col(10, Ui.H2("RETE E AUDIO"), prefillTxt, prefill,
                         Ui.Col(0, Ui.Lbl("Broker MQTT (uno per riga, host:porta)"), brokers),
                         fwBtn, fwNote)),
@@ -1053,7 +1098,7 @@ Server e client devono avere versioni dello stesso «protocollo». La versione d
   Versioni          Protocollo   Compatibili con
   0.1.0 – 0.1.3     1            solo 0.1.x
   0.2.0 – 0.2.8     2            tutte le 0.2.x
-  0.3.0 - 0.3.3     3            solo 0.3.x (numero a 10 cifre, codice fisso, più client, sicurezza TX, panadapter; 0.3.1 browser;
+  0.3.0 - 0.3.4     3            solo 0.3.x (numero a 10 cifre, codice fisso, più client, sicurezza TX, panadapter; 0.3.1 browser;
                                  0.3.2 aggiornamenti automatici)
 Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   scelta delle schede audio del server dal client ......... 0.2.1 o successiva
@@ -1110,6 +1155,12 @@ diventa la sua porta di controllo. Tutto lo scambio compare riga per riga nella 
 ROUTER (dalla 0.2.8): il router si cerca prima con UPnP e solo se non risponde con NAT-PMP. Se rifiuta le porte
 il programma prova l'altro protocollo; se le rifiuta comunque usa una porta del PC (rete locale, DMZ, inoltro
 manuale) e l'abbinamento continua con il ciclo delle porte e il collegamento inverso.
+PORTE APERTE SUL ROUTER (dalla 0.3.4): in Impostazioni si scrivono due porte, controllo (TCP) e audio
+(TCP e UDP), da inoltrare a mano sul router principale verso il PC con lo stesso numero dentro e fuori. Il server
+le usa al posto di quelle casuali; il client le propone per il collegamento inverso. Sotto c'è l'elenco delle due
+porte da aprire, con «Copia l'elenco». Se all'UPnP risponde un altro apparecchio della rete (ripetitore, nodo
+mesh, router in cascata: il suo IP esterno è nella stessa rete del PC) il programma non lo usa e lo scrive nel
+registro; con doppio NAT o CGNAT prova una sola porta invece di 6.
 FIREWALL DI WINDOWS: l'installatore consente il programma su tutte le reti; con le versioni portatili usa
 Impostazioni › Rete e audio › «Consenti nel firewall di Windows» (serve soprattutto sul server).
 

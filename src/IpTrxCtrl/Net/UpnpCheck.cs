@@ -67,6 +67,19 @@ namespace IpTrxCtrl.Net
                     cts.CancelAfter(TimeSpan.FromSeconds(10));
                     var dev = await new NatDiscoverer().DiscoverDeviceAsync(PortMapper.Upnp | PortMapper.Pmp, cts);
                     var ip = await dev.GetExternalIPAsync();
+                    // 0.3.4: l'IP esterno sta nella rete di casa: risponde un altro apparecchio, non il router di uscita
+                    if (ip != null && PortManager.OnLocalNetwork(ip))
+                    {
+                        _device = null;
+                        ExternalIp = ip.ToString();
+                        Diagnosis = $"All'UPnP risponde un altro apparecchio della rete ({ip}: ripetitore o nodo mesh in modo router, decoder, router in cascata), "
+                                  + "non il router che porta a internet: le porte aperte lì non arrivano da fuori.\n"
+                                  + "Attiva l'UPnP sul router principale (di solito 192.168.1.1 o 192.168.0.1) e, se puoi, spegnilo sull'altro apparecchio. "
+                                  + "Oppure scegli due porte in Impostazioni › PORTE APERTE SUL ROUTER e inoltrale a mano verso questo PC.";
+                        L($"UPnP da un apparecchio della rete ({ip}), non dal router principale: non lo considero");
+                        Set(UpnpState.Missing);
+                        return;
+                    }
                     _device = dev;
                     Method = dev.GetType().Name.Contains("Pmp", StringComparison.OrdinalIgnoreCase) ? "NAT-PMP" : "UPnP";
                     ExternalIp = ip?.ToString() ?? "";

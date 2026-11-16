@@ -28,7 +28,9 @@ namespace IpTrxCtrl.Net.Udp
 
         public static readonly string[] DefaultServers =
         {
-            "stun.l.google.com:19302", "stun1.l.google.com:19302", "stun.cloudflare.com:3478"
+            // due gestori diversi per primi: con due indirizzi dello stesso gestore (stessa porta 19302, a volte
+            // lo stesso IP) un NAT simmetrico può sembrare «a cono» (0.3.4, come IP-DESK-CTRL 0.5.17)
+            "stun.l.google.com:19302", "stun.cloudflare.com:3478", "stun1.l.google.com:19302"
         };
 
         public static bool IsStun(ReadOnlySpan<byte> d) =>
@@ -86,13 +88,17 @@ namespace IpTrxCtrl.Net.Udp
         public static async Task<NatInfo> DiscoverAsync(UdpLink link, IReadOnlyList<string> servers, Action<string>? log, CancellationToken ct)
         {
             var found = new List<IPEndPoint>();
+            var asked = new List<IPAddress>();
             foreach (string s in servers)
             {
                 if (found.Count == 2) break;
                 var ep = await ResolveAsync(s, ct);
                 if (ep == null) { log?.Invoke($"STUN {s}: nome non risolto"); continue; }
+                // stesso indirizzo di un server già interrogato: non dice niente sul tipo di NAT
+                if (asked.Contains(ep.Address)) { log?.Invoke($"STUN {s}: stesso indirizzo {ep.Address} del server precedente, salto"); continue; }
+                asked.Add(ep.Address);
                 var r = await link.StunAsync(ep, ct);
-                log?.Invoke(r == null ? $"STUN {s}: nessuna risposta" : $"STUN {s}: visto come {r}");
+                log?.Invoke(r == null ? $"STUN {s} ({ep.Address}): nessuna risposta" : $"STUN {s} ({ep.Address}): visto come {r}");
                 if (r != null) found.Add(r);
             }
             if (found.Count == 0) return new NatInfo(null, "UDP bloccato o STUN non raggiungibile", 0);
