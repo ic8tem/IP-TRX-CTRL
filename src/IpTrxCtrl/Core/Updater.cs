@@ -260,7 +260,7 @@ namespace IpTrxCtrl.Core
             if (r.Sha256 != null)
             {
                 string h;
-                using (var f = File.OpenRead(file)) h = Convert.ToHexString(SHA256.HashData(f)).ToLowerInvariant();
+                using (var f = File.OpenRead(file)) h = Convert.ToHexString(SHA256.Create().ComputeHash(f)).ToLowerInvariant();
                 if (h != r.Sha256) throw new IOException("l'impronta SHA-256 del pacchetto non corrisponde a quella pubblicata su GitHub");
             }
 

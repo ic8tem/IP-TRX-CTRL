@@ -157,7 +157,7 @@ namespace IpTrxCtrl.Core
         /// <summary>Tiene solo le cifre; vero se sono esattamente 10.</summary>
         public static bool TryNormalizePairingNumber(string input, out string digits)
         {
-            digits = new string((input ?? "").Where(char.IsAsciiDigit).ToArray());
+            digits = new string((input ?? "").Where(IpTrxCtrl.Core.Compat.IsAsciiDigit).ToArray());
             return digits.Length == PairingDigits;
         }
 
@@ -184,7 +184,7 @@ namespace IpTrxCtrl.Core
         /// <summary>Solo le cifre: 10 = numero temporaneo, 12 = codice fisso del server.</summary>
         public static bool TryNormalizeAnyCode(string input, out string digits)
         {
-            digits = new string((input ?? "").Where(char.IsAsciiDigit).ToArray());
+            digits = new string((input ?? "").Where(IpTrxCtrl.Core.Compat.IsAsciiDigit).ToArray());
             return digits.Length == PairingDigits || digits.Length == FixedCodeDigits;
         }
 

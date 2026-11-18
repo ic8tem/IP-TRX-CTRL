@@ -2759,7 +2759,7 @@ namespace IpTrxCtrl.Core
             }
             var packed = KeyStore.LoadMaster("fixed-code");
             string d = packed == null ? "" : System.Text.Encoding.ASCII.GetString(packed).TrimEnd('\0');
-            _fixedDigits = d.Length == Crypto.FixedCodeDigits && d.All(char.IsAsciiDigit) ? d : "";
+            _fixedDigits = d.Length == Crypto.FixedCodeDigits && d.All(IpTrxCtrl.Core.Compat.IsAsciiDigit) ? d : "";
             _fixedSecret = null;
         }
 

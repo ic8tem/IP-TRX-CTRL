@@ -265,7 +265,7 @@ namespace IpTrxCtrl.Net
         /// </summary>
         public static byte[]? ReadWebFile(string name)
         {
-            if (name.Length == 0 || name.Length > 80 || !name.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_') || name.Contains("..")) return null;
+            if (name.Length == 0 || name.Length > 80 || !name.All(c => IpTrxCtrl.Core.Compat.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_') || name.Contains("..")) return null;
             try
             {
                 string local = Path.Combine(AppSettings.Folder, "web", name);
