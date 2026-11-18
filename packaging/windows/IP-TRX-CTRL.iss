@@ -7,6 +7,10 @@
 #ifndef Arch
   #define Arch "x64"
 #endif
+; «win» (Windows 10/11, .NET 8) o «win7» (Windows 7 SP1, 8, 8.1, .NET 6)
+#ifndef Nome
+  #define Nome "win"
+#endif
 
 [Setup]
 AppId={{7C1E4A2B-5D33-4F0E-9B6A-1A2B3C4D5E6F}
@@ -20,7 +24,13 @@ DefaultDirName={autopf}\IP-TRX-CTRL
 DefaultGroupName=IP-TRX-CTRL
 DisableProgramGroupPage=yes
 OutputDir={#OutDir}
-OutputBaseFilename=IP-TRX-CTRL-{#AppVersion}-win-{#Arch}-setup
+OutputBaseFilename=IP-TRX-CTRL-{#AppVersion}-{#Nome}-{#Arch}-setup
+; .NET 8 richiede Windows 10: l'installatore lo dice subito; per Windows 7 SP1, 8 e 8.1 c'è il pacchetto win7 (.NET 6)
+#if Nome == "win7"
+MinVersion=6.1sp1
+#else
+MinVersion=10.0
+#endif
 SetupIconFile=..\..\src\IpTrxCtrl\Assets\icon.ico
 UninstallDisplayIcon={app}\IP-TRX-CTRL.exe
 Compression=lzma2

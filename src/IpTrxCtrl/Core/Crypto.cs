@@ -57,12 +57,22 @@ namespace IpTrxCtrl.Core
         }
 
         /// <summary>Formato: nonce(12) | tag(16) | testo cifrato.</summary>
+        /// <summary>AES-GCM con etichetta da 16 byte (.NET 6, per Windows 7/8, non ha il costruttore con la lunghezza).</summary>
+        public static AesGcm NewGcm(byte[] key)
+        {
+#if NET8_0_OR_GREATER
+            return new AesGcm(key, TagSize);
+#else
+            return new AesGcm(key);
+#endif
+        }
+
         public static byte[] Seal(byte[] key, byte[] plain)
         {
             byte[] nonce = RandomNumberGenerator.GetBytes(NonceSize);
             byte[] ct = new byte[plain.Length];
             byte[] tag = new byte[TagSize];
-            using (var g = new AesGcm(key, TagSize)) g.Encrypt(nonce, plain, ct, tag);
+            using (var g = NewGcm(key)) g.Encrypt(nonce, plain, ct, tag);
             return Concat(nonce, tag, ct);
         }
 
@@ -73,7 +83,7 @@ namespace IpTrxCtrl.Core
             var tag = sealedData.AsSpan(NonceSize, TagSize);
             var ct = sealedData.AsSpan(NonceSize + TagSize);
             byte[] plain = new byte[ct.Length];
-            using (var g = new AesGcm(key, TagSize)) g.Decrypt(nonce, ct, tag, plain);
+            using (var g = NewGcm(key)) g.Decrypt(nonce, ct, tag, plain);
             return plain;
         }
 

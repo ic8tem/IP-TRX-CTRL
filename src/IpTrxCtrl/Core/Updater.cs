@@ -284,7 +284,11 @@ namespace IpTrxCtrl.Core
             {
                 await using var fs = File.OpenRead(file);
                 await using var gz = new GZipStream(fs, CompressionMode.Decompress);
+#if NET7_0_OR_GREATER
                 await TarFile.ExtractToDirectoryAsync(gz, outDir, true, ct);
+#else
+                throw new NotSupportedException("tar.gz non gestito in questa compilazione (solo Windows 7/8)");
+#endif
             }
             st.Dir = outDir;
             return st;
@@ -295,12 +299,14 @@ namespace IpTrxCtrl.Core
         private static void MakeExecutable(string f)
         {
             if (IsWin || !File.Exists(f)) return;
+#if NET7_0_OR_GREATER
             try
             {
                 File.SetUnixFileMode(f, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
                                         UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
             }
             catch { }
+#endif
         }
 
         private static string? FindRoot(string dir, string marker)

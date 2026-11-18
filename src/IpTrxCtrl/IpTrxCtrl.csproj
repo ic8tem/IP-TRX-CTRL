@@ -3,6 +3,8 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
+    <!-- pacchetti per Windows 7 SP1, 8 e 8.1: .NET 6 (dotnet publish -p:Windows7=true), come YA-MS -->
+    <TargetFramework Condition="'$(Windows7)' == 'true'">net6.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
@@ -42,7 +44,9 @@
 
   <!-- codice della compilazione (win-arm64, linux-musl-x64…): l'aggiornamento automatico sceglie il pacchetto giusto -->
   <ItemGroup Condition="'$(RuntimeIdentifier)' != ''">
-    <AssemblyMetadata Include="Rid" Value="$(RuntimeIdentifier)" />
+    <AssemblyMetadata Condition="'$(Windows7)' != 'true'" Include="Rid" Value="$(RuntimeIdentifier)" />
+    <!-- Windows 7/8/8.1: «win7-x64», così l'aggiornamento automatico prende sempre il pacchetto .NET 6 -->
+    <AssemblyMetadata Condition="'$(Windows7)' == 'true'" Include="Rid" Value="$(RuntimeIdentifier.Replace('win-', 'win7-'))" />
   </ItemGroup>
 
   <ItemGroup>

@@ -4,16 +4,17 @@ Comando a distanza di una radio HF via internet: audio bidirezionale a 8 kHz cif
 
 Un unico programma per i due PC: **server** (la radio è collegata qui) e **client** (l'operatore). I ruoli si scelgono al primo avvio e si possono invertire.
 
-Versioni: Windows 64 e 32 bit e ARM, Linux (Debian e derivate, Fedora, openSUSE, Arch, Slackware, Alpine, AppImage per tutte), Raspberry Pi 64 e 32 bit, macOS Apple Silicon e Intel.
+Versioni: Windows 10/11 64 e 32 bit e ARM, Windows 7 SP1, 8 e 8.1 (64 e 32 bit), Linux (Debian e derivate, Fedora, openSUSE, Arch, Slackware, Alpine, AppImage per tutte), Raspberry Pi 64 e 32 bit, macOS Apple Silicon e Intel.
 
 ## Scaricare
 
-I file sono nella pagina **Releases**:
+I file sono nella pagina **Releases**; in cima a ogni release c'è la tabella «Scarica la versione per il tuo sistema» con il collegamento diretto a ogni pacchetto.
 
 | Distribuzione | File da scaricare | Si aggiorna da solo | Note |
 |---|---|---|---|
 | **Windows 64 bit** | `IP-TRX-CTRL-…-win-x64-setup.exe` (portatile: `…-win-x64-portatile.zip`) | sì | Hamlib incluso; il setup propone anche il cavo audio virtuale VB-CABLE per i programmi digitali |
 | **Windows 32 bit** | `IP-TRX-CTRL-…-win-x86-setup.exe` (portatile: `…-win-x86-portatile.zip`) | sì | Hamlib incluso |
+| **Windows 7 SP1, 8, 8.1** (64 e 32 bit) | `IP-TRX-CTRL-…-win7-x64-setup.exe` o `…-win7-x86-setup.exe` (portatile: `…-win7-x64-portatile.zip`, `…-win7-x86-portatile.zip`) | sì | dalla 0.3.5, con .NET 6 (l'ultimo che gira su questi Windows); Hamlib incluso. I pacchetti `-win-` richiedono Windows 10 o 11 |
 | **Windows ARM** (Snapdragon) | `IP-TRX-CTRL-…-win-arm64-setup.exe` (portatile: `…-win-arm64-portatile.zip`) | sì | Hamlib incluso (rigctld per x64, eseguito dall'emulazione di Windows 11) |
 | **Debian, Ubuntu, Mint** (x86_64) | `ip-trx-ctrl_…_amd64.deb` | no, avvisa | `sudo apt install ./<file>.deb` installa anche Hamlib |
 | **Fedora, openSUSE, RHEL** | `ip-trx-ctrl-….x86_64.rpm` (o `.aarch64.rpm`, `.armv7hl.rpm`) | no, avvisa | `sudo dnf install ./<file>.rpm` o `sudo zypper install ./<file>.rpm`; Hamlib consigliato (`hamlib`) |
@@ -63,7 +64,7 @@ Server e client devono avere versioni dello stesso protocollo:
 |---|---|---|
 | 0.1.0 – 0.1.3 | 1 | solo le 0.1.x |
 | 0.2.0 – 0.2.8 | 2 | tutte le 0.2.x (alcune funzioni richiedono una versione minima su entrambi i PC) |
-| 0.3.0 – 0.3.4 | 3 | solo le 0.3.x (numero a 10 cifre, codice fisso del server, più client sul server, sicurezza in trasmissione, panadapter; dalla 0.3.1 accesso dal browser; dalla 0.3.2 aggiornamenti automatici) |
+| 0.3.0 – 0.3.5 | 3 | solo le 0.3.x (numero a 10 cifre, codice fisso del server, più client sul server, sicurezza in trasmissione, panadapter; dalla 0.3.1 accesso dal browser; dalla 0.3.2 aggiornamenti automatici) |
 
 Dettagli e controllo automatico: [docs/Versioni-compatibili.md](docs/Versioni-compatibili.md).
 

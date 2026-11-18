@@ -57,7 +57,7 @@ namespace IpTrxCtrl.Net.Udp
                 const int SIO_UDP_CONNRESET = -1744830452;
                 try { _udp.Client.IOControl(SIO_UDP_CONNRESET, new byte[] { 0 }, null); } catch { }
             }
-            _aes = new AesGcm(Crypto.Hkdf(master, Array.Empty<byte>(), "iptrx-udp"), 16);
+            _aes = Crypto.NewGcm(Crypto.Hkdf(master, Array.Empty<byte>(), "iptrx-udp"));
             _ = Task.Run(ReceiveLoopAsync);
             _ = Task.Run(MaintainLoopAsync);
         }

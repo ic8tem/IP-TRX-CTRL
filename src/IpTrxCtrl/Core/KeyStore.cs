@@ -60,7 +60,9 @@ namespace IpTrxCtrl.Core
             else
             {
                 File.WriteAllBytes(path, Crypto.Seal(LocalKey(), key));
+#if NET7_0_OR_GREATER
                 try { File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite); } catch { }
+#endif
             }
         }
 
