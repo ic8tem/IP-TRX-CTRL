@@ -9,6 +9,7 @@ IP-TRX-CTRL is written in **C# (.NET 8)** with the **Avalonia** interface, to ha
 | Windows 64 bit | `win-x64` |
 | Windows 32 bit | `win-x86` |
 | Windows ARM (Snapdragon) | `win-arm64` |
+| Windows 7 SP1, 8, 8.1 (64 and 32 bit) | `win-x64` and `win-x86` with .NET 6, packages `win7-x64` and `win7-x86` |
 | macOS Apple Silicon | `osx-arm64` |
 | macOS Intel | `osx-x64` |
 | Linux 64 bit | `linux-x64` |
@@ -44,6 +45,7 @@ Every push to the `main` branch starts the build on GitHub Actions (file `.githu
 | Windows 64 bit | `IP-TRX-CTRL-<version>-win-x64-setup.exe` | `…-win-x64-portatile.zip` |
 | Windows 32 bit | `IP-TRX-CTRL-<version>-win-x86-setup.exe` | `…-win-x86-portatile.zip` |
 | Windows ARM | `IP-TRX-CTRL-<version>-win-arm64-setup.exe` | `…-win-arm64-portatile.zip` |
+| Windows 7 SP1, 8, 8.1 | `IP-TRX-CTRL-<version>-win7-x64-setup.exe`, `…-win7-x86-setup.exe` | `…-win7-x64-portatile.zip`, `…-win7-x86-portatile.zip` |
 | Linux 64 bit | `ip-trx-ctrl_<version>_amd64.deb`, `ip-trx-ctrl-<version>.x86_64.rpm`, `ip-trx-ctrl-<version>-1-x86_64.pkg.tar.zst`, `ip-trx-ctrl-<version>-x86_64-1_ic8tem.txz`, `IP-TRX-CTRL-<version>-x86_64.AppImage` | `…-linux-x64-portatile.tar.gz` |
 | Raspberry Pi / Linux ARM64 | `ip-trx-ctrl_<version>_arm64.deb`, `….aarch64.rpm`, `…-aarch64.pkg.tar.zst`, `…-aarch64-1_ic8tem.txz`, `…-aarch64.AppImage` | `…-linux-arm64-portatile.tar.gz` |
 | Raspberry Pi / Linux ARM 32 bit | `ip-trx-ctrl_<version>_armhf.deb`, `….armv7hl.rpm` | `…-linux-arm-portatile.tar.gz` |

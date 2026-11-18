@@ -7,7 +7,7 @@ IP-TRX-CTRL serve a usare una radio HF a distanza, via internet, come se fosse s
 
 I ruoli si scelgono al primo avvio e si possono invertire in qualsiasi momento.
 
-> **Versione attuale: 0.3.4.** Le immagini sono schermate vere del programma (client collegato a un server con una radio simulata da Hamlib).
+> **Versione attuale: 0.3.5.** Le immagini sono schermate vere del programma (client collegato a un server con una radio simulata da Hamlib).
 
 ## In breve
 
@@ -22,6 +22,7 @@ I ruoli si scelgono al primo avvio e si possono invertire in qualsiasi momento.
 - Dalla 0.3.0: sicurezza in trasmissione (tempo massimo, niente cambi di frequenza in trasmissione, precedenza a chi è alla radio, client in solo ascolto), comandi della radio (NR, NB, Notch, ATT, preamplificatore, AGC, compressore, squelch, ALC), bande, passo e memorie, [panadapter della radio](IT-Panadapter), rapporto per segnalare un problema e avviso di versione nuova. Vedi [Radio, split e potenza](IT-Radio-split-e-potenza) e [Finestra principale](IT-Finestra-principale).
 - Dalla 0.3.1: [accesso dal browser](IT-Accesso-dal-browser) di telefono, tablet e PC, con la pagina «Trova il server».
 - Dalla 0.3.2: aggiornamenti automatici (non per i pacchetti .deb, .rpm, Arch e Slackware) e pacchetti per Windows ARM, Fedora/openSUSE, Arch, Slackware, AppImage e Alpine: vedi [Registri e risoluzione dei problemi](IT-Registri-e-risoluzione-dei-problemi).
+- Dalla 0.3.5: pacchetti per Windows 7 SP1, 8 e 8.1 (`-win7-x64-`, `-win7-x86-`, con .NET 6); in cima a ogni release la tabella con il collegamento a ogni pacchetto.
 - Dalla 0.3.4: porte scelte da te in Impostazioni (con l'elenco delle due porte da aprire), riconoscimento del doppio NAT e dell'UPnP di un apparecchio che non è il router.
 - Dalla 0.3.3: su Linux, Raspberry Pi e Mac prima configurazione, Impostazioni e licenze non si bloccano più; etichette ROS e Gain visibili.
 - Sei temi di colore: Chiaro, Notte, Nero, Blu, Viola, Verde: vedi [Temi di colore](IT-Temi-di-colore).
