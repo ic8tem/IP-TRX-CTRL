@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
+#if NET7_0_OR_GREATER
 using System.Formats.Tar;
+#endif
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
