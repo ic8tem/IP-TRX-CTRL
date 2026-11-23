@@ -24,8 +24,8 @@ install -m 644 "$ROOT/src/IpTrxCtrl/Assets/icon.png" "$PKG/usr/share/icons/hicol
 chmod 644 "$PKG/usr/share/doc/ip-trx-ctrl/copyright"
 install -m 644 "$ROOT/README.md" "$PKG/usr/share/doc/ip-trx-ctrl/README.md"
 # 0.3.7: servizio di systemd per il server senza finestra (Raspberry Pi senza schermo); non si attiva da solo
-install -d "$PKG/lib/systemd/system"
-install -m 644 "$ROOT/packaging/linux/ip-trx-ctrl-server@.service" "$PKG/lib/systemd/system/ip-trx-ctrl-server@.service"
+install -d "$PKG/usr/lib/systemd/system"
+install -m 644 "$ROOT/packaging/linux/ip-trx-ctrl-server@.service" "$PKG/usr/lib/systemd/system/ip-trx-ctrl-server@.service"
 
 cat > "$PKG/usr/share/applications/ip-trx-ctrl.desktop" <<EOF
 [Desktop Entry]

@@ -55,6 +55,7 @@ exit 0
 /usr/bin/ip-trx-ctrl
 /usr/share/applications/ip-trx-ctrl.desktop
 /usr/share/icons/hicolor/256x256/apps/ip-trx-ctrl.png
+/usr/lib/systemd/system/ip-trx-ctrl-server@.service
 %doc /usr/share/doc/ip-trx-ctrl
 SPEC
 

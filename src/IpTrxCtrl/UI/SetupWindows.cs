@@ -1183,6 +1183,26 @@ utente e password (cifrata su questo PC). Poi: modello Hamlib della radio, PTT �
 interno verso il flusso CI-V della radio. Protocollo dalle fonti di wfview (GPL 3) e kappanhang.
   https://gitlab.com/eliggett/wfview   https://github.com/nonoo/kappanhang
 
+FUNZIONI DELLA 0.3.7 (prese da remoteAudio, PiRO, rustyrig, rigcontrol e CAESAR)
+- VOX (client): scheda Audio › «VOX». Il PTT parte da solo quando parli e si rilascia dopo la tenuta. Soglia e
+  tenuta in Impostazioni › VOX, squelch vocale e registrazione. Serve la cuffia.
+- Squelch vocale (client): scheda Audio › «Squelch vocale». In SSB, AM e FM toglie il fruscio tra un intervento e
+  l'altro: apre quando riconosce una voce, non con portanti, toni CW o scariche. Nessuna soglia da regolare.
+- Registrazione: scheda Audio › «● Registra» salva un WAV (8 kHz) con ricezione e trasmissione nella cartella
+  «registrazioni»; con l'opzione «Registra l'audio di ogni QSO» parte da sola quando scrivi un nominativo nel
+  Registro e si chiude con «Registra», con il nominativo nel nome del file.
+- Note: scheda «Note». Brevi messaggi tra chi opera e chi ascolta, anche dalla pagina web; restano un'ora.
+- Ascolto della trasmissione: chi è in solo ascolto sente anche l'operatore quando trasmette (net); si toglie in
+  Impostazioni › Sicurezza in trasmissione (server). Non nei modi dati e in CW.
+- Bitrate Opus: da 8 a 32 kbit/s in Impostazioni (16 di serie).
+- IPv6 diretto: se server e client hanno IPv6 pubblico il client prova prima IPv6 (niente NAT, passa il CGNAT).
+  Il server chiede al router con PCP di lasciar passare le sue porte; senza PCP vanno permesse a mano nel firewall
+  IPv6 del router. Se IPv6 non risponde si resta su IPv4.
+- Server senza finestra: «IP-TRX-CTRL --senza-finestra» avvia il server con le impostazioni salvate (Raspberry Pi
+  senza schermo). Con il pacchetto .deb: sudo systemctl enable --now ip-trx-ctrl-server@NOMEUTENTE
+- WinKeyer per i programmi di log (client): Impostazioni › WinKeyer. N1MM, DXLog, TR4W, Win-Test, QLog vedono un
+  WinKeyer e il loro CW parte dalla radio. Windows: coppia di porte com0com; Linux e Mac: porta «virtuale».
+
 KEYER (solo client)
 SSB: F1..F8 trasmettono messaggi WAV (pulsante «File WAV…»). Filtro, compressore e volume come in WavPTT.
 CW: F1..F8 trasmettono testi in CW con il keyer interno della radio (pulsante «Macro…»).
@@ -1255,7 +1275,7 @@ Server e client devono avere versioni dello stesso «protocollo». La versione d
   Versioni          Protocollo   Compatibili con
   0.1.0 – 0.1.3     1            solo 0.1.x
   0.2.0 – 0.2.8     2            tutte le 0.2.x
-  0.3.0 - 0.3.6     3            solo 0.3.x (numero a 10 cifre, codice fisso, più client, sicurezza TX, panadapter; 0.3.1 browser;
+  0.3.0 - 0.3.7     3            solo 0.3.x (numero a 10 cifre, codice fisso, più client, sicurezza TX, panadapter; 0.3.1 browser;
                                  0.3.2 aggiornamenti automatici)
 Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   scelta delle schede audio del server dal client ......... 0.2.1 o successiva
