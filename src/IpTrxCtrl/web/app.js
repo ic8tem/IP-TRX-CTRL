@@ -8,7 +8,7 @@
   const M = {
     Audio: 0x01, Hello: 0x10, Ping: 0x11, Pong: 0x12, PeerInfo: 0x13, Telemetry: 0x20, SetFreqMode: 0x21, Ptt: 0x22,
     RadioStatus: 0x23, SetVfoB: 0x24, SetSplit: 0x25, VfoOp: 0x26, SetPower: 0x27, Busy: 0x33, ServerNotice: 0x34,
-    SetRadioCtl: 0x35, SpectrumOn: 0x39, Spectrum: 0x3A, CwKey: 0x2D, ListenOnly: 0x3B
+    SetRadioCtl: 0x35, SpectrumOn: 0x39, Spectrum: 0x3A, CwKey: 0x2D, ListenOnly: 0x3B, Note: 0x3C
   };
   const enc = new TextEncoder(), dec = new TextDecoder();
 
@@ -243,6 +243,28 @@
   }
 
   let listenOnly = '';
+  // ---- note tra chi opera e chi ascolta (0.3.7, come le note di PiRO)
+  const noteSeen = new Set();
+  function addNote(who, text, ms) {
+    const key = `${ms}|${who}|${text}`;
+    if (noteSeen.has(key)) return;
+    noteSeen.add(key);
+    const list = $('notesList'); if (!list) return;
+    const d = document.createElement('div');
+    const t = new Date(ms); const hh = String(t.getHours()).padStart(2, '0'), mm = String(t.getMinutes()).padStart(2, '0');
+    const b = document.createElement('b'); b.textContent = who;
+    d.append(`${hh}:${mm} `, b, `: ${text}`);
+    d.className = 'new';
+    list.append(d);
+    while (list.children.length > 30) list.firstChild.remove();
+    list.scrollTop = list.scrollHeight;
+  }
+  function bindNotes() {
+    const inp = $('noteIn'), btn = $('noteSend'); if (!inp) return;
+    const go = () => { const t = inp.value.trim(); if (!t || !connected) return; send(new W(M.Note).str(t).build()); inp.value = ''; };
+    btn.addEventListener('click', go);
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+  }
   function onBinary(u) {
     if (u.length === 0) return;
     const r = new R(u);
@@ -255,6 +277,7 @@
       case M.ServerNotice: showNotice(r.str(), 12000); break;
       case M.Spectrum: onSpectrum(r); break;
       case M.PeerInfo: $('kvAddr').textContent = location.hostname; break;
+      case M.Note: { const who = r.str(), text = r.str(); const ms = r.end ? Date.now() : r.i64(); addNote(who, text, ms); break; }
       case M.ListenOnly: listenOnly = r.str(); showNotice(`Solo ascolto: la radio è usata da ${listenOnly || 'un altro operatore'}. Senti l'audio e vedi la frequenza, ma non puoi trasmettere né cambiare nulla.`); break;
       default: break;
     }
@@ -821,6 +844,7 @@
   buildControls();
   bindPtt();
   bindKey();
+  bindNotes();
   bindDevices();
   bindPan();
   window.matchMedia('(min-width: 900px)').addEventListener('change', () => { if (tel) render(); });

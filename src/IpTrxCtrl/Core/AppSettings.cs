@@ -140,6 +140,19 @@ namespace IpTrxCtrl.Core
         public string IcomLanHost { get; set; } = "";
         public int IcomLanPort { get; set; } = 50001;
         public string IcomLanUser { get; set; } = "";
+        // 0.3.7 (soluzioni adottate da remoteAudio, PiRO, rustyrig, rigcontrol, CAESAR)
+        public bool VoxEnabled { get; set; }                 // client: PTT automatico quando si parla (remoteAudio)
+        public int VoxThresholdDb { get; set; } = -32;       // dBFS sul microfono
+        public int VoxHoldMs { get; set; } = 700;            // tenuta dopo l'ultima parola
+        public int OpusBitrate { get; set; } = 16000;        // 8000-32000 bit/s (remoteAudio)
+        public bool EchoTxToListeners { get; set; } = true;  // server: gli ascoltatori sentono anche l'operatore (PiRO)
+        public bool VoiceSquelch { get; set; }               // squelch vocale in SSB, AM, FM (PiRO)
+        public int VoiceSquelchHoldMs { get; set; } = 1200;
+        public bool RecordEveryQso { get; set; }             // registrazione automatica durante il QSO aperto nel registro (rustyrig)
+        public bool Ipv6Direct { get; set; } = true;         // collegamento diretto IPv6 quando entrambi i PC lo hanno (rigcontrol)
+        public bool PcpEnabled { get; set; } = true;         // apertura delle porte con PCP (RFC 6887), anche IPv6
+        public bool WinKeyerEnabled { get; set; }            // client: emulazione WinKeyer per i programmi di log (CAESAR)
+        public string WinKeyerPort { get; set; } = "";       // porta seriale (Windows: un lato della coppia com0com) o «virtuale»
         public int WebPort { get; set; } = 8443;
         public bool WebOpenRouter { get; set; }             // apre la porta anche sul router (UPnP)
         public bool WebRxOnly { get; set; }                  // il browser parte in solo ascolto
@@ -316,12 +329,15 @@ namespace IpTrxCtrl.Core
     {
         private static readonly object Lock = new();
         public static string FilePath => Path.Combine(AppSettings.Folder, "sessioni.log");
+        /// <summary>Server senza finestra: ogni riga va anche sulla console (journalctl).</summary>
+        public static bool Echo { get; set; }
 
         public static void Write(string line)
         {
             lock (Lock)
             {
                 try { File.AppendAllText(FilePath, $"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}Z | {line}{Environment.NewLine}"); } catch { }
+                if (Echo) { try { Console.WriteLine(line); } catch { } }
             }
         }
 

@@ -259,6 +259,9 @@ namespace IpTrxCtrl.Core
             Audio.RxGain = AudioEngine.GainFrom(_s.RxVolume, _s.RxBoost);
             Audio.TxGain = AudioEngine.GainFrom(_s.TxVolume, _s.TxBoost);
             Audio.Playback.PrefillSamples = Math.Clamp(_s.PrefillMs, 20, 1000) * AudioEngine.SampleRate / 1000;
+            _opusTx.SetBitrate(_s.OpusBitrate);
+            Squelch.Enabled = !IsServer && _s.VoiceSquelch;
+            Squelch.HoldMs = Math.Clamp(_s.VoiceSquelchHoldMs, 200, 5000);
         }
 
         public void RestartAudio()
@@ -686,12 +689,135 @@ namespace IpTrxCtrl.Core
             try { _ctlListener?.Stop(); } catch { }
             try { _audListener?.Stop(); } catch { }
             _ctlListener = null; _audListener = null;
+            await StopV6Async();
             if (closeChannels) CloseChannels();
             if (_ports != null) await _ports.CloseAllAsync();
             _ports = null;
             _ctlPort = 0; _audPort = 0; _audLocal = 0;
             _remotePtt = false;
             Stats.ServerEndpoint = "";
+        }
+
+        // =================================================================== IPv6 diretto e PCP (0.3.7, da rigcontrol)
+
+        private static string ShowIp(IPAddress a) =>
+            a.AddressFamily == AddressFamily.InterNetworkV6 && !a.IsIPv4MappedToIPv6 ? $"[{a}]" : a.MapToIPv4().ToString();
+
+        private TcpListener? _v6Ctl, _v6Aud;
+        private CancellationTokenSource? _v6Cts;
+        private IPAddress? _v6Addr, _v6Gw;
+        private int _v6CtlPort, _v6AudPort;
+        private DateTime _v6PcpRenew = DateTime.MinValue;
+        private bool _v6PcpOk;
+        public string Ipv6Status { get; private set; } = "";
+
+        /// <summary>
+        /// Server: con un IPv6 pubblico ascolta anche su IPv6 (stesse porte interne, nessuna traduzione) e chiede al
+        /// router con PCP di lasciar passare le connessioni in arrivo. Restituisce l'indirizzo da pubblicare.
+        /// </summary>
+        private async Task<Rendezvous.V6Address?> EnsureV6Async(CancellationToken ct)
+        {
+            int c = (_ctlListener?.LocalEndpoint as IPEndPoint)?.Port ?? 0;
+            int a = (_audListener?.LocalEndpoint as IPEndPoint)?.Port ?? 0;
+            var (addr, gw) = Pcp.StableIpv6();
+            if (!_s.Ipv6Direct || !Socket.OSSupportsIPv6 || addr == null || c == 0 || a == 0)
+            {
+                await StopV6Async();
+                Ipv6Status = !_s.Ipv6Direct ? "spento nelle Impostazioni" : addr == null ? "nessun indirizzo IPv6 pubblico su questo PC" : "";
+                return null;
+            }
+            if (_v6Ctl == null || c != _v6CtlPort || a != _v6AudPort || !addr.Equals(_v6Addr))
+            {
+                await StopV6Async();
+                try
+                {
+                    _v6Cts = new CancellationTokenSource();
+                    _v6Ctl = ListenV6(c); _v6Aud = ListenV6(a);
+                    _v6CtlPort = c; _v6AudPort = a; _v6Addr = addr; _v6Gw = gw;
+                    var vct = _v6Cts.Token;
+                    var lc = _v6Ctl; var la = _v6Aud;
+                    _ = Task.Run(() => AcceptLoopAsync(lc, ChannelKind.Control, vct));
+                    _ = Task.Run(() => AcceptLoopAsync(la, ChannelKind.Audio, vct));
+                    SessionLog.Write($"IPV6 il server ascolta anche su [{addr}]:{c}/{a}");
+                }
+                catch (Exception ex)
+                {
+                    SessionLog.Write("IPV6 non disponibile: " + ex.Message);
+                    Ipv6Status = "non disponibile: " + ex.Message;
+                    await StopV6Async();
+                    return null;
+                }
+            }
+            if (_s.PcpEnabled && gw != null && DateTime.UtcNow >= _v6PcpRenew)
+            {
+                try
+                {
+                    var r1 = await Pcp.MapAsync(gw, addr, c, true, 7200, ct);
+                    var r2 = r1.Ok ? await Pcp.MapAsync(gw, addr, a, true, 7200, ct) : r1;
+                    _v6PcpOk = r1.Ok && r2.Ok;
+                    int life = _v6PcpOk ? Math.Max(120, Math.Min(r1.Lifetime, r2.Lifetime)) : 1800;
+                    _v6PcpRenew = DateTime.UtcNow.AddSeconds(_v6PcpOk ? life / 2 : life);
+                    SessionLog.Write(_v6PcpOk
+                        ? $"IPV6 PCP: il router lascia passare le porte {c}/{a} per {life / 60} minuti"
+                        : $"IPV6 PCP: {Pcp.Describe(r1.Ok ? r2.ResultCode : r1.ResultCode)}; le porte IPv6 vanno aperte a mano nel router (firewall IPv6)");
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex) { SessionLog.Write("IPV6 PCP errore: " + ex.Message); _v6PcpRenew = DateTime.UtcNow.AddMinutes(30); }
+            }
+            Ipv6Status = $"[{addr}]:{c}/{a}" + (_s.PcpEnabled ? (_v6PcpOk ? " · aperte con PCP" : " · PCP non riuscito: firewall IPv6 da aprire a mano") : "");
+            return new Rendezvous.V6Address(addr, c, a, DateTime.UtcNow.Ticks);
+        }
+
+        private static TcpListener ListenV6(int port)
+        {
+            var l = new TcpListener(IPAddress.IPv6Any, port);
+            l.Server.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.IPv6Only, true);   // l'IPv4 resta all'altro socket
+            l.Start();
+            return l;
+        }
+
+        private async Task StopV6Async()
+        {
+            _v6Cts?.Cancel(); _v6Cts = null;
+            try { _v6Ctl?.Stop(); } catch { }
+            try { _v6Aud?.Stop(); } catch { }
+            _v6Ctl = null; _v6Aud = null;
+            if (_v6PcpOk && _v6Gw != null && _v6Addr != null)
+            {
+                try
+                {
+                    using var t = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                    await Pcp.MapAsync(_v6Gw, _v6Addr, _v6CtlPort, true, 0, t.Token);
+                    await Pcp.MapAsync(_v6Gw, _v6Addr, _v6AudPort, true, 0, t.Token);
+                }
+                catch { }
+            }
+            _v6PcpOk = false; _v6PcpRenew = DateTime.MinValue;
+            _v6CtlPort = 0; _v6AudPort = 0;
+        }
+
+        // ---- client: tentativo IPv6
+        private ServerAddress? _v6Target;
+        private DateTime _v6FailedUntil = DateTime.MinValue;
+
+        private async Task<SecureChannel?> TryV6Async(CancellationToken ct)
+        {
+            _v6Target = null;
+            var v6 = _rdv?.LastV6;
+            if (!_s.Ipv6Direct || v6 == null || DateTime.UtcNow < _v6FailedUntil || !Socket.OSSupportsIPv6) return null;
+            if (Pcp.StableIpv6().addr == null) return null;   // questo PC non ha IPv6 pubblico
+            var t = new ServerAddress(v6.Ip, v6.ControlPort, v6.AudioPort);
+            SessionLog.Write($"IPV6 provo il server su [{v6.Ip}]:{v6.ControlPort}");
+            var ch = await TryConnectAsync(t, ChannelKind.Control, ct);
+            if (ch == null)
+            {
+                _v6FailedUntil = DateTime.UtcNow.AddMinutes(30);   // firewall IPv6 chiuso: per un po' si va diretti su IPv4
+                SessionLog.Write("IPV6 il server non risponde su IPv6 (firewall del router?): uso IPv4");
+                return null;
+            }
+            SessionLog.Write("IPV6 collegato al server su IPv6: niente NAT di mezzo");
+            _v6Target = t;
+            return ch;
         }
 
         public ServerAddress? CurrentServerAddress =>
@@ -1018,10 +1144,11 @@ namespace IpTrxCtrl.Core
                 old?.Dispose();
                 OnConnected();
                 await SendHelloAsync(ch);
-                try { await ch.SendAsync(new MsgWriter(Msg.PeerInfo).Str(ch.Remote.Address.MapToIPv4().ToString()).Build(), ct); } catch { }
-                Stats.ClientEndpoint = ch.Remote.Address.MapToIPv4().ToString();
+                try { await ch.SendAsync(new MsgWriter(Msg.PeerInfo).Str(ShowIp(ch.Remote.Address)).Build(), ct); } catch { }
+                Stats.ClientEndpoint = ShowIp(ch.Remote.Address);
                 _ = SendDeviceStateAsync();
                 SendServerMemories();
+                _ = SendRecentNotesAsync(ch);
                 _spectrumWanted = false;
                 _remotePttRefusedNotified = false;
                 _ = Task.Run(() => OfferUdpAsync(ct));
@@ -1083,11 +1210,12 @@ namespace IpTrxCtrl.Core
             List<(string id, Rendezvous rdv, byte[] key)> all;
             lock (_clientKeys) all = _clientRdvs.Select(kv => (kv.Key, kv.Value, _clientKeys[kv.Key])).ToList();
             if (all.Count == 0) return;
+            var v6 = await EnsureV6Async(ct);
             bool anyOk = false;
             int brokers = 0;
             foreach (var (_, rdv, _) in all)
             {
-                bool ok = await rdv.PublishAsync(addr.Value, LanIp(), AppVersion.Tag, ct);
+                bool ok = await rdv.PublishAsync(addr.Value, LanIp(), AppVersion.Tag, ct, v6);
                 anyOk |= ok;
                 brokers = Math.Max(brokers, rdv.LastOkBrokers);
             }
@@ -1464,7 +1592,10 @@ namespace IpTrxCtrl.Core
                 else target = LastServer;
 
                 SecureChannel? ctl = null;
-                if (target != null) ctl = await TryConnectAsync(target.Value, ChannelKind.Control, ct);
+                // 0.3.7: prima IPv6 diretto, se il server lo ha pubblicato e questo PC ha IPv6 (passa anche il CGNAT)
+                ctl = await TryV6Async(ct);
+                if (ctl != null) target = _v6Target;
+                if (ctl == null && target != null) ctl = await TryConnectAsync(target.Value, ChannelKind.Control, ct);
 
                 if (ctl == null && _rdv != null)
                 {
@@ -1472,7 +1603,8 @@ namespace IpTrxCtrl.Core
                     var found = await _rdv.LookupAsync(ct);
                     Stats.MqttOk = _rdv.LastOkBrokers;
                     if (_rdv.LastLan.Length > 0 && _rdv.LastLan != _s.LastServerLan) { _s.LastServerLan = _rdv.LastLan; SyncActiveEntry(); _s.Save(); }
-                    if (found != null && !found.Equals(target))
+                    if (ctl == null) { ctl = await TryV6Async(ct); if (ctl != null) target = _v6Target; }
+                    if (ctl == null && found != null && !found.Equals(target))
                     {
                         target = found;
                         ctl = await TryConnectAsync(found.Value, ChannelKind.Control, ct);
@@ -1547,7 +1679,7 @@ namespace IpTrxCtrl.Core
                 else
                 {
                     var addr = target!.Value;
-                    RememberServer(addr);
+                    if (addr.Ip.AddressFamily == AddressFamily.InterNetwork) RememberServer(addr);
                     Stats.ServerEndpoint = $"{addr.Ip} · porte {addr.ControlPort}/{addr.AudioPort}";
                     UpdateClientEndpoint();
                     OnConnected();
@@ -1779,6 +1911,10 @@ namespace IpTrxCtrl.Core
                                 Notice?.Invoke($"Il server è occupato: è collegato {who}. Riprovo da solo tra 30 secondi.");
                             }
                             break;
+                        case Msg.Note:
+                            if (IsServer) PostNote(OperatorName(), r.Str());
+                            else { string who = r.Str(), text = r.Str(); long ms = r.AtEnd ? 0 : r.I64(); AddNote(who, text, ms); }
+                            break;
                         case Msg.ListenOnly:
                             if (!IsServer)
                             {
@@ -2009,6 +2145,60 @@ namespace IpTrxCtrl.Core
         private bool CanAddListener() => IsServer && _s.AllowListeners && ListenerCount < MaxListeners;
         private string OperatorName() => _s.PeerCallsign.Length > 0 ? _s.PeerCallsign : ClientName(_sessionClientId);
 
+        // ---- 0.3.7: note tra chi opera e chi ascolta (le note di PiRO, la chat delle stanze di rustyrig)
+        public sealed record NoteItem(DateTime Utc, string From, string Text);
+        private readonly List<NoteItem> _notes = new();
+        public event Action<NoteItem>? NoteAdded;
+        public List<NoteItem> Notes { get { lock (_notes) return _notes.ToList(); } }
+
+        private void AddNote(string from, string text, long ms)
+        {
+            text = (text ?? "").Trim();
+            if (text.Length == 0) return;
+            if (text.Length > 300) text = text[..300];
+            var n = new NoteItem(ms > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(ms).UtcDateTime : DateTime.UtcNow, from, text);
+            lock (_notes)
+            {
+                if (_notes.Any(x => x.Utc == n.Utc && x.From == n.From && x.Text == n.Text)) return;   // già ricevuta (ricollegamento)
+                _notes.Add(n);
+                _notes.RemoveAll(x => (DateTime.UtcNow - x.Utc).TotalHours > 1);
+                while (_notes.Count > 30) _notes.RemoveAt(0);
+            }
+            NoteAdded?.Invoke(n);
+        }
+
+        /// <summary>Server: tiene la nota e la manda all'operatore, a ogni ascoltatore e alle pagine web.</summary>
+        private void PostNote(string from, string text)
+        {
+            text = (text ?? "").Trim();
+            if (text.Length == 0) return;
+            if (text.Length > 300) text = text[..300];
+            long ms = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            AddNote(from, text, ms);
+            SessionLog.Write($"NOTA {from}: {text}");
+            byte[] msg = new MsgWriter(Msg.Note).Str(from).Str(text).I64(ms).Build();
+            Send(msg);
+            foreach (var l in ListenerSnapshot()) _ = l.Ctl.SendAsync(msg).ContinueWith(_ => { }, TaskContinuationOptions.OnlyOnFaulted);
+        }
+
+        /// <summary>Scrive una nota: sul server la diffonde, sul client la manda al server (che la rimanda a tutti).</summary>
+        public void SendNote(string text)
+        {
+            text = (text ?? "").Trim();
+            if (text.Length == 0) return;
+            if (IsServer) PostNote(_s.Callsign.Length > 0 ? _s.Callsign : "server", text);
+            else Send(new MsgWriter(Msg.Note).Str(text).Build());
+        }
+
+        private async Task SendRecentNotesAsync(IMsgChannel ch)
+        {
+            foreach (var n in Notes)
+            {
+                try { await ch.SendAsync(new MsgWriter(Msg.Note).Str(n.From).Str(n.Text).I64(new DateTimeOffset(n.Utc).ToUnixTimeMilliseconds()).Build()); }
+                catch { return; }
+            }
+        }
+
         private void UpdateListenerStats()
         {
             var names = ListenerSnapshot().Select(l => l.Call.Length > 0 ? l.Call : ClientName(l.Cid)).ToList();
@@ -2037,6 +2227,7 @@ namespace IpTrxCtrl.Core
                 await SendHelloAsync(ch);
                 await ch.SendAsync(new MsgWriter(Msg.ListenOnly).Str(op).Build(), ct);
                 await ch.SendAsync(new MsgWriter(Msg.ServerNotice).Str($"Sei in solo ascolto: trasmette {op}. Quando si scollega, il primo che si ricollega prende la radio.").Build(), ct);
+                await SendRecentNotesAsync(ch);
                 OnRigUpdated();
                 while (!ct.IsCancellationRequested)
                 {
@@ -2057,6 +2248,8 @@ namespace IpTrxCtrl.Core
                             break;
                         case Msg.Ping:
                             await ch.SendAsync(new MsgWriter(Msg.Pong).I64(r.I64()).Build(), ct); break;
+                        case Msg.Note:
+                            PostNote(l.Call.Length > 0 ? l.Call : ClientName(l.Cid), r.Str()); break;
                         default: break;   // comandi, PTT e audio di chi ascolta non arrivano alla radio
                     }
                 }
@@ -2148,7 +2341,70 @@ namespace IpTrxCtrl.Core
             Stats.LossPercent = _expected > 0 ? 100.0 * _lost / _expected : 0;
             if (IsServer && Rig.TxBlocked) return;   // ROS alto: niente audio verso la radio (anche col PTT a VOX)
             if (IsServer && !Stats.PeerTx) return;   // il microfono remoto arriva alla radio solo durante la SUA trasmissione permessa
+            if (IsServer)
+            {
+                // 0.3.7 (PiRO): gli ascoltatori sentono anche l'operatore che trasmette, utile per i net; non nei modi dati
+                if (_s.EchoTxToListeners && ListenerCount > 0 && IsVoiceMode(Rig.Telemetry.Mode)) { byte[]? o = null; SendToListeners(pcm, pcm.Length, ref o); }
+            }
+            else
+            {
+                NoteRxLevel(pcm);
+                if (Squelch.Enabled && IsVoiceMode(LastTelemetry.Mode)) Squelch.Process(pcm, pcm.Length);
+            }
+            Recorder.Write(pcm, pcm.Length);
             Audio.Playback.Write(pcm, 0, pcm.Length);
+        }
+
+        /// <summary>Modi in fonia: lo squelch vocale e l'eco agli ascoltatori valgono solo qui (non CW, dati, RTTY).</summary>
+        private static bool IsVoiceMode(string? mode)
+        {
+            string m = (mode ?? "").ToUpperInvariant();
+            return m is "USB" or "LSB" or "AM" or "FM" or "WFM" or "SAM" or "AMS" or "DSB" or "FMN" or "AMN" or "ECSSUSB" or "ECSSLSB";
+        }
+
+        // ---- 0.3.7: squelch vocale (PiRO) e registrazione (rustyrig)
+        public VoiceSquelch Squelch { get; } = new();
+        public Recorder Recorder { get; } = new();
+
+        // ---- 0.3.7: VOX del client (remoteAudio): il PTT parte da solo quando si parla
+        private volatile bool _voxKeyed;
+        private DateTime _voxLastVoice, _rxLevelAt;
+        private double _rxLevelDb = -120;
+        public bool VoxKeyed => _voxKeyed;
+
+        private static double LevelDb(byte[] pcm, int len)
+        {
+            double sum = 0; int n = len / 2;
+            for (int i = 0; i < n; i++) { double v = (short)(pcm[2 * i] | pcm[2 * i + 1] << 8); sum += v * v; }
+            return n == 0 ? -120 : 10 * Math.Log10(sum / n / (32768.0 * 32768.0) + 1e-12);
+        }
+
+        private void NoteRxLevel(byte[] pcm) { _rxLevelDb = LevelDb(pcm, pcm.Length); _rxLevelAt = DateTime.UtcNow; }
+
+        private void VoxStep(byte[] pcm, int len)
+        {
+            var now = DateTime.UtcNow;
+            double db = LevelDb(pcm, len);
+            // anti-VOX: un livello molto più basso dell'audio ricevuto appena suonato è l'altoparlante che rientra nel microfono
+            bool echo = (now - _rxLevelAt).TotalMilliseconds < 300 && db < _rxLevelDb - 10;
+            if (db >= _s.VoxThresholdDb && !echo)
+            {
+                _voxLastVoice = now;
+                if (!_localPtt && !_voxKeyed) { _voxKeyed = true; SetPttLocal(true); }
+            }
+            else if (_voxKeyed && (now - _voxLastVoice).TotalMilliseconds > Math.Clamp(_s.VoxHoldMs, 100, 5000))
+            {
+                _voxKeyed = false;
+                SetPttLocal(false);
+            }
+        }
+
+        /// <summary>VOX spento o disattivato: se teneva il PTT lo rilascia.</summary>
+        public void VoxRelease()
+        {
+            if (!_voxKeyed) return;
+            _voxKeyed = false;
+            SetPttLocal(false);
         }
 
         private void ResetAudioStats()
@@ -2157,13 +2413,20 @@ namespace IpTrxCtrl.Core
             Stats.JitterMs = 0; Stats.LossPercent = 0;
             Audio.Playback.Reset();
             _opusRx.Reset();
+            Squelch.Reset();
         }
 
         private void OnCaptured(byte[] pcm, int len)
         {
+            if (!IsServer)
+            {
+                if (_s.VoxEnabled && !ListenOnly && _control != null && !_digitalPtt) VoxStep(pcm, len);
+                else if (_voxKeyed) VoxRelease();
+            }
             // Server: invia sempre l'audio ricevuto dalla radio (non durante la trasmissione). Client: solo con PTT.
             bool send = IsServer ? !Stats.PeerTx : _localPtt && !_digitalPtt;
             if (!send) return;
+            Recorder.Write(pcm, len);
             SendAudioFrame(pcm, len);
         }
 
@@ -2428,6 +2691,7 @@ namespace IpTrxCtrl.Core
         public void SetKeySpeed(int wpm) { if (IsServer) _ = Rig.SetKeySpeedAsync(wpm); else Send(new MsgWriter(Msg.SetKeySpeed).I32(wpm).Build()); }
         /// <summary>Testo della macro CW: il client lo inoltra al server come stringa, con la velocità.</summary>
         public void SendMorse(string text) { if (IsServer) _ = Rig.SendCwAsync(text, _s.CwSpeedWpm); else Send(new MsgWriter(Msg.SendMorse).Str(text).I32(_s.CwSpeedWpm).Build()); }
+        public void SendMorse(string text, int wpm) { wpm = Math.Clamp(wpm, 5, 60); if (IsServer) _ = Rig.SendCwAsync(text, wpm); else Send(new MsgWriter(Msg.SendMorse).Str(text).I32(wpm).Build()); }
         /// <summary>Tasto CW manuale del client: ogni pressione e rilascio vanno al server con l'istante.</summary>
         public void SendCwKey(bool down, long ms)
         {
@@ -2628,6 +2892,7 @@ namespace IpTrxCtrl.Core
             Stats.ClientEndpoint = ch.Remote.Address + " (browser)";
             _ = SendDeviceStateAsync();
             SendServerMemories();
+            _ = SendRecentNotesAsync(ch);
             _spectrumWanted = false;
             _remotePttRefusedNotified = false;
             await ReceiveLoopAsync(ch, ct);

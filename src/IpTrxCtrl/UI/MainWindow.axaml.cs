@@ -88,6 +88,7 @@ namespace IpTrxCtrl.UI
             LoadControls();
             HookEvents();
             BuildExtras();
+            InitAdopted();
 
             _node.StatsChanged += () => Dispatcher.UIThread.Post(RefreshStats);
             _node.TelemetryChanged += t => Dispatcher.UIThread.Post(() => { _tel = t; RefreshRadio(); });
@@ -132,6 +133,7 @@ namespace IpTrxCtrl.UI
             if (_s.Role == NodeRole.Client) _hotkeys.Start();
             StartSerialInput();
             StartPaddle();
+            StartWinKeyer();
             ApplyRoleTexts();
             RefreshStats();
             RefreshRadio();
@@ -147,7 +149,7 @@ namespace IpTrxCtrl.UI
             foreach (var w in _decodeWindows.ToList()) w.Close();
             _hotkeys.Dispose();
             _serialIn?.Dispose();
-            _midi?.Dispose(); _paddle?.Dispose();
+            _midi?.Dispose(); _paddle?.Dispose(); _winkeyer?.Dispose(); _node.Recorder.Stop();
             _node.Dispose();
             _s.Save();
         }
@@ -482,6 +484,7 @@ namespace IpTrxCtrl.UI
 
         private void ApplyRoleTexts()
         {
+            ApplyAdoptedRole();
             bool server = !IsClient;
             TxtRoleBadge.Text = server ? "SERVER" : "CLIENT";
             TxtRoleLine.Text = server
@@ -555,6 +558,9 @@ namespace IpTrxCtrl.UI
                 if (w.DigitalChanged) _node.StartDigital();
                 if (w.SerialInputChanged) StartSerialInput();
                 StartPaddle();
+                StartWinKeyer();
+                _node.ApplyAudioSettings();
+                ChkVox.IsChecked = _s.VoxEnabled; ChkSquelch.IsChecked = _s.VoiceSquelch;
                 if ((w.PanChanged || w.RigChanged) && _s.Role == NodeRole.Server) _node.RestartPanadapter();
                 if (w.WebChanged && _s.Role == NodeRole.Server) _node.RestartWeb();
                 ApplyOptionalParts();
@@ -905,6 +911,7 @@ namespace IpTrxCtrl.UI
         private void OnUiTick()
         {
             TickExtras();
+            TickAdopted();
             var st = _node.Stats;
             PbRx.Value = st.RxPeak * 100;
             PbRxCompact.Value = st.RxPeak * 100;

@@ -61,7 +61,7 @@ namespace IpTrxCtrl.Net
 
         public static async Task<SecureChannel> ConnectAsync(ServerAddress addr, ChannelKind kind, byte[] master, CancellationToken ct)
         {
-            var tcp = new TcpClient();
+            var tcp = new TcpClient(addr.Ip.AddressFamily);   // dalla 0.3.7 anche IPv6
             try
             {
                 int port = kind == ChannelKind.Control ? addr.ControlPort : addr.AudioPort;

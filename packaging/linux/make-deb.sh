@@ -23,6 +23,9 @@ install -m 644 "$ROOT/src/IpTrxCtrl/Assets/icon.png" "$PKG/usr/share/icons/hicol
 { printf "IP-TRX-CTRL - Copyright (C) 2026 Costantino Cerrotta IC8TEM\nLicenza: GNU AGPL 3.0 o successiva (testo completo qui sotto)\n\n"; cat "$ROOT/THIRD-PARTY-NOTICES.txt"; printf "\n\n"; cat "$ROOT/LICENSE"; } > "$PKG/usr/share/doc/ip-trx-ctrl/copyright"
 chmod 644 "$PKG/usr/share/doc/ip-trx-ctrl/copyright"
 install -m 644 "$ROOT/README.md" "$PKG/usr/share/doc/ip-trx-ctrl/README.md"
+# 0.3.7: servizio di systemd per il server senza finestra (Raspberry Pi senza schermo); non si attiva da solo
+install -d "$PKG/lib/systemd/system"
+install -m 644 "$ROOT/packaging/linux/ip-trx-ctrl-server@.service" "$PKG/lib/systemd/system/ip-trx-ctrl-server@.service"
 
 cat > "$PKG/usr/share/applications/ip-trx-ctrl.desktop" <<EOF
 [Desktop Entry]

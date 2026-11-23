@@ -26,6 +26,14 @@ namespace IpTrxCtrl.UI
         private readonly TextBlock _radio = Ui.Sub("", 13);
         private readonly ListBox _list = new() { Height = 240, FontFamily = new FontFamily("JetBrains Mono,DejaVu Sans Mono,Consolas,monospace"), FontSize = 12 };
         private DateTime _start = DateTime.MinValue;
+        private bool _autoRec;   // 0.3.7: registrazione automatica del QSO aperta da questa finestra
+
+        private void StopAutoRec(string call)
+        {
+            if (!_autoRec) return;
+            _autoRec = false;
+            _node.Recorder.StopAs(call);
+        }
         private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
 
         public LogWindow(Node node, AppSettings s)
@@ -39,8 +47,15 @@ namespace IpTrxCtrl.UI
             _call.TextChanged += (_, _) =>
             {
                 string t = _call.Text ?? "";
-                if (t.Length > 0 && _start == DateTime.MinValue) _start = DateTime.UtcNow;   // inizio del QSO: quando si scrive il nominativo
-                if (t.Length == 0) _start = DateTime.MinValue;
+                if (t.Length > 0 && _start == DateTime.MinValue)
+                {
+                    _start = DateTime.UtcNow;   // inizio del QSO: quando si scrive il nominativo
+                    if (_s.RecordEveryQso && !_node.Recorder.Active)
+                    {
+                        try { _node.Recorder.Start(_node.LastTelemetry.FreqHz, ""); _autoRec = true; } catch { }
+                    }
+                }
+                if (t.Length == 0) { _start = DateTime.MinValue; StopAutoRec(""); }
                 string up = t.ToUpperInvariant().Replace(" ", "");
                 if (up != t) { int c = _call.CaretIndex; _call.Text = up; _call.CaretIndex = Math.Min(c, up.Length); }
             };
@@ -95,7 +110,7 @@ namespace IpTrxCtrl.UI
             _timer.Tick += (_, _) => UpdateRadio();
             _timer.Start();
             UpdateRadio();
-            Closed += (_, _) => { _timer.Stop(); QsoLog.Changed -= OnChanged; };
+            Closed += (_, _) => { _timer.Stop(); QsoLog.Changed -= OnChanged; StopAutoRec(""); };
             Opened += (_, _) => _call.Focus();
         }
 
@@ -128,6 +143,7 @@ namespace IpTrxCtrl.UI
         {
             _call.Text = ""; _name.Text = ""; _qth.Text = ""; _grid.Text = ""; _comment.Text = "";
             _start = DateTime.MinValue;
+            StopAutoRec("");
             ResetReports();
             _call.Focus();
         }
@@ -158,6 +174,7 @@ namespace IpTrxCtrl.UI
             };
             try { QsoLog.Add(q, _s); }
             catch (Exception ex) { await Dialogs.Info(this, "Non riesco a scrivere il registro: " + ex.Message); return; }
+            StopAutoRec(call);
             ClearForm();
         }
     }

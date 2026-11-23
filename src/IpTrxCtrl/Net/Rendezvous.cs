@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -92,7 +93,26 @@ namespace IpTrxCtrl.Net
         /// <summary>Versione del server letta nell'ultima ricerca («P2 0.2.3», "" se il server è più vecchio).</summary>
         public string LastVersion { get; private set; } = "";
 
-        public async Task<bool> PublishAsync(ServerAddress addr, string lan, string versionTag, CancellationToken ct)
+        /// <summary>
+        /// Dalla 0.3.7: indirizzo IPv6 pubblico del server e le sue porte, su un canale a parte («…/6») perché i
+        /// client precedenti non lo leggano (il formato del messaggio principale resta lo stesso). null = nessuno.
+        /// </summary>
+        public sealed record V6Address(IPAddress Ip, int ControlPort, int AudioPort, long Ticks);
+
+        /// <summary>IPv6 del server letto nell'ultima ricerca (null se il server non lo ha o è più vecchio).</summary>
+        public V6Address? LastV6 { get; private set; }
+
+        private static byte[] V6Bytes(V6Address v) => Crypto.Concat(v.Ip.GetAddressBytes(),
+            new[] { (byte)(v.ControlPort >> 8), (byte)v.ControlPort, (byte)(v.AudioPort >> 8), (byte)v.AudioPort }, BitConverter.GetBytes(v.Ticks));
+
+        private static V6Address? V6From(byte[] b)
+        {
+            if (b.Length < 28) return null;
+            var ip = new IPAddress(b.AsSpan(0, 16));
+            return new V6Address(ip, (b[16] << 8) | b[17], (b[18] << 8) | b[19], BitConverter.ToInt64(b, 20));
+        }
+
+        public async Task<bool> PublishAsync(ServerAddress addr, string lan, string versionTag, CancellationToken ct, V6Address? v6 = null)
         {
             // indirizzo · ora · IP locale (4 byte, 0.0.0.0 se manca) · versione
             byte[] lanBytes = System.Net.IPAddress.TryParse(lan, out var l) && l.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
@@ -109,6 +129,9 @@ namespace IpTrxCtrl.Net
                     t.CancelAfter(TimeSpan.FromSeconds(10));
                     await client.ConnectAsync(Mqtt.Options(broker, Mqtt.NewClientId()), t.Token);
                     await client.PublishAsync(Mqtt.Message(_topic, payload, true), t.Token);
+                    // IPv6: messaggio trattenuto sul canale «/6»; vuoto = cancella quello vecchio
+                    byte[] p6 = v6 != null ? Crypto.Seal(_key, V6Bytes(v6)) : Array.Empty<byte>();
+                    try { await client.PublishAsync(Mqtt.Message(_topic + "/6", p6, true), t.Token); } catch { }
                     ok++;
                 }
                 catch { }
@@ -176,6 +199,7 @@ namespace IpTrxCtrl.Net
             ServerAddress? best = null;
             string bestLan = "", bestVer = "";
             long bestTicks = 0;
+            V6Address? bestV6 = null;
             int ok = 0;
             foreach (string broker in _brokers)
             {
@@ -183,9 +207,11 @@ namespace IpTrxCtrl.Net
                 try
                 {
                     var received = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    byte[]? got6 = null;
                     client.ApplicationMessageReceivedAsync += e =>
                     {
-                        received.TrySetResult(e.ApplicationMessage.PayloadSegment.ToArray());
+                        if (e.ApplicationMessage.Topic == _topic + "/6") got6 = e.ApplicationMessage.PayloadSegment.ToArray();
+                        else received.TrySetResult(e.ApplicationMessage.PayloadSegment.ToArray());
                         return Task.CompletedTask;
                     };
                     using var t = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -193,8 +219,10 @@ namespace IpTrxCtrl.Net
                     await client.ConnectAsync(Mqtt.Options(broker, Mqtt.NewClientId()), t.Token);
                     ok++;
                     await client.SubscribeAsync(Mqtt.Subscribe(_topic), t.Token);
+                    try { await client.SubscribeAsync(Mqtt.Subscribe(_topic + "/6"), t.Token); } catch { }
                     var done = await Task.WhenAny(received.Task, Task.Delay(TimeSpan.FromSeconds(5), t.Token));
                     if (done != received.Task) continue;
+                    for (int w = 0; w < 4 && got6 == null; w++) await Task.Delay(100, t.Token);   // il messaggio IPv6 arriva subito dopo, se c'è
                     byte[] plain = Crypto.Open(_key, received.Task.Result);
                     var addr = ServerAddress.FromBytes(plain, 0);
                     long ticks = BitConverter.ToInt64(plain, 8);
@@ -204,6 +232,11 @@ namespace IpTrxCtrl.Net
                         bestLan = plain.Length >= 20 ? new System.Net.IPAddress(plain.AsSpan(16, 4)).ToString() : "";
                         if (bestLan == "0.0.0.0") bestLan = "";
                         bestVer = plain.Length > 20 ? Encoding.UTF8.GetString(plain, 20, plain.Length - 20) : "";
+                        bestV6 = null;
+                        if (got6 is { Length: > 0 })
+                        {
+                            try { bestV6 = V6From(Crypto.Open(_key, got6)); } catch { }
+                        }
                     }
                 }
                 catch { }
@@ -212,6 +245,7 @@ namespace IpTrxCtrl.Net
             LastOkBrokers = ok;
             LastLan = bestLan;
             LastVersion = bestVer;
+            LastV6 = bestV6;
             return best;
         }
     }

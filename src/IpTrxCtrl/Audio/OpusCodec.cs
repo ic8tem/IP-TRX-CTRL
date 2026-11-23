@@ -28,6 +28,9 @@ namespace IpTrxCtrl.Audio
             _enc.Complexity = 6;
         }
 
+        /// <summary>Bitrate tra 8 e 32 kbit/s (dalla 0.3.7, come l'opzione opus-bitrate di remoteAudio).</summary>
+        public void SetBitrate(int bitrate) { lock (_lock) _enc.Bitrate = Math.Clamp(bitrate, 8000, 32000); }
+
         /// <summary>PCM 16 bit LE (un blocco da 40 ms) → pacchetto Opus.</summary>
         public byte[] Encode(byte[] pcm, int len)
         {

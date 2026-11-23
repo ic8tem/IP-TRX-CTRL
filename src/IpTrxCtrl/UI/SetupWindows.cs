@@ -646,6 +646,37 @@ namespace IpTrxCtrl.UI
                 + "Porta 2237 = quella di WSJT-X: se WSJT-X è aperto sullo stesso PC, nel programma di log aggiungi una seconda porta o usa l'inoltro (multicast 224.0.0.1).", 12);
             qNote.TextWrapping = TextWrapping.Wrap;
 
+            // ---- 0.3.7: soluzioni adottate da remoteAudio, PiRO, rustyrig, rigcontrol e CAESAR
+            var voxOn = new CheckBox { Content = "VOX: il PTT parte da solo quando parli (client)", IsChecked = s.VoxEnabled };
+            var voxDb = new TextBox { Text = s.VoxThresholdDb.ToString(CultureInfo.InvariantCulture), Width = 60 };
+            var voxHold = new TextBox { Text = s.VoxHoldMs.ToString(CultureInfo.InvariantCulture), Width = 70 };
+            var sqOn = new CheckBox { Content = "Squelch vocale in SSB, AM e FM: apre solo con la voce, non con portanti o scariche", IsChecked = s.VoiceSquelch };
+            var sqHold = new TextBox { Text = s.VoiceSquelchHoldMs.ToString(CultureInfo.InvariantCulture), Width = 70 };
+            var recQso = new CheckBox { Content = "Registra l'audio di ogni QSO aperto nel «Registro» (dal nominativo scritto fino a «Registra»)", IsChecked = s.RecordEveryQso };
+            int[] rates = { 8000, 12000, 16000, 24000, 32000 };
+            var opusRate = new ComboBox { ItemsSource = rates.Select(r => $"{r / 1000} kbit/s").ToList(), SelectedIndex = Math.Max(0, Array.IndexOf(rates, s.OpusBitrate)), Width = 130 };
+            var voxNote = Ui.Sub("VOX: soglia in dBFS sul microfono (più bassa = più sensibile, di solito tra -40 e -25) e tenuta in millisecondi dopo l'ultima parola. "
+                + "Serve la cuffia: con l'altoparlante il VOX si accenderebbe con l'audio della radio (il programma prova a riconoscerlo e lo ignora). "
+                + "Opus: banda dell'audio compresso in ciascun verso; 16 kbit/s va bene quasi sempre, 8 kbit/s per il telefono in giro, 24-32 per la musica dei net.", 12);
+            voxNote.TextWrapping = TextWrapping.Wrap;
+            var echoOn = new CheckBox { Content = "Chi ascolta sente anche l'operatore che trasmette (utile per i net; non nei modi dati e in CW)", IsChecked = s.EchoTxToListeners };
+            var v6On = new CheckBox { Content = "Collegamento diretto IPv6 quando entrambi i PC hanno IPv6 (passa anche il CGNAT)", IsChecked = s.Ipv6Direct };
+            var pcpOn = new CheckBox { Content = "Chiedi al router di aprire le porte IPv6 con PCP (RFC 6887)", IsChecked = s.PcpEnabled };
+            var v6Note = Ui.Sub((node.Ipv6Status.Length > 0 ? "IPv6: " + node.Ipv6Status + ". " : "")
+                + "Con IPv6 non c'è NAT: il server ascolta anche sul suo indirizzo IPv6 con le stesse porte e il client prova prima quello. "
+                + "Se il router non ha PCP, le due porte vanno permesse nel firewall IPv6 del router per questo PC; altrimenti si resta su IPv4 senza perdere tempo.", 12);
+            v6Note.TextWrapping = TextWrapping.Wrap;
+            var wkOn = new CheckBox { Content = "WinKeyer per i programmi di log (N1MM, DXLog, TR4W, Win-Test, QLog…): il CW che mandano parte dalla radio", IsChecked = s.WinKeyerEnabled };
+            var wkPorts = new List<string>();
+            if (!OperatingSystem.IsWindows()) wkPorts.Add("virtuale");
+            try { wkPorts.AddRange(System.IO.Ports.SerialPort.GetPortNames().OrderBy(x => x)); } catch { }
+            if (s.WinKeyerPort.Length > 0 && !wkPorts.Contains(s.WinKeyerPort)) wkPorts.Add(s.WinKeyerPort);
+            var wkPort = new ComboBox { ItemsSource = wkPorts, MinWidth = 160, SelectedItem = s.WinKeyerPort.Length > 0 ? s.WinKeyerPort : wkPorts.FirstOrDefault() };
+            var wkNote = Ui.Sub(OperatingSystem.IsWindows()
+                ? "Su Windows serve una coppia di porte virtuali com0com (per esempio COM10 e COM11): qui scegli una delle due, nel programma di log l'altra come porta del WinKeyer."
+                : "«virtuale» crea una porta seriale finta: nel programma di log indica come porta del WinKeyer il percorso «winkeyer» nella cartella delle impostazioni (" + AppSettings.Folder + "/winkeyer).", 12);
+            wkNote.TextWrapping = TextWrapping.Wrap;
+
             var save = Ui.Btn("Salva", true);
             var cancel = Ui.Btn("Annulla");
             cancel.Click += (_, _) => Close();
@@ -715,6 +746,19 @@ namespace IpTrxCtrl.UI
                     s.WebEnabled = webOn.IsChecked == true; s.WebPort = wp; s.WebOpenRouter = webRouter.IsChecked == true; s.WebRxOnly = webRx.IsChecked == true;
                     node.Rig.PushTelemetry();
                 }
+                // 0.3.7
+                s.VoxEnabled = voxOn.IsChecked == true;
+                if (int.TryParse(voxDb.Text, out int vdb)) s.VoxThresholdDb = Math.Clamp(vdb, -60, -5);
+                if (int.TryParse(voxHold.Text, out int vh)) s.VoxHoldMs = Math.Clamp(vh, 100, 5000);
+                s.VoiceSquelch = sqOn.IsChecked == true;
+                if (int.TryParse(sqHold.Text, out int sh)) s.VoiceSquelchHoldMs = Math.Clamp(sh, 200, 5000);
+                s.RecordEveryQso = recQso.IsChecked == true;
+                if (opusRate.SelectedIndex >= 0) s.OpusBitrate = rates[opusRate.SelectedIndex];
+                s.WinKeyerEnabled = wkOn.IsChecked == true;
+                s.WinKeyerPort = wkPort.SelectedItem as string ?? "";
+                s.Ipv6Direct = v6On.IsChecked == true;
+                s.PcpEnabled = pcpOn.IsChecked == true;
+                if (srvRole) s.EchoTxToListeners = echoOn.IsChecked == true;
                 // 0.3.6: tasto USB e MIDI, registro
                 s.UsbKeyEnabled = ukOn.IsChecked == true;
                 s.UsbKeyIambic = ukType.SelectedIndex != 2;
@@ -787,6 +831,11 @@ namespace IpTrxCtrl.UI
                     Ui.Panel(Ui.Col(10, Ui.H2("TASTO CW USB E MIDI"), ukOn,
                         Ui.Row(10, ukType, Ui.Sub("velocità", 13), ukWpm, Ui.Sub("WPM", 13)), Ui.Row(16, ukSwap, ukTone),
                         mkOn, Ui.Row(8, Ui.Sub("Dispositivo MIDI", 13), mkDev), ukNote)),
+                    Ui.Panel(Ui.Col(10, Ui.H2("VOX, SQUELCH VOCALE E REGISTRAZIONE"), voxOn,
+                        Ui.Row(8, Ui.Sub("soglia", 13), voxDb, Ui.Sub("dBFS · tenuta", 13), voxHold, Ui.Sub("ms", 13)),
+                        sqOn, Ui.Row(8, Ui.Sub("tenuta dello squelch", 13), sqHold, Ui.Sub("ms", 13)),
+                        recQso, Ui.Row(8, Ui.Sub("Audio Opus", 13), opusRate), voxNote)),
+                    Ui.Panel(Ui.Col(10, Ui.H2("WINKEYER PER I PROGRAMMI DI LOG (CLIENT)"), wkOn, Ui.Row(8, Ui.Sub("Porta", 13), wkPort), wkNote)),
                     Ui.Panel(Ui.Col(10, Ui.H2("REGISTRO DEI QSO"), qOn,
                         Ui.Row(10, Ui.Col(0, Ui.Lbl("Indirizzo"), qHost), Ui.Col(0, Ui.Lbl("Porta UDP"), qPort), Ui.Col(0, Ui.Lbl("Il mio locatore"), qGrid)),
                         qNote)),
@@ -805,7 +854,7 @@ namespace IpTrxCtrl.UI
                         optBands, optCtl, optMem, optAlc, optPan, optUpd, optAuto, optUpdNote)),
                     srvRole
                         ? Ui.Panel(Ui.Col(8, Ui.H2("SICUREZZA IN TRASMISSIONE (SERVER)"),
-                            Ui.Row(8, totOn, totSec, Ui.Sub("secondi", 13)), qsyLock, Ui.Row(8, locOn, locMin, Ui.Sub("minuti", 13)), fixRx, listen, safeNote))
+                            Ui.Row(8, totOn, totSec, Ui.Sub("secondi", 13)), qsyLock, Ui.Row(8, locOn, locMin, Ui.Sub("minuti", 13)), fixRx, listen, echoOn, safeNote))
                         : Ui.Panel(Ui.Col(8, Ui.H2("SICUREZZA IN TRASMISSIONE"),
                             Ui.Sub("Tempo massimo di trasmissione, blocco dei cambi di frequenza in trasmissione, precedenza a chi è alla radio e solo ascolto si impostano sul server: valgono per tutti i client.", 13))),
                     srvRole
@@ -817,7 +866,7 @@ namespace IpTrxCtrl.UI
                             Ui.Sub("Si attiva sul server. Da qui puoi salvare la pagina «Trova il server» da tenere sul telefono o su un altro PC.", 13), finder)),
                     Ui.Panel(Ui.Col(8, Ui.H2("PORTE APERTE SUL ROUTER"), mpNote,
                         Ui.Row(8, Ui.Sub("Controllo (TCP)", 13), mpCtl, Ui.Sub("Audio (TCP e UDP)", 13), mpAud),
-                        Ui.Row(8, mpUse, mpAuto, mpCopy), mpList)),
+                        Ui.Row(8, mpUse, mpAuto, mpCopy), mpList, v6On, pcpOn, v6Note)),
                     Ui.Panel(Ui.Col(10, Ui.H2("RETE E AUDIO"), prefillTxt, prefill,
                         Ui.Col(0, Ui.Lbl("Broker MQTT (uno per riga, host:porta)"), brokers),
                         fwBtn, fwNote)),

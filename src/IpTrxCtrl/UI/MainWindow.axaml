@@ -459,6 +459,13 @@
                   </StackPanel>
                 </Border>
               </Grid>
+              <WrapPanel x:Name="RowAudioExtra">
+                <CheckBox x:Name="ChkVox" Content="VOX (parli e trasmette)" Margin="0,0,14,0" ToolTip.Tip="Il PTT parte da solo quando parli e si rilascia dopo il tempo di tenuta. Usa la cuffia: l'altoparlante farebbe scattare il VOX. Soglia e tenuta in Impostazioni." />
+                <CheckBox x:Name="ChkSquelch" Content="Squelch vocale" Margin="0,0,14,0" ToolTip.Tip="In SSB, AM e FM toglie il fruscio tra un intervento e l'altro: apre solo quando sente una voce, non con portanti o scariche." />
+                <Button x:Name="BtnRec" Classes="small" Content="● Registra" Margin="0,0,8,0" />
+                <Button x:Name="BtnRecFolder" Classes="small" Content="Cartella" Margin="0,0,8,0" />
+                <TextBlock x:Name="TxtRec" Classes="sub" FontSize="11" VerticalAlignment="Center" />
+              </WrapPanel>
             </StackPanel>
           </TabItem>
 
@@ -482,6 +489,21 @@
                 </Grid>
               </Border>
               <TextBlock Classes="sub" FontSize="11" Text="Porte, chiavi e riconnessione sono gestite in automatico." />
+            </StackPanel>
+          </TabItem>
+
+          <TabItem x:Name="TabNotes" Header="Note">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="sub" FontSize="11" TextWrapping="Wrap" Text="Brevi note tra chi opera e chi ascolta (anche dalla pagina web): «sono sui 40 m in FT8 fino alle 16:30», «dopo il net posso prenderla io?». Restano sul server per un'ora." />
+              <Border Classes="inset" Padding="8,6">
+                <ScrollViewer x:Name="SvNotes" Height="110">
+                  <TextBlock x:Name="TxtNotes" FontSize="12" TextWrapping="Wrap" />
+                </ScrollViewer>
+              </Border>
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBox x:Name="TxtNoteIn" MinHeight="30" Watermark="Scrivi una nota e premi Invio" MaxLength="300" />
+                <Button x:Name="BtnNoteSend" Grid.Column="1" Classes="small" Content="Invia" Margin="6,0,0,0" />
+              </Grid>
             </StackPanel>
           </TabItem>
         </TabControl>

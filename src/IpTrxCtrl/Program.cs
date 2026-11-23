@@ -14,6 +14,8 @@ namespace IpTrxCtrl
             if (Array.IndexOf(args, "--versione") >= 0) { Console.WriteLine($"IP-TRX-CTRL {AppVersion.Text} ({Updater.Rid})"); return; }
             // dopo un aggiornamento automatico: aspetta l'uscita della versione vecchia (porte, radio) e toglie i suoi resti
             Updater.AfterRestart(args);
+            // 0.3.7: server senza finestra (Raspberry Pi senza schermo, servizio di systemd)
+            if (Array.IndexOf(args, "--senza-finestra") >= 0 || Array.IndexOf(args, "--headless") >= 0) { Environment.ExitCode = Headless.Run(); return; }
             try
             {
                 BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);

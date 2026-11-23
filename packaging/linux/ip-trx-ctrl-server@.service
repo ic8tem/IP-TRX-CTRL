@@ -1,0 +1,22 @@
+# IP-TRX-CTRL come server senza finestra (dalla 0.3.7), per un Raspberry Pi o un PC senza schermo vicino alla radio.
+# Prima volta: avvia il programma con la finestra come utente %i, scegli «Server», imposta radio e audio e abbina
+# un client (oppure attiva il codice fisso). Poi:
+#   sudo systemctl enable --now ip-trx-ctrl-server@NOMEUTENTE
+# Registro: journalctl -u ip-trx-ctrl-server@NOMEUTENTE -f   (e sessioni.log nella cartella delle impostazioni)
+[Unit]
+Description=IP-TRX-CTRL server senza finestra (utente %i)
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+SupplementaryGroups=audio dialout
+ExecStart=/opt/ip-trx-ctrl/IP-TRX-CTRL --senza-finestra
+Restart=always
+RestartSec=10
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target
