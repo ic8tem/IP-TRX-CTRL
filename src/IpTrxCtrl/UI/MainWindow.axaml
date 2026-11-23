@@ -67,6 +67,7 @@
               <TextBlock x:Name="TxtRoleBadge" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource B.AccentText}" Text="CLIENT" />
             </Border>
             <ComboBox x:Name="CmbTheme" Width="112" MinHeight="30" FontSize="12" VerticalAlignment="Center" ToolTip.Tip="Colori" />
+            <Button x:Name="BtnLog" Classes="small" Content="Registro" ToolTip.Tip="Registro dei QSO (ADIF e invio a GridTracker, JTAlert, Log4OM)" />
             <Button x:Name="BtnSettings" Classes="small" Content="Impostazioni" />
             <Button x:Name="BtnSwap" Classes="small" Content="Inverti ruoli" />
             <Button x:Name="BtnHelp" Classes="small" Content="Help" />

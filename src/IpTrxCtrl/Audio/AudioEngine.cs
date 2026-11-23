@@ -107,6 +107,9 @@ namespace IpTrxCtrl.Audio
 
         private readonly IAudioBackend _native = AudioBackends.Create();
         private readonly TciAudioBackend _tci = new();
+        private readonly IcomLanAudioBackend _icom = new();
+        /// <summary>Server con la radio Icom in rete: negli elenchi compare anche «Icom LAN».</summary>
+        public bool OfferIcomLan { get; set; }
         private IAudioBackend? _active;
         /// <summary>Server con il CAT via TCI: negli elenchi delle schede compare anche «TCI».</summary>
         public bool OfferTci { get; set; }
@@ -118,6 +121,11 @@ namespace IpTrxCtrl.Audio
         public JitterBuffer Playback { get; } = new();
         public WavKeyer Keyer { get; } = new();
         public volatile float TxGain = 1.0f;
+        /// <summary>Tono di ascolto del tasto CW locale (0.3.6): suona finché il tasto è giù, con rampe da 5 ms.</summary>
+        public volatile bool SidetoneOn;
+        public volatile int SidetonePitch = 600;
+        private double _stPhase;
+        private float _stEnv;
         public volatile float RxGain = 1.0f;
         public float TxPeak, RxPeak;
         public string LastError => (_active ?? _native).LastError;
@@ -133,6 +141,7 @@ namespace IpTrxCtrl.Audio
         private List<string> WithTci(List<string> list)
         {
             if (OfferTci && !list.Contains(TciAudioBackend.DeviceName)) list.Insert(0, TciAudioBackend.DeviceName);
+            if (OfferIcomLan && !list.Contains(IcomLanAudioBackend.DeviceName)) list.Insert(0, IcomLanAudioBackend.DeviceName);
             return list;
         }
 
@@ -141,11 +150,12 @@ namespace IpTrxCtrl.Audio
             Playback.Reset();
             // «TCI» come ingresso o uscita: tutto l'audio passa dal TCI (niente schede né cavi virtuali)
             bool tci = input == TciAudioBackend.DeviceName || output == TciAudioBackend.DeviceName;
-            _active = tci ? _tci : _native;
+            bool icom = input == IcomLanAudioBackend.DeviceName || output == IcomLanAudioBackend.DeviceName;
+            _active = icom ? _icom : tci ? _tci : _native;
             _active.Start(input, output, OnCapture, OnFill);
         }
 
-        public void Stop() { _native.Stop(); _tci.Stop(); }
+        public void Stop() { _native.Stop(); _tci.Stop(); _icom.Stop(); }
 
         private void OnCapture(short[] frame)
         {
@@ -194,6 +204,15 @@ namespace IpTrxCtrl.Audio
                         v += _local[_localPos++];
                         if (_localPos >= _local.Length) _local = null;
                     }
+                    float target = SidetoneOn ? 1f : 0f;
+                    if (_stEnv != target || _stEnv > 0)
+                    {
+                        _stEnv += Math.Sign(target - _stEnv) * (1f / (SampleRate * 0.005f));
+                        _stEnv = Math.Clamp(_stEnv, 0f, 1f);
+                        _stPhase += 2 * Math.PI * SidetonePitch / SampleRate;
+                        if (_stPhase > 2 * Math.PI) _stPhase -= 2 * Math.PI;
+                        v += (float)(Math.Sin(_stPhase) * 7000 * _stEnv);
+                    }
                     if (v > 32767) v = 32767; else if (v < -32768) v = -32768;
                     frame[i] = (short)v;
                     float a = Math.Abs(v) / 32768f;
@@ -216,7 +235,7 @@ namespace IpTrxCtrl.Audio
 
         public bool LocalPlaying { get { lock (_localLock) return _local != null; } }
 
-        public void Dispose() { _native.Dispose(); _tci.Dispose(); }
+        public void Dispose() { _native.Dispose(); _tci.Dispose(); _icom.Dispose(); }
 
         /// <summary>Guadagno = volume (0–100 %) × (1 + boost oltre soglia in %).</summary>
         public static float GainFrom(int volumePercent, int boostPercent)

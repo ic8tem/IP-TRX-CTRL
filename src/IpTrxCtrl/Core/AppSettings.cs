@@ -118,6 +118,28 @@ namespace IpTrxCtrl.Core
         public string PanCivAddr { get; set; } = "94";
         // accesso dal browser (pagina web HTTPS servita dal server, dalla 0.3.1): si entra con il codice fisso
         public bool WebEnabled { get; set; }
+        // 0.3.6: altri client (o pagine web) in solo ascolto mentre un operatore usa la radio
+        public bool AllowListeners { get; set; } = true;
+        // 0.3.6: tasto CW USB (VBand, Vail in modo tastiera: Ctrl sinistro e destro) e MIDI (Vail, TinyMIDI)
+        public bool UsbKeyEnabled { get; set; }
+        public bool UsbKeyIambic { get; set; } = true;     // false = tasto verticale (un solo contatto)
+        public bool UsbKeyModeB { get; set; } = true;
+        public bool UsbKeySwap { get; set; }
+        public int UsbKeyWpm { get; set; } = 20;
+        public bool MidiKeyEnabled { get; set; }
+        public string MidiKeyDevice { get; set; } = "";
+        public bool KeySidetone { get; set; } = true;
+        // 0.3.6: registro dei QSO e invio ai programmi (protocollo UDP di WSJT-X)
+        public bool QsoUdpEnabled { get; set; } = true;
+        public string QsoUdpHost { get; set; } = "127.0.0.1";
+        public int QsoUdpPort { get; set; } = 2237;
+        public string QsoLastRstSent { get; set; } = "59";
+        public string MyGrid { get; set; } = "";
+        // 0.3.6: radio Icom collegata in rete (protocollo LAN Icom, come RS-BA1 e wfview), senza cavi al PC
+        public bool IcomLan { get; set; }
+        public string IcomLanHost { get; set; } = "";
+        public int IcomLanPort { get; set; } = 50001;
+        public string IcomLanUser { get; set; } = "";
         public int WebPort { get; set; } = 8443;
         public bool WebOpenRouter { get; set; }             // apre la porta anche sul router (UPnP)
         public bool WebRxOnly { get; set; }                  // il browser parte in solo ascolto

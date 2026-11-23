@@ -52,6 +52,9 @@ namespace IpTrxCtrl.Core
             return (x, y, z).CompareTo((a, b, c)) >= 0;
         }
 
+        /// <summary>Dalla 0.3.6: audio Opus e client in solo ascolto.</summary>
+        public static bool HasOpus(string peerVersion) => AtLeast(peerVersion, 0, 3, 6);
+
         /// <summary>Testo di compatibilità con l'altro PC ("" se è tutto a posto).</summary>
         public static string Notes(int peerProto, string peerVersion, bool peerIsServer)
         {

@@ -25,7 +25,7 @@ namespace IpTrxCtrl.Net.Udp
     public sealed class UdpLink : IDisposable
     {
         private const byte Mark = 0xA5;
-        public const byte Punch = 1, PunchAck = 2, Audio = 0x10, Ctrl = 0x20, Ack = 0x21, KeepAlive = 0x30, Probe = 0x40, ProbeAck = 0x41;
+        public const byte Punch = 1, PunchAck = 2, Audio = 0x10, AudioOpus = 0x11, Ctrl = 0x20, Ack = 0x21, KeepAlive = 0x30, Probe = 0x40, ProbeAck = 0x41;
 
         private readonly UdpClient _udp;
         private readonly AesGcm _aes;
@@ -45,7 +45,7 @@ namespace IpTrxCtrl.Net.Udp
         public int LocalPort => ((IPEndPoint)_udp.Client.LocalEndPoint!).Port;
         public long Retransmits;
         public event Action<string>? Log;
-        public event Action<uint, byte[]>? AudioReceived;     // seq, PCM
+        public event Action<uint, byte[], bool>? AudioReceived;     // seq, PCM o Opus, true = Opus
         public event Action<byte[]>? ControlReceived;          // messaggio già senza duplicati
 
         public UdpLink(byte[] master, int localPort = 0)
@@ -135,7 +135,10 @@ namespace IpTrxCtrl.Net.Udp
                         if (p.Length >= 8 && p.AsSpan(0, 8).SequenceEqual(_id) && Remote == null) Select(src, "PUNCH_ACK ricevuto");
                         break;
                     case Audio:
-                        if (p.Length >= 4) AudioReceived?.Invoke((uint)(p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3]), p.AsSpan(4).ToArray());
+                        if (p.Length >= 4) AudioReceived?.Invoke((uint)(p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3]), p.AsSpan(4).ToArray(), false);
+                        break;
+                    case AudioOpus:
+                        if (p.Length >= 4) AudioReceived?.Invoke((uint)(p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3]), p.AsSpan(4).ToArray(), true);
                         break;
                     case Ctrl:
                         if (p.Length < 4) break;
@@ -245,13 +248,13 @@ namespace IpTrxCtrl.Net.Udp
         }
 
         // ------------------------------------------------------------------ canale
-        public void SendAudio(ReadOnlySpan<byte> pcm)
+        public void SendAudio(ReadOnlySpan<byte> pcm, bool opus = false)
         {
             uint seq = ++_audioSeq;
             byte[] p = new byte[4 + pcm.Length];
             p[0] = (byte)(seq >> 24); p[1] = (byte)(seq >> 16); p[2] = (byte)(seq >> 8); p[3] = (byte)seq;
             pcm.CopyTo(p.AsSpan(4));
-            Send(Audio, p);
+            Send(opus ? AudioOpus : Audio, p);
         }
 
         public void SendControl(ReadOnlySpan<byte> message)

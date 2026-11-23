@@ -36,6 +36,7 @@ namespace IpTrxCtrl.Core
         public string PeerNet = "";         // IPv4 / IPv6 dell'altro PC
         public string AudioPath = "";       // «TCP» o «UDP» (percorso dell'audio)
         public string PeerVersion = "";     // versione del programma sull'altro PC
+        public string Listeners = "";       // server: chi è collegato in solo ascolto (dalla 0.3.6)
     }
 
     /// <summary>
@@ -253,6 +254,7 @@ namespace IpTrxCtrl.Core
         public void ApplyAudioSettings()
         {
             Audio.OfferTci = IsServer && _s.CatViaTci;   // «TCI» tra le schede del server
+            Audio.OfferIcomLan = IsServer && _s.IcomLan;   // «Icom LAN» tra le schede del server
             _devListsAt = DateTime.MinValue;
             Audio.RxGain = AudioEngine.GainFrom(_s.RxVolume, _s.RxBoost);
             Audio.TxGain = AudioEngine.GainFrom(_s.TxVolume, _s.TxBoost);
@@ -994,6 +996,11 @@ namespace IpTrxCtrl.Core
             {
                 // un operatore per volta: un altro client collegato riceve «server occupato»;
                 // lo stesso client che si ricollega (cambio di rete) prende il posto della sua vecchia sessione
+                if (_control != null && _sessionClientId.Length > 0 && _sessionClientId != cid && CanAddListener())
+                {
+                    await ServeListenerAsync(ch, cid, ct);
+                    return;
+                }
                 if (_control != null && _sessionClientId.Length > 0 && _sessionClientId != cid)
                 {
                     string who = _s.PeerCallsign.Length > 0 ? _s.PeerCallsign : ClientName(_sessionClientId);
@@ -1003,6 +1010,7 @@ namespace IpTrxCtrl.Core
                     return;
                 }
                 if (_sessionClientId != cid) StopUdp();
+                _peerOpus = false;   // fino al saluto dell'altro programma
                 _master = master;
                 _sessionClientId = cid;
                 if (_s.Clients.FirstOrDefault(x => x.Id == cid) is { } ce) { ce.LastUsed = DateTime.Now; _s.Save(); }
@@ -1021,7 +1029,18 @@ namespace IpTrxCtrl.Core
             }
             else
             {
-                if (_sessionClientId.Length > 0 && _sessionClientId != cid) { ch.Dispose(); return; }   // audio di un altro client
+                if (_sessionClientId.Length > 0 && _sessionClientId != cid)
+                {
+                    // audio di un client in solo ascolto: riceve la radio come l'operatore
+                    Listener? li;
+                    lock (_listeners) li = _listeners.FirstOrDefault(x => x.Cid == cid);
+                    if (li == null) { ch.Dispose(); return; }
+                    Interlocked.Exchange(ref li.Aud, ch)?.Dispose();
+                    try { while (!ct.IsCancellationRequested && await ch.ReceiveAsync(ct) is { Length: > 0 }) { } } catch { }
+                    Interlocked.CompareExchange(ref li.Aud, null, ch);
+                    ch.Dispose();
+                    return;
+                }
                 var old = Interlocked.Exchange(ref _audio, ch);
                 old?.Dispose();
                 ResetAudioStats();
@@ -1505,6 +1524,7 @@ namespace IpTrxCtrl.Core
                 failedRounds = 0;
                 round = 0;
                 NeedFallbackCode?.Invoke(false);
+                _peerOpus = false; ListenOnly = false; ListenOnlyOperator = "";
                 _control = ctl;
 
                 if (reverse)
@@ -1720,6 +1740,7 @@ namespace IpTrxCtrl.Core
                     switch (r.Type)
                     {
                         case Msg.Audio: OnAudioPacket(r); break;
+                        case Msg.AudioOpus: { uint sq = r.U32(); OnAudioOpus(sq, r.Rest()); } break;
                         case Msg.Hello:
                             {
                                 _s.PeerCallsign = r.Str();
@@ -1741,6 +1762,8 @@ namespace IpTrxCtrl.Core
                                 Stats.PeerNet = r.AtEnd ? "" : r.Str();
                                 var (pp, pv) = AppVersion.Parse(r.AtEnd ? "" : r.Str());
                                 Stats.PeerVersion = AppVersion.Show(pv);
+                                _peerOpus = AppVersion.HasOpus(pv) && Stats.PeerNet != "browser" && ch is not WebChannel;
+                                if (_peerOpus) SessionLog.Write("AUDIO Opus con l'altro PC (16 kbit/s invece di 128)");
                                 string note = AppVersion.Notes(pp, pv, !IsServer);
                                 SessionLog.Write($"VERSIONE questo PC {AppVersion.Text} · altro PC {Stats.PeerVersion} (protocollo {pp})" + (note.Length > 0 ? " · " + note : " · compatibili"));
                                 if (note.Length > 0) VersionWarning?.Invoke(note, AppVersion.Compatible(pp));
@@ -1754,6 +1777,15 @@ namespace IpTrxCtrl.Core
                                 _busyUntil = DateTime.UtcNow.AddSeconds(30);
                                 SessionLog.Write($"SESSIONE il server è occupato: è collegato {who}");
                                 Notice?.Invoke($"Il server è occupato: è collegato {who}. Riprovo da solo tra 30 secondi.");
+                            }
+                            break;
+                        case Msg.ListenOnly:
+                            if (!IsServer)
+                            {
+                                ListenOnly = true;
+                                ListenOnlyOperator = r.Str();
+                                SessionLog.Write($"ASCOLTO questo PC è in solo ascolto: trasmette {ListenOnlyOperator}");
+                                StatsChanged?.Invoke();
                             }
                             break;
                         case Msg.PeerInfo:
@@ -1945,6 +1977,7 @@ namespace IpTrxCtrl.Core
                     ch.Dispose();
                     Interlocked.Exchange(ref _audio, null)?.Dispose();
                     OnDisconnected();
+                    if (IsServer) CloseListeners("l'operatore si è scollegato: il primo che si ricollega trasmette");
                 }
                 else if (ReferenceEquals(ch, _audio))
                 {
@@ -1955,10 +1988,144 @@ namespace IpTrxCtrl.Core
             }
         }
 
+        // =================================================================== ascoltatori (0.3.6)
+
+        /// <summary>Client in solo ascolto: riceve audio e stato della radio, i suoi comandi non arrivano alla radio.</summary>
+        private sealed class Listener
+        {
+            public string Cid = "";
+            public IMsgChannel Ctl = null!;
+            public IMsgChannel? Aud;
+            public string Call = "";
+            public bool Opus;
+        }
+
+        private readonly List<Listener> _listeners = new();
+        private uint _lsnSeq;
+        public const int MaxListeners = 8;
+
+        public int ListenerCount { get { lock (_listeners) return _listeners.Count; } }
+        private List<Listener> ListenerSnapshot() { lock (_listeners) return _listeners.ToList(); }
+        private bool CanAddListener() => IsServer && _s.AllowListeners && ListenerCount < MaxListeners;
+        private string OperatorName() => _s.PeerCallsign.Length > 0 ? _s.PeerCallsign : ClientName(_sessionClientId);
+
+        private void UpdateListenerStats()
+        {
+            var names = ListenerSnapshot().Select(l => l.Call.Length > 0 ? l.Call : ClientName(l.Cid)).ToList();
+            Stats.Listeners = names.Count == 0 ? "" : string.Join(", ", names);
+            StatsChanged?.Invoke();
+        }
+
+        /// <summary>Server: un altro client (o una pagina web) mentre c'è già l'operatore: entra in solo ascolto.</summary>
+        private async Task ServeListenerAsync(IMsgChannel ch, string cid, CancellationToken ct, string webName = "")
+        {
+            var l = new Listener { Cid = cid, Ctl = ch, Call = webName };
+            if (ch is WebChannel) l.Aud = ch;   // la pagina web usa un solo WebSocket per tutto
+            Listener? old;
+            lock (_listeners)
+            {
+                old = _listeners.FirstOrDefault(x => x.Cid == cid);
+                if (old != null) _listeners.Remove(old);
+                _listeners.Add(l);
+            }
+            if (old != null) { try { old.Ctl.Dispose(); } catch { } }
+            string op = OperatorName();
+            SessionLog.Write($"ASCOLTO entra {(webName.Length > 0 ? webName + " (pagina web)" : ClientName(cid))} da {ch.Remote}: trasmette {op}");
+            UpdateListenerStats();
+            try
+            {
+                await SendHelloAsync(ch);
+                await ch.SendAsync(new MsgWriter(Msg.ListenOnly).Str(op).Build(), ct);
+                await ch.SendAsync(new MsgWriter(Msg.ServerNotice).Str($"Sei in solo ascolto: trasmette {op}. Quando si scollega, il primo che si ricollega prende la radio.").Build(), ct);
+                OnRigUpdated();
+                while (!ct.IsCancellationRequested)
+                {
+                    byte[]? data = await ch.ReceiveAsync(ct);
+                    if (data == null || data.Length == 0) break;
+                    var r = new MsgReader(data);
+                    switch (r.Type)
+                    {
+                        case Msg.Hello:
+                            {
+                                string call = r.Str();
+                                string net = r.AtEnd ? "" : r.Str();
+                                var (_, pv) = AppVersion.Parse(r.AtEnd ? "" : r.Str());
+                                if (call.Length > 0) l.Call = call;
+                                l.Opus = AppVersion.HasOpus(pv) && net != "browser" && ch is not WebChannel;
+                                UpdateListenerStats();
+                            }
+                            break;
+                        case Msg.Ping:
+                            await ch.SendAsync(new MsgWriter(Msg.Pong).I64(r.I64()).Build(), ct); break;
+                        default: break;   // comandi, PTT e audio di chi ascolta non arrivano alla radio
+                    }
+                }
+            }
+            catch { }
+            finally
+            {
+                lock (_listeners) _listeners.Remove(l);
+                try { ch.Dispose(); } catch { }
+                if (l.Aud != null && !ReferenceEquals(l.Aud, ch)) { try { l.Aud.Dispose(); } catch { } }
+                SessionLog.Write($"ASCOLTO esce {(l.Call.Length > 0 ? l.Call : ClientName(cid))}");
+                UpdateListenerStats();
+            }
+        }
+
+        private void CloseListeners(string why)
+        {
+            List<Listener> all;
+            lock (_listeners) { all = _listeners.ToList(); _listeners.Clear(); }
+            if (all.Count == 0) return;
+            SessionLog.Write($"ASCOLTO chiudo {all.Count} collegamenti in ascolto: {why}");
+            foreach (var l in all)
+            {
+                try { l.Ctl.Dispose(); } catch { }
+                try { l.Aud?.Dispose(); } catch { }
+            }
+            UpdateListenerStats();
+        }
+
+        /// <summary>Server: l'audio della radio anche a chi ascolta (Opus ai programmi 0.3.6, PCM agli altri e al browser).</summary>
+        private void SendToListeners(byte[] pcm, int len, ref byte[]? opus)
+        {
+            if (ListenerCount == 0) return;
+            uint seq = ++_lsnSeq;
+            byte[]? pcmMsg = null, opusMsg = null;
+            foreach (var l in ListenerSnapshot())
+            {
+                var a = l.Aud;
+                if (a == null) continue;
+                byte[] msg;
+                if (l.Opus)
+                {
+                    opus ??= _opusTx.Encode(pcm, len);
+                    msg = opusMsg ??= new MsgWriter(Msg.AudioOpus).U32(seq).Bytes(opus).Build();
+                }
+                else msg = pcmMsg ??= new MsgWriter(Msg.Audio).U32(seq).Bytes(pcm, 0, len).Build();
+                _ = a.SendAsync(msg).ContinueWith(_ => { }, TaskContinuationOptions.OnlyOnFaulted);
+            }
+        }
+
+        // ---- client: questo PC è in solo ascolto
+        public bool ListenOnly { get; private set; }
+        public string ListenOnlyOperator { get; private set; } = "";
+
         private void OnAudioPacket(MsgReader r)
         {
             uint seq = r.U32();
             OnAudio(seq, r.Rest());
+        }
+
+        // ---- audio Opus (0.3.6): un codificatore per l'audio che parte, un decodificatore per quello che arriva
+        private readonly OpusTx _opusTx = new();
+        private readonly OpusRx _opusRx = new();
+        private volatile bool _peerOpus;   // l'altro programma è 0.3.6 o successivo (non la pagina web)
+
+        private void OnAudioOpus(uint seq, byte[] packet)
+        {
+            foreach (var (s, pcm) in _opusRx.Decode(seq, packet))
+                if (pcm.Length > 0) OnAudio(s, pcm);
         }
 
         private void OnAudio(uint seq, byte[] pcm)
@@ -1989,6 +2156,7 @@ namespace IpTrxCtrl.Core
             _lastSeq = 0; _expected = 0; _lost = 0; _lastArrival = DateTime.MinValue;
             Stats.JitterMs = 0; Stats.LossPercent = 0;
             Audio.Playback.Reset();
+            _opusRx.Reset();
         }
 
         private void OnCaptured(byte[] pcm, int len)
@@ -2002,11 +2170,20 @@ namespace IpTrxCtrl.Core
         /// <summary>Audio verso l'altro PC: su UDP se il percorso è stato verificato dai due lati, altrimenti su TCP.</summary>
         private void SendAudioFrame(byte[] pcm, int len)
         {
+            byte[]? opus = null;
+            if (IsServer) SendToListeners(pcm, len, ref opus);
             var udp = _udp;
-            if (_udpAudio && udp != null) { udp.SendAudio(pcm.AsSpan(0, len)); return; }
+            bool useOpus = _peerOpus;
+            if (useOpus) opus ??= _opusTx.Encode(pcm, len);
+            if (_udpAudio && udp != null)
+            {
+                if (useOpus) udp.SendAudio(opus, true); else udp.SendAudio(pcm.AsSpan(0, len));
+                return;
+            }
             var aud = _audio;
             if (aud == null) return;
-            byte[] msg = new MsgWriter(Msg.Audio).U32(++_txSeq).Bytes(pcm, 0, len).Build();
+            byte[] msg = useOpus ? new MsgWriter(Msg.AudioOpus).U32(++_txSeq).Bytes(opus!).Build()
+                                 : new MsgWriter(Msg.Audio).U32(++_txSeq).Bytes(pcm, 0, len).Build();
             _ = aud.SendAsync(msg).ContinueWith(_ => { }, TaskContinuationOptions.OnlyOnFaulted);
         }
 
@@ -2025,7 +2202,7 @@ namespace IpTrxCtrl.Core
             try { link = new UdpLink(_master, localPort); }
             catch { link = new UdpLink(_master, 0); localPort = 0; }
             link.Log += SessionLog.Write;
-            link.AudioReceived += (seq, pcm) => { _lastUdpAudio = DateTime.UtcNow; OnAudio(seq, pcm); };
+            link.AudioReceived += (seq, data, opus) => { _lastUdpAudio = DateTime.UtcNow; if (opus) OnAudioOpus(seq, data); else OnAudio(seq, data); };
             _udp = link;
 
             var cands = new List<string>();
@@ -2118,6 +2295,15 @@ namespace IpTrxCtrl.Core
             var ctl = _control;
             if (ctl != null && IsServer)
                 _ = ctl.SendAsync(t.Encode()).ContinueWith(_ => { }, TaskContinuationOptions.OnlyOnFaulted);
+            if (IsServer && ListenerCount > 0)
+            {
+                var tl = t.Clone();
+                tl.TxAllowed = false;
+                tl.TxDenied = "sei in solo ascolto: trasmette " + OperatorName();
+                byte[] enc = tl.Encode();
+                foreach (var l in ListenerSnapshot())
+                    _ = l.Ctl.SendAsync(enc).ContinueWith(_ => { }, TaskContinuationOptions.OnlyOnFaulted);
+            }
         }
 
         // =================================================================== schede audio del server
@@ -2412,6 +2598,11 @@ namespace IpTrxCtrl.Core
         private async Task ServeWebAsync(IMsgChannel ch, string name, CancellationToken ct)
         {
             var e = EnsureWebClient(name);
+            if (_control != null && _sessionClientId.Length > 0 && CanAddListener())
+            {
+                await ServeListenerAsync(ch, WebClientId + ":" + name + ":" + ch.Remote, ct, name);
+                return;
+            }
             if (_control != null && _sessionClientId.Length > 0 && _sessionClientId != WebClientId)
             {
                 string who = _s.PeerCallsign.Length > 0 ? _s.PeerCallsign : ClientName(_sessionClientId);
@@ -2421,6 +2612,7 @@ namespace IpTrxCtrl.Core
                 return;
             }
             StopUdp();
+            _peerOpus = false;   // la pagina web usa il PCM
             _master = null;
             _sessionClientId = WebClientId;
             e.LastUsed = DateTime.Now;

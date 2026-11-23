@@ -12,6 +12,8 @@ IP-TRX-CTRL include o usa i componenti elencati qui sotto. Il programma contiene
 | Inter (carattere) | SIL Open Font License 1.1 | https://github.com/rsms/inter |
 | MQTTnet | MIT | https://github.com/dotnet/MQTTnet |
 | Open.NAT | MIT | https://github.com/lontivero/Open.NAT |
+| Concentus (codec Opus, dalla 0.3.6) | BSD-3-Clause | https://github.com/lostromb/concentus |
+| wfview (protocollo Icom in rete, codice riscritto in C#, dalla 0.3.6) | GNU GPL 3.0 | https://gitlab.com/eliggett/wfview |
 | .NET Runtime, System.IO.Ports | MIT | https://github.com/dotnet/runtime |
 
 Note:
@@ -20,4 +22,6 @@ Note:
 - Audio e tasti globali usano direttamente le funzioni del sistema operativo (winmm/Core Audio, ALSA/libX11, CoreAudio/Carbon): nessuna libreria aggiuntiva.
 - Il codice del keyer deriva da WavPTT, dello stesso autore, e non aggiunge vincoli.
 - Il decodificatore CW è scritto da zero.
+- Il collegamento alle Icom in rete segue wfview (GPL 3.0, compatibile con la AGPL) e la documentazione di kappanhang (MIT); i loro autori sono citati nel file sorgente.
+- Il MIDI usa direttamente winmm su Windows e /dev/snd su Linux: nessuna libreria aggiuntiva.
 - I nomi dei broker MQTT pubblici sono usati solo come punto d'incontro; nessun dato in chiaro viene pubblicato.

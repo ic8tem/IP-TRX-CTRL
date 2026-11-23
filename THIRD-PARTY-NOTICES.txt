@@ -1,7 +1,8 @@
 IP-TRX-CTRL - NOTE DI TERZE PARTI
 =================================
 
-IP-TRX-CTRL: Copyright (C) 2026 IC8TEM - GNU GPL 3.0 o successiva (file LICENSE).
+IP-TRX-CTRL: Copyright (C) 2026 Costantino Cerrotta IC8TEM - GNU AGPL 3.0 o successiva
+(file LICENSE; fino alla 0.3.5: GNU GPL 3.0 o successiva).
 
 Questo programma include o usa i componenti di terze parti elencati qui sotto.
 Prima di distribuire gli eseguibili, verifica che titolari e testi corrispondano
@@ -37,6 +38,39 @@ https://github.com/dotnet/MQTTnet
 
 Open.NAT - licenza MIT - Copyright (c) Lucas Ontivero e collaboratori
 https://github.com/lontivero/Open.NAT
+
+---------------------------------------------------------
+Concentus (codec Opus in C#, dalla 0.3.6) - licenza BSD-3-Clause
+Copyright (c) 2016 Logan Stromberg; deriva da libopus: Copyright (c) 2001-2011
+Xiph.Org, Skype Limited, Octasic, Jean-Marc Valin, Timothy B. Terriberry,
+CSIRO, Gregory Maxwell, Mark Borgerding, Erik de Castro Lopo
+https://github.com/lostromb/concentus
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+- Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+- Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+- Neither the name of Internet Society, IETF or IETF Trust, nor the names of
+  specific contributors, may be used to endorse or promote products derived
+  from this software without specific prior written permission.
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+THE POSSIBILITY OF SUCH DAMAGE.
+
+---------------------------------------------------------
+wfview - GNU GPL 3.0 - Copyright (C) Elliott H. Liggett W6EL, Phil Taylor M0VSE
+e collaboratori - https://gitlab.com/eliggett/wfview
+Il collegamento alle radio Icom in rete (src/IpTrxCtrl/Rig/IcomLan.cs, dalla
+0.3.6) e' riscritto in C# seguendo il codice di wfview (udphandler, udpbase,
+udpcivdata, udpaudio, packettypes) e la documentazione di kappanhang
+(Norbert Varga HA2NON, MIT). La GPL 3.0 e' compatibile con la AGPL 3.0 di
+IP-TRX-CTRL (sezione 13 di entrambe).
 
 .NET Runtime, System.IO.Ports, System.Security.Cryptography.ProtectedData
 licenza MIT - Copyright (c) .NET Foundation e collaboratori

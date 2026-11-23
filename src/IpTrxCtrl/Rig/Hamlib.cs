@@ -186,12 +186,13 @@ namespace IpTrxCtrl.Rig
             catch { return null; }
         }
 
-        public static Process? StartRigctld(AppSettings s, int localPort)
+        public static Process? StartRigctld(AppSettings s, int localPort, string? pathOverride = null)
         {
             string? exe = Find("rigctld", s);
             if (exe == null) return null;
             var args = new StringBuilder();
-            args.Append($"-m {s.RigModel} -r {s.RigCom} -s {s.RigBaud} -T 127.0.0.1 -t {localPort}");
+            // radio Icom in rete (0.3.6): «-r 127.0.0.1:porta» del ponte CI-V locale, che Hamlib apre come porta di rete
+            args.Append(pathOverride != null ? $"-m {s.RigModel} -r {pathOverride} -T 127.0.0.1 -t {localPort}" : $"-m {s.RigModel} -r {s.RigCom} -s {s.RigBaud} -T 127.0.0.1 -t {localPort}");
             // RTS/DTR su una porta diversa da quella del CAT li comanda direttamente il programma (anche per il CW)
             var plan = KeyingPlan.Resolve(s);
             if (s.PttMethod == PttMethod.Cat) args.Append(" -P RIG");

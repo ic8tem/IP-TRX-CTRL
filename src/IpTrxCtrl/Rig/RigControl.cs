@@ -114,7 +114,12 @@ namespace IpTrxCtrl.Rig
             return true;
         }
 
-        public bool IsConfigured => _s.CatViaTci || _s.UseExternalRigctld || (_s.RigModel > 0 && !string.IsNullOrEmpty(_s.RigCom));
+        public bool IsConfigured => _s.CatViaTci || _s.UseExternalRigctld || (_s.RigModel > 0 && (_s.IcomLan || !string.IsNullOrEmpty(_s.RigCom)));
+
+        // radio Icom in rete (0.3.6): collegamento LAN e ponte CI-V per rigctld
+        private IcomLanLink? _icom;
+        private IcomCivBridge? _icomBridge;
+        public string IcomLanStatus => _icom?.Status ?? "";
 
         /// <summary>CAT tramite TCI attivo.</summary>
         public bool CatViaTci => _tciLink != null;
@@ -128,6 +133,13 @@ namespace IpTrxCtrl.Rig
                 SessionLog.Write($"RADIO CAT via TCI {_s.TciHost}:{_s.TciPort}");
             }
             else if (_s.PttMethod == PttMethod.Tci) _tci = new TciClient(_s.TciHost, _s.TciPort);
+            if (_s.IcomLan && !_s.CatViaTci && !_s.UseExternalRigctld && _s.IcomLanHost.Length > 0)
+            {
+                _icom = new IcomLanLink(_s.IcomLanHost, _s.IcomLanPort, _s.IcomLanUser, IcomLanLink.LoadPassword());
+                _icomBridge = new IcomCivBridge(_icom);
+                _icom.StatusChanged += st => SetStatus("Icom LAN: " + st);
+                SessionLog.Write($"RADIO Icom in rete {_s.IcomLanHost}:{_s.IcomLanPort} (utente {_s.IcomLanUser}), CI-V per rigctld su 127.0.0.1:{_icomBridge.Port}");
+            }
             OpenKeyingPorts();
             _cts = new CancellationTokenSource();
             var ct = _cts.Token;
@@ -149,6 +161,8 @@ namespace IpTrxCtrl.Rig
             _tci = null;
             _tciBridge?.Dispose(); _tciBridge = null;
             _tciLink?.Dispose(); _tciLink = null;
+            _icomBridge?.Dispose(); _icomBridge = null;
+            _icom?.Dispose(); _icom = null;
             if (_dummyProc != null)
             {
                 try { if (!_dummyProc.HasExited) _dummyProc.Kill(true); } catch { }
@@ -285,7 +299,8 @@ namespace IpTrxCtrl.Rig
                 {
                     int p = FreeLocalPort();
                     _proc?.Dispose();
-                    _proc = Hamlib.StartRigctld(_s, p);
+                    if (_icom != null && !_icom.CivReady) throw new IOException(_icom.Status);
+                    _proc = Hamlib.StartRigctld(_s, p, _icomBridge != null ? $"127.0.0.1:{_icomBridge.Port}" : null);
                     if (_proc == null) throw new IOException(Hamlib.InstallHint);
                     _procPort = p;
                     await Task.Delay(1200, ct);

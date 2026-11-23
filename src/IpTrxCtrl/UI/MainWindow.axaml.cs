@@ -30,6 +30,9 @@ namespace IpTrxCtrl.UI
         private readonly Node _node;
         private readonly GlobalHotkeys _hotkeys = new();
         private IpTrxCtrl.Platform.SerialInput? _serialIn;
+        private LogWindow? _logWindow;
+        private IpTrxCtrl.Audio.PaddleKeyer? _paddle;   // tasto CW USB (VBand, Vail) e MIDI, dalla 0.3.6
+        private IpTrxCtrl.Platform.MidiInput? _midi;
         private readonly DispatcherTimer _uiTimer, _wfTimer;
         private RigTelemetry _tel = new();
         private bool _loading = true;
@@ -116,7 +119,7 @@ namespace IpTrxCtrl.UI
 
             Opened += OnOpened;
             Closing += (_, _) => OnClosingWindow();
-            Deactivated += (_, _) => { if (_manualPtt) SetManualPtt(false); };
+            Deactivated += (_, _) => { if (_manualPtt) SetManualPtt(false); _paddle?.ReleaseAll(); };
             AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
             AddHandler(KeyUpEvent, OnKeyUpTunnel, RoutingStrategies.Tunnel);
         }
@@ -128,6 +131,7 @@ namespace IpTrxCtrl.UI
             _node.Start();
             if (_s.Role == NodeRole.Client) _hotkeys.Start();
             StartSerialInput();
+            StartPaddle();
             ApplyRoleTexts();
             RefreshStats();
             RefreshRadio();
@@ -143,6 +147,7 @@ namespace IpTrxCtrl.UI
             foreach (var w in _decodeWindows.ToList()) w.Close();
             _hotkeys.Dispose();
             _serialIn?.Dispose();
+            _midi?.Dispose(); _paddle?.Dispose();
             _node.Dispose();
             _s.Save();
         }
@@ -302,6 +307,13 @@ namespace IpTrxCtrl.UI
                 InvalidateVisual();
             };
             BtnSettings.Click += async (_, _) => await OpenSettings();
+            BtnLog.Click += (_, _) =>
+            {
+                if (_logWindow != null) { _logWindow.Activate(); return; }
+                _logWindow = new LogWindow(_node, _s);
+                _logWindow.Closed += (_, _) => _logWindow = null;
+                _logWindow.Show(this);
+            };
             BtnSwap.Click += async (_, _) =>
             {
                 if (await Dialogs.YesNo(this, "Vuoi chiedere al peer di invertire i ruoli? Il server diventerà client e viceversa."))
@@ -542,6 +554,7 @@ namespace IpTrxCtrl.UI
                 if (w.AudioChanged && _s.Role == NodeRole.Server) _node.RestartAudio();
                 if (w.DigitalChanged) _node.StartDigital();
                 if (w.SerialInputChanged) StartSerialInput();
+                StartPaddle();
                 if ((w.PanChanged || w.RigChanged) && _s.Role == NodeRole.Server) _node.RestartPanadapter();
                 if (w.WebChanged && _s.Role == NodeRole.Server) _node.RestartWeb();
                 ApplyOptionalParts();
@@ -683,6 +696,12 @@ namespace IpTrxCtrl.UI
         private void OnKeyDownTunnel(object? sender, KeyEventArgs e)
         {
             if (FocusInTextBox() && e.Key != Key.Escape) return;
+            if (_paddle != null && _s.UsbKeyEnabled && (e.Key == Key.LeftCtrl || e.Key == Key.RightCtrl))
+            {
+                _paddle.Paddle(e.Key == Key.LeftCtrl, true);   // VBand / Vail: Ctrl sinistro = punto, destro = linea
+                e.Handled = true;
+                return;
+            }
             if (e.Key == Key.Space && _s.PttWithSpace)
             {
                 if (!_manualPtt) SetManualPtt(true);
@@ -699,6 +718,12 @@ namespace IpTrxCtrl.UI
 
         private void OnKeyUpTunnel(object? sender, KeyEventArgs e)
         {
+            if (_paddle != null && _s.UsbKeyEnabled && (e.Key == Key.LeftCtrl || e.Key == Key.RightCtrl))
+            {
+                _paddle.Paddle(e.Key == Key.LeftCtrl, false);
+                e.Handled = true;
+                return;
+            }
             if (e.Key == Key.Space && _s.PttWithSpace && !FocusInTextBox())
             {
                 if (_manualPtt) SetManualPtt(false);
@@ -709,6 +734,42 @@ namespace IpTrxCtrl.UI
         // ================================================================= PTT
 
         /// <summary>Client: pedale PTT e tasto CW meccanico (o porta virtuale di un altro programma) sulla seriale.</summary>
+        /// <summary>Tasto CW USB (VBand, Vail in modo tastiera) e MIDI (Vail, TinyMIDI): manipolatore locale, eventi al server.</summary>
+        private void StartPaddle()
+        {
+            _midi?.Dispose(); _midi = null;
+            _paddle?.Dispose(); _paddle = null;
+            _node.Audio.SidetoneOn = false;
+            if (!_s.UsbKeyEnabled && !_s.MidiKeyEnabled) return;
+            var k = new IpTrxCtrl.Audio.PaddleKeyer { Wpm = _s.UsbKeyWpm, Iambic = _s.UsbKeyIambic, ModeB = _s.UsbKeyModeB, Swap = _s.UsbKeySwap };
+            k.Key += (down, ms) =>
+            {
+                _node.SendCwKey(down, ms);
+                if (_s.KeySidetone) { _node.Audio.SidetonePitch = _s.CwPitch; _node.Audio.SidetoneOn = down; }
+            };
+            _paddle = k;
+            SessionLog.Write($"TASTO USB {(_s.UsbKeyEnabled ? "tastiera (Ctrl sinistro e destro)" : "")}{(_s.MidiKeyEnabled ? " MIDI " + _s.MidiKeyDevice : "")} · {(_s.UsbKeyIambic ? "iambico " + (_s.UsbKeyModeB ? "B" : "A") : "verticale")} {_s.UsbKeyWpm} WPM");
+            if (_s.MidiKeyEnabled)
+            {
+                try
+                {
+                    var m = new IpTrxCtrl.Platform.MidiInput(_s.MidiKeyDevice);
+                    m.Contact += (what, down) =>
+                    {
+                        if (what == 0) k.SetStraight(down);
+                        else k.Paddle(what == 1, down);
+                    };
+                    _midi = m;
+                }
+                catch (Exception ex)
+                {
+                    SessionLog.Write("TASTO MIDI non apribile: " + ex.Message);
+                    TxtNotice.Text = "Tasto MIDI non disponibile: " + ex.Message;
+                    TxtNotice.IsVisible = true;
+                }
+            }
+        }
+
         private void StartSerialInput()
         {
             _serialIn?.Dispose();
@@ -913,6 +974,8 @@ namespace IpTrxCtrl.UI
             TxtBuffer.Text = $"{st.BufferMs} ms";
             TxtMqtt.Text = st.MqttOk < 0 ? "—" : st.MqttOk == 0 ? "nessun broker" : $"{st.MqttOk} broker ok";
             TxtPeerCall.Text = string.IsNullOrEmpty(_s.PeerCallsign) ? "—" : _s.PeerCallsign;
+            if (!IsClient && st.Listeners.Length > 0) TxtPeerCall.Text += " · in ascolto: " + st.Listeners;
+            if (IsClient && _node.ListenOnly && st.Connected) TxtPeerCall.Text += " · tu sei in solo ascolto";
             TxtPeerSince.Text = st.Connected ? $"{st.ConnectedSince:HH:mm:ss} ({DateTime.Now - st.ConnectedSince:hh\\:mm\\:ss})" : "—";
             TxtPeerLatency.Text = TxtLatency.Text;
             TxtServerIp.Text = string.IsNullOrEmpty(st.ServerEndpoint) ? "—" : st.ServerEndpoint;

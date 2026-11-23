@@ -610,6 +610,42 @@ namespace IpTrxCtrl.UI
             var report = Ui.Btn("Rapporto per un problema…");
             report.Click += async (_, _) => await ReportAsync(s);
 
+            // ---- 0.3.6: radio Icom in rete (server)
+            var icOn = new CheckBox { Content = "La radio è una Icom collegata in rete (IC-7610, IC-9700, IC-705, IC-7300MK2, IC-905…): niente cavi USB al PC", IsChecked = s.IcomLan };
+            var icHost = new TextBox { Text = s.IcomLanHost, Watermark = "es. 192.168.1.50", Width = 180 };
+            var icPort = new TextBox { Text = s.IcomLanPort.ToString(CultureInfo.InvariantCulture), Width = 80 };
+            var icUser = new TextBox { Text = s.IcomLanUser, Width = 150 };
+            var icPass = new TextBox { Text = IcomLanLink.LoadPassword(), PasswordChar = '•', Width = 150 };
+            var icNote = Ui.Sub("Nel menu della radio: Set › Network › Network Control ON, e un utente in Network User1 (nome e password, al massimo 16 caratteri). "
+                + "Il programma parla con la radio come RS-BA1 e wfview (porta di controllo 50001): CAT tramite rigctld con il modello Hamlib scelto sopra, audio a 8 kHz. "
+                + "Salva, riapri le Impostazioni e come scheda audio del server scegli «" + IpTrxCtrl.Audio.IcomLanAudioBackend.DeviceName + "» e come PTT «CAT». Non serve la porta seriale. La password resta cifrata su questo PC.", 12);
+            icNote.TextWrapping = TextWrapping.Wrap;
+            var icState = Ui.Sub(node.Rig.IcomLanStatus.Length > 0 ? "Stato: " + node.Rig.IcomLanStatus : "", 12);
+            var listen = new CheckBox { Content = "Altri client e pagine web possono collegarsi in solo ascolto mentre un operatore usa la radio (fino a 8)", IsChecked = s.AllowListeners };
+
+            // ---- 0.3.6: tasto CW USB e MIDI
+            var ukOn = new CheckBox { Content = "Tasto USB in modo tastiera (VBand, Vail): Ctrl sinistro = punto, Ctrl destro = linea", IsChecked = s.UsbKeyEnabled };
+            var ukType = new ComboBox { ItemsSource = new[] { "Manipolatore iambico, modo B", "Manipolatore iambico, modo A", "Tasto verticale" }, SelectedIndex = !s.UsbKeyIambic ? 2 : s.UsbKeyModeB ? 0 : 1, Width = 260 };
+            var ukWpm = new TextBox { Text = s.UsbKeyWpm.ToString(CultureInfo.InvariantCulture), Width = 60 };
+            var ukSwap = new CheckBox { Content = "Scambia punto e linea", IsChecked = s.UsbKeySwap };
+            var ukTone = new CheckBox { Content = "Tono di ascolto qui (al pitch CW del programma)", IsChecked = s.KeySidetone };
+            var midiDevs = IpTrxCtrl.Platform.MidiInput.Devices();
+            var mkOn = new CheckBox { Content = "Tasto MIDI (Vail in modo MIDI, TinyMIDI): nota Do = verticale, Do# = punto, Re = linea", IsChecked = s.MidiKeyEnabled, IsEnabled = midiDevs.Count > 0 || s.MidiKeyEnabled };
+            var mkDev = new ComboBox { ItemsSource = midiDevs, MinWidth = 220, SelectedItem = midiDevs.Contains(s.MidiKeyDevice) ? s.MidiKeyDevice : midiDevs.FirstOrDefault() };
+            var ukNote = Ui.Sub((midiDevs.Count == 0 ? (OperatingSystem.IsMacOS() ? "MIDI non disponibile sul Mac: usa il modo tastiera. " : "Nessun dispositivo MIDI trovato. " + (OperatingSystem.IsLinux() ? "Su Linux serve il gruppo «audio» (sudo usermod -aG audio $USER). " : "")) : "")
+                + "Il manipolatore è su questo PC e manda al server i tempi del tasto, come il tasto verticale sulla seriale: il server li ripete con il ritardo fisso impostato qui sopra. "
+                + "Con il tasto in modo tastiera i tasti Ctrl non servono ad altro in questa finestra. Anche nella pagina web funzionano il modo tastiera e il MIDI (Chrome, Edge).", 12);
+            ukNote.TextWrapping = TextWrapping.Wrap;
+
+            // ---- 0.3.6: registro dei QSO
+            var qOn = new CheckBox { Content = "Manda ogni QSO ai programmi di log con il protocollo UDP di WSJT-X (GridTracker, JTAlert, Log4OM, N1MM…)", IsChecked = s.QsoUdpEnabled };
+            var qHost = new TextBox { Text = s.QsoUdpHost, Width = 160 };
+            var qPort = new TextBox { Text = s.QsoUdpPort.ToString(CultureInfo.InvariantCulture), Width = 80 };
+            var qGrid = new TextBox { Text = s.MyGrid, Width = 100, Watermark = "es. JN70CN" };
+            var qNote = Ui.Sub("Il registro si apre con il pulsante «Registro» in alto. Frequenza, banda, modo e orari si prendono dalla radio; il file ADIF esportato va bene per LoTW, QRZ e Club Log. "
+                + "Porta 2237 = quella di WSJT-X: se WSJT-X è aperto sullo stesso PC, nel programma di log aggiungi una seconda porta o usa l'inoltro (multicast 224.0.0.1).", 12);
+            qNote.TextWrapping = TextWrapping.Wrap;
+
             var save = Ui.Btn("Salva", true);
             var cancel = Ui.Btn("Annulla");
             cancel.Click += (_, _) => Close();
@@ -679,11 +715,37 @@ namespace IpTrxCtrl.UI
                     s.WebEnabled = webOn.IsChecked == true; s.WebPort = wp; s.WebOpenRouter = webRouter.IsChecked == true; s.WebRxOnly = webRx.IsChecked == true;
                     node.Rig.PushTelemetry();
                 }
+                // 0.3.6: tasto USB e MIDI, registro
+                s.UsbKeyEnabled = ukOn.IsChecked == true;
+                s.UsbKeyIambic = ukType.SelectedIndex != 2;
+                s.UsbKeyModeB = ukType.SelectedIndex == 0;
+                s.UsbKeySwap = ukSwap.IsChecked == true;
+                s.KeySidetone = ukTone.IsChecked == true;
+                if (int.TryParse(ukWpm.Text, out int wpm)) s.UsbKeyWpm = Math.Clamp(wpm, 5, 60);
+                s.MidiKeyEnabled = mkOn.IsChecked == true;
+                s.MidiKeyDevice = mkDev.SelectedItem as string ?? "";
+                s.QsoUdpEnabled = qOn.IsChecked == true;
+                s.QsoUdpHost = string.IsNullOrWhiteSpace(qHost.Text) ? "127.0.0.1" : qHost.Text.Trim();
+                if (int.TryParse(qPort.Text, out int qp) && qp > 0 && qp < 65536) s.QsoUdpPort = qp;
+                s.MyGrid = (qGrid.Text ?? "").Trim().ToUpperInvariant();
+                bool oldIc = s.IcomLan; string oldIcHost = s.IcomLanHost, oldIcUser = s.IcomLanUser; int oldIcPort = s.IcomLanPort;
+                bool icPassChanged = (icPass.Text ?? "") != IcomLanLink.LoadPassword();
+                if (srvRole)
+                {
+                    s.AllowListeners = listen.IsChecked == true;
+                    s.IcomLan = icOn.IsChecked == true;
+                    s.IcomLanHost = (icHost.Text ?? "").Trim();
+                    if (int.TryParse(icPort.Text, out int icp) && icp > 0 && icp < 65536) s.IcomLanPort = icp;
+                    s.IcomLanUser = (icUser.Text ?? "").Trim();
+                    if (icPassChanged) { try { IcomLanLink.SavePassword(icPass.Text ?? ""); } catch (Exception ex) { SessionLog.Write("ICOM LAN password non salvata: " + ex.Message); } }
+                }
+                bool icChanged = oldIc != s.IcomLan || oldIcHost != s.IcomLanHost || oldIcUser != s.IcomLanUser || oldIcPort != s.IcomLanPort || icPassChanged;
+                if (icChanged) AudioChanged = true;
                 var list = (brokers.Text ?? "").Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
                 if (list.Count > 0) s.MqttBrokers = list;
                 RigChanged = oldModel != s.RigModel || oldBaud != s.RigBaud || oldCom != s.RigCom || oldExt != s.UseExternalRigctld
                              || oldHost != s.ExternalRigctldHost || oldPort != s.ExternalRigctldPort || oldPath != s.RigctldPath
-                             || oldTci != s.CatViaTci || oldTciHost != s.TciHost || oldTciPort != s.TciPort;
+                             || oldTci != s.CatViaTci || oldTciHost != s.TciHost || oldTciPort != s.TciPort || icChanged;
                 var newRole = role.SelectedIndex == 0 ? NodeRole.Server : NodeRole.Client;
                 bool roleChanged = newRole != s.Role;
                 s.Role = newRole;
@@ -717,6 +779,17 @@ namespace IpTrxCtrl.UI
                         swrOn,
                         Ui.Row(16, Ui.Col(0, Ui.Lbl("Avviso da ROS"), swrWarn), Ui.Col(0, Ui.Lbl("Blocco da ROS"), swrTrip)),
                         swrNote)),
+                    srvRole
+                        ? Ui.Panel(Ui.Col(10, Ui.H2("RADIO ICOM IN RETE (SERVER)"), icOn,
+                            Ui.Row(10, Ui.Col(0, Ui.Lbl("Indirizzo della radio"), icHost), Ui.Col(0, Ui.Lbl("Porta"), icPort), Ui.Col(0, Ui.Lbl("Utente"), icUser), Ui.Col(0, Ui.Lbl("Password"), icPass)),
+                            icNote, icState))
+                        : new Control(),
+                    Ui.Panel(Ui.Col(10, Ui.H2("TASTO CW USB E MIDI"), ukOn,
+                        Ui.Row(10, ukType, Ui.Sub("velocità", 13), ukWpm, Ui.Sub("WPM", 13)), Ui.Row(16, ukSwap, ukTone),
+                        mkOn, Ui.Row(8, Ui.Sub("Dispositivo MIDI", 13), mkDev), ukNote)),
+                    Ui.Panel(Ui.Col(10, Ui.H2("REGISTRO DEI QSO"), qOn,
+                        Ui.Row(10, Ui.Col(0, Ui.Lbl("Indirizzo"), qHost), Ui.Col(0, Ui.Lbl("Porta UDP"), qPort), Ui.Col(0, Ui.Lbl("Il mio locatore"), qGrid)),
+                        qNote)),
                     Ui.Panel(Ui.Col(10, Ui.H2("PEDALE PTT E TASTO CW (CLIENT)"),
                         Ui.Sub("Porta seriale del client letta come ingresso: un pedale tra RTS e CTS, un tasto verticale tra DTR e DSR. Va bene anche la porta virtuale di un altro programma (su Windows una coppia com0com).", 13),
                         Ui.Col(0, Ui.Lbl("Porta seriale"), inCom),
@@ -732,7 +805,7 @@ namespace IpTrxCtrl.UI
                         optBands, optCtl, optMem, optAlc, optPan, optUpd, optAuto, optUpdNote)),
                     srvRole
                         ? Ui.Panel(Ui.Col(8, Ui.H2("SICUREZZA IN TRASMISSIONE (SERVER)"),
-                            Ui.Row(8, totOn, totSec, Ui.Sub("secondi", 13)), qsyLock, Ui.Row(8, locOn, locMin, Ui.Sub("minuti", 13)), fixRx, safeNote))
+                            Ui.Row(8, totOn, totSec, Ui.Sub("secondi", 13)), qsyLock, Ui.Row(8, locOn, locMin, Ui.Sub("minuti", 13)), fixRx, listen, safeNote))
                         : Ui.Panel(Ui.Col(8, Ui.H2("SICUREZZA IN TRASMISSIONE"),
                             Ui.Sub("Tempo massimo di trasmissione, blocco dei cambi di frequenza in trasmissione, precedenza a chi è alla radio e solo ascolto si impostano sul server: valgono per tutti i client.", 13))),
                     srvRole
@@ -1025,6 +1098,41 @@ NON si aggiornano da soli i pacchetti di sistema .deb, .rpm, Arch e Slackware (i
 solo la riga della versione nuova; si installa il pacchetto nuovo con lo stesso comando della prima volta.
 Con gli aggiornamenti automatici spenti (Impostazioni › Finestra principale) resta la riga in alto con «Aggiorna
 adesso». La 0.3.0 e la 0.3.1 non si aggiornano da sole: la 0.3.2 si installa a mano una volta.
+
+AUDIO OPUS (dalla 0.3.6)
+Tra due programmi 0.3.6 o successivi l'audio viaggia compresso con Opus (16 kbit/s, voce a 8 kHz) invece che PCM:
+meno banda, correzione degli errori (FEC) e riempimento dei buchi quando un pacchetto si perde. Con versioni
+precedenti e con la pagina web resta PCM a 8 kHz; non c'è niente da impostare.
+
+PIÙ ASCOLTATORI (server, dalla 0.3.6)
+Impostazioni › Sicurezza in trasmissione (server) › «Altri client e pagine web possono collegarsi in solo ascolto»
+(attiva di serie). Mentre un operatore usa la radio, fino a 8 altri client abbinati o pagine web si collegano lo
+stesso: sentono l'audio della radio e vedono frequenza e strumenti, ma non trasmettono né cambiano nulla. In alto
+compare «tu sei in solo ascolto: trasmette X»; sul server il riquadro dell'altro PC mostra gli ascoltatori.
+Quando l'operatore si scollega gli ascoltatori vengono scollegati e il primo che si ricollega diventa operatore.
+
+TASTO CW USB E MIDI (client, dalla 0.3.6)
+Impostazioni › Tasto CW USB e MIDI. Modo tastiera (VBand, Vail e simili): Ctrl sinistro = punto, Ctrl destro =
+linea. Manipolatore iambico modo A o B, oppure tasto verticale; velocità 5-60 WPM, scambio punto/linea, tono di
+ascolto sul PC al pitch CW. MIDI (Vail in modo MIDI, TinyMIDI): Do = verticale, Do# = punto, Re = linea; Windows
+e Linux (gruppo «audio»), non sul Mac. Il manipolatore è sul client e manda i tempi del tasto al server, che li
+ripete con il ritardo fisso del tasto CW. Nella pagina web: Impostazioni › Tasto CW (tastiera; MIDI con Chrome/Edge).
+
+REGISTRO DEI QSO (dalla 0.3.6)
+Pulsante «Registro» in alto: nominativo, RST, locatore, nome, QTH e note; frequenza, banda, modo e orari arrivano
+dalla radio. «Registra» salva in registro.adi nella cartella delle impostazioni e, se attivo, manda il QSO ai
+programmi di log con il protocollo UDP di WSJT-X (messaggi «QSO Logged» e «Logged ADIF», porta 2237 di serie):
+GridTracker, JTAlert, Log4OM, N1MM, HRD e altri lo registrano come un QSO di WSJT-X. «Esporta ADIF…» salva un file
+per LoTW (TQSL), QRZ e Club Log. Impostazioni › Registro dei QSO: indirizzo, porta, il mio locatore.
+
+RADIO ICOM IN RETE (server, dalla 0.3.6)
+Per IC-7610, IC-9700, IC-705, IC-7300MK2, IC-905 e altre Icom con la rete: il server parla con la radio come
+RS-BA1 e wfview, senza cavi USB e senza un PC accanto alla radio. Sulla radio: Set › Network › Network Control ON
+e un utente in Network User1. Impostazioni › Radio Icom in rete (server): indirizzo della radio, porta 50001,
+utente e password (cifrata su questo PC). Poi: modello Hamlib della radio, PTT «CAT», scheda audio del server
+«Icom LAN · audio della radio» (ricezione e trasmissione a 8 kHz). Il CAT passa da rigctld collegato a un ponte
+interno verso il flusso CI-V della radio. Protocollo dalle fonti di wfview (GPL 3) e kappanhang.
+  https://gitlab.com/eliggett/wfview   https://github.com/nonoo/kappanhang
 
 KEYER (solo client)
 SSB: F1..F8 trasmettono messaggi WAV (pulsante «File WAV…»). Filtro, compressore e volume come in WavPTT.

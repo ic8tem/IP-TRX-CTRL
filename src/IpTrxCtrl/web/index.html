@@ -141,6 +141,17 @@
     <select id="micSel2"></select>
     <label class="field" for="spkSel2">Altoparlante</label>
     <select id="spkSel2"></select>
+    <label class="field" for="keyType">Tasto CW (modo tastiera VBand/Vail: Ctrl sinistro = punto, Ctrl destro = linea; anche [ e ])</label>
+    <select id="keyType">
+      <option value="off">Spento</option>
+      <option value="b">Manipolatore iambico, modo B</option>
+      <option value="a">Manipolatore iambico, modo A</option>
+      <option value="str">Tasto verticale (Ctrl)</option>
+    </select>
+    <label class="field" for="keyWpm">Velocità (WPM)</label>
+    <input id="keyWpm" type="number" min="5" max="60" value="20">
+    <label class="check"><input type="checkbox" id="keySwap"> Scambia punto e linea</label>
+    <label class="check"><input type="checkbox" id="keyMidi"> Tasto MIDI (Vail, TinyMIDI: Do = verticale, Do# = punto, Re = linea · Chrome, Edge)</label>
     <span class="muted hint" id="dlgInfo">—</span>
     <span class="muted hint">IP-TRX-CTRL · GNU AGPL 3.0 o successiva · <a href="https://github.com/ic8tem/IP-TRX-CTRL" target="_blank" rel="noopener">codice sorgente</a></span>
   </div>

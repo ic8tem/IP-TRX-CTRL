@@ -9,6 +9,8 @@ namespace IpTrxCtrl.Net
     public static class Msg
     {
         public const byte Audio = 0x01;            // seq(u32) | pcm 16 bit
+        public const byte AudioOpus = 0x02;        // seq(u32) | pacchetto Opus (dalla 0.3.6, tra programmi 0.3.6 o successivi)
+        public const byte ListenOnly = 0x3B;       // server -> client: str operatore che trasmette (questo client è solo in ascolto, dalla 0.3.6)
         public const byte Hello = 0x10;            // nominativo
         public const byte Ping = 0x11;             // ticks(i64)
         public const byte Pong = 0x12;             // ticks(i64)

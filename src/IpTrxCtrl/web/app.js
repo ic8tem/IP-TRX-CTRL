@@ -8,7 +8,7 @@
   const M = {
     Audio: 0x01, Hello: 0x10, Ping: 0x11, Pong: 0x12, PeerInfo: 0x13, Telemetry: 0x20, SetFreqMode: 0x21, Ptt: 0x22,
     RadioStatus: 0x23, SetVfoB: 0x24, SetSplit: 0x25, VfoOp: 0x26, SetPower: 0x27, Busy: 0x33, ServerNotice: 0x34,
-    SetRadioCtl: 0x35, SpectrumOn: 0x39, Spectrum: 0x3A
+    SetRadioCtl: 0x35, SpectrumOn: 0x39, Spectrum: 0x3A, CwKey: 0x2D, ListenOnly: 0x3B
   };
   const enc = new TextEncoder(), dec = new TextDecoder();
 
@@ -242,6 +242,7 @@
     if (text && ms) noticeTimer = setTimeout(() => showNotice(''), ms);
   }
 
+  let listenOnly = '';
   function onBinary(u) {
     if (u.length === 0) return;
     const r = new R(u);
@@ -254,6 +255,7 @@
       case M.ServerNotice: showNotice(r.str(), 12000); break;
       case M.Spectrum: onSpectrum(r); break;
       case M.PeerInfo: $('kvAddr').textContent = location.hostname; break;
+      case M.ListenOnly: listenOnly = r.str(); showNotice(`Solo ascolto: la radio è usata da ${listenOnly || 'un altro operatore'}. Senti l'audio e vedi la frequenza, ma non puoi trasmettere né cambiare nulla.`); break;
       default: break;
     }
   }
@@ -521,6 +523,108 @@
     document.addEventListener('visibilitychange', () => { if (document.hidden) pttRelease(); });
   }
 
+  // ================================================================ tasto CW (0.3.6): modo tastiera (VBand, Vail) e Web MIDI
+  // Il manipolatore gira qui e manda al server i tempi del tasto (M.CwKey): il server li ripete con il ritardo fisso.
+  const key = { type: store.get('keyType', 'off'), wpm: Number(store.get('keyWpm', '20')) || 20, swap: store.get('keySwap', '0') === '1', midi: store.get('keyMidi', '0') === '1',
+    dit: false, dah: false, memDit: false, memDah: false, last: 0, timer: 0, running: false, down: false, osc: null, og: null, midiAcc: null };
+  function keyOut(down) {
+    if (key.down === down) return;
+    if (down && (!tel || !tel.txAllowed || tel.txBlocked)) { showNotice('Trasmissione non permessa: ' + ((tel && tel.txDenied) || 'bloccata dal server') + '.', 4000); return; }
+    key.down = down;
+    send(new W(M.CwKey).bool(down).i64(Math.round(performance.now())).build());
+    sidetone(down);
+  }
+  function sidetone(on) {
+    if (!actx) return;
+    try {
+      if (!key.osc) {
+        key.og = actx.createGain(); key.og.gain.value = 0; key.og.connect(actx.destination);
+        key.osc = actx.createOscillator(); key.osc.type = 'sine'; key.osc.connect(key.og); key.osc.start();
+      }
+      key.osc.frequency.value = (tel && tel.pitch > 200) ? tel.pitch : 600;
+      const t = actx.currentTime;
+      key.og.gain.cancelScheduledValues(t);
+      key.og.gain.setTargetAtTime(on ? 0.25 * (Number(store.get('vol', '70')) / 100) : 0, t, 0.004);
+    } catch { }
+  }
+  function keyerStep() {
+    // iambico: punto e linea si alternano; la memoria (modo B) aggiunge l'elemento opposto premuto durante il precedente
+    const unit = 1200 / Math.max(5, Math.min(60, key.wpm));
+    let el = null;
+    if (key.memDit || key.memDah) {
+      el = key.memDit && key.memDah ? (key.last === 1 ? 2 : 1) : key.memDit ? 1 : 2;
+      key.memDit = key.memDah = false;
+    } else if (key.dit && key.dah) el = key.last === 1 ? 2 : 1;
+    else if (key.dit) el = 1;
+    else if (key.dah) el = 2;
+    if (!el) { key.running = false; return; }
+    key.last = el;
+    const on = el === 1 ? unit : unit * 3;
+    keyOut(true);
+    const modeB = key.type === 'b';
+    const watch = setInterval(() => {   // durante l'elemento: memorizza l'altra paletta
+      if (el === 1 && key.dah) key.memDah = true;
+      if (el === 2 && key.dit) key.memDit = true;
+    }, 5);
+    key.timer = setTimeout(() => {
+      clearInterval(watch);
+      keyOut(false);
+      if (!modeB && !key.dit && !key.dah) key.memDit = key.memDah = false;
+      key.timer = setTimeout(keyerStep, unit);
+    }, on);
+  }
+  function paddle(left, down) {
+    if (key.type === 'off') return;
+    if (key.type === 'str') { keyOut(down); return; }
+    const isDit = key.swap ? !left : left;
+    if (isDit) key.dit = down; else key.dah = down;
+    if (down) { if (isDit) key.memDit = key.running; else key.memDah = key.running; }
+    if (down && !key.running) { key.running = true; key.memDit = key.memDah = false; keyerStep(); }
+  }
+  function keyReleaseAll() { key.dit = key.dah = key.memDit = key.memDah = false; clearTimeout(key.timer); key.running = false; keyOut(false); }
+  function bindKey() {
+    const typing = () => { const a = document.activeElement; return a && (a.tagName === 'INPUT' || a.tagName === 'SELECT' || a.tagName === 'TEXTAREA'); };
+    const on = (e, down) => {
+      if (key.type === 'off' || $('station').hidden || typing()) return;
+      if (e.code !== 'ControlLeft' && e.code !== 'ControlRight' && e.code !== 'BracketLeft' && e.code !== 'BracketRight') return;
+      if (down && e.repeat) { e.preventDefault(); return; }
+      e.preventDefault();
+      paddle(e.code === 'ControlLeft' || e.code === 'BracketLeft', down);
+    };
+    document.addEventListener('keydown', (e) => on(e, true));
+    document.addEventListener('keyup', (e) => on(e, false));
+    window.addEventListener('blur', keyReleaseAll);
+    const t = $('keyType'), w = $('keyWpm'), sw = $('keySwap'), mi = $('keyMidi');
+    if (!t) return;
+    t.value = key.type; w.value = key.wpm; sw.checked = key.swap; mi.checked = key.midi;
+    t.onchange = () => { keyReleaseAll(); key.type = t.value; store.set('keyType', key.type); };
+    w.onchange = () => { key.wpm = Math.max(5, Math.min(60, Number(w.value) || 20)); w.value = key.wpm; store.set('keyWpm', String(key.wpm)); };
+    sw.onchange = () => { key.swap = sw.checked; store.set('keySwap', key.swap ? '1' : '0'); };
+    mi.onchange = () => { key.midi = mi.checked; store.set('keyMidi', key.midi ? '1' : '0'); if (key.midi) openMidi(); };
+    if (key.midi) openMidi();
+  }
+  async function openMidi() {
+    if (key.midiAcc) return;
+    if (!navigator.requestMIDIAccess) { showNotice('Questo browser non ha Web MIDI: usa Chrome o Edge, oppure il modo tastiera.', 8000); return; }
+    try {
+      key.midiAcc = await navigator.requestMIDIAccess();
+      const hook = () => { for (const inp of key.midiAcc.inputs.values()) inp.onmidimessage = onMidi; };
+      hook(); key.midiAcc.onstatechange = hook;
+    } catch (e) { showNotice('MIDI non disponibile: ' + (e && e.name ? e.name : 'permesso negato') + '.', 8000); }
+  }
+  function onMidi(m) {
+    // Vail e TinyMIDI: nota 0 (Do) = tasto verticale, 1 = punto, 2 = linea (note on/off)
+    if (!key.midi || $('station').hidden) return;
+    const [st, note, vel] = m.data; const cmd = st & 0xF0;
+    if (cmd !== 0x90 && cmd !== 0x80) return;
+    const down = cmd === 0x90 && vel > 0; const n = note % 12;
+    if (n === 0) { keyOut(down); return; }
+    if (n === 1 || n === 2) {
+      if (key.type === 'off' || key.type === 'str') { key.type = 'b'; }
+      paddle(n === 1, down);   // paddle() applica già lo scambio
+    }
+  }
+
   // ================================================================ audio (8 kHz, 16 bit, blocchi da 40 ms)
   let actx = null, rxNode = null, txNode = null, gain = null, micStream = null, micReady = false, txSeq = 0;
   let lastSeq = 0, lost = 0, expected = 0, lastArr = 0, jitter = 0;
@@ -716,6 +820,7 @@
   initLogin();
   buildControls();
   bindPtt();
+  bindKey();
   bindDevices();
   bindPan();
   window.matchMedia('(min-width: 900px)').addEventListener('change', () => { if (tel) render(); });
