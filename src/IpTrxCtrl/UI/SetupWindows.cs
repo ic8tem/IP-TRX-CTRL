@@ -882,9 +882,9 @@ namespace IpTrxCtrl.UI
                 notices = st == null ? "" : new StreamReader(st).ReadToEnd();
             var sb = new StringBuilder();
             sb.AppendLine($"IP-TRX-CTRL {asm.GetName().Version}");
-            sb.AppendLine("Copyright (C) 2026 IC8TEM");
+            sb.AppendLine("Copyright (C) 2026 Costantino Cerrotta IC8TEM");
             sb.AppendLine("Questo programma è software libero: puoi ridistribuirlo e/o modificarlo secondo i termini della");
-            sb.AppendLine("GNU General Public License, versione 3 o (a tua scelta) successiva, pubblicata dalla Free Software");
+            sb.AppendLine("GNU Affero General Public License, versione 3 o (a tua scelta) successiva, pubblicata dalla Free Software");
             sb.AppendLine("Foundation. È distribuito nella speranza che sia utile, ma SENZA ALCUNA GARANZIA; senza neppure la");
             sb.AppendLine("garanzia implicita di COMMERCIABILITÀ o IDONEITÀ PER UN PARTICOLARE SCOPO. Il testo completo è in fondo.");
             sb.AppendLine("Sorgenti: https://github.com/ic8tem/IP-TRX-CTRL");
@@ -896,7 +896,7 @@ namespace IpTrxCtrl.UI
                 if (lic != null)
                 {
                     sb.AppendLine();
-                    sb.AppendLine("==================== IP-TRX-CTRL – GNU GPL 3.0 ====================");
+                    sb.AppendLine("==================== IP-TRX-CTRL – GNU AGPL 3.0 ====================");
                     sb.AppendLine(new StreamReader(lic).ReadToEnd());
                 }
             foreach (string f in new[] { "COPYING", "COPYING.LIB" })
@@ -1098,7 +1098,7 @@ Server e client devono avere versioni dello stesso «protocollo». La versione d
   Versioni          Protocollo   Compatibili con
   0.1.0 – 0.1.3     1            solo 0.1.x
   0.2.0 – 0.2.8     2            tutte le 0.2.x
-  0.3.0 - 0.3.5     3            solo 0.3.x (numero a 10 cifre, codice fisso, più client, sicurezza TX, panadapter; 0.3.1 browser;
+  0.3.0 - 0.3.6     3            solo 0.3.x (numero a 10 cifre, codice fisso, più client, sicurezza TX, panadapter; 0.3.1 browser;
                                  0.3.2 aggiornamenti automatici)
 Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   scelta delle schede audio del server dal client ......... 0.2.1 o successiva

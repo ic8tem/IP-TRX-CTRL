@@ -1,5 +1,7 @@
 # Licenze dei componenti di terze parti
 
+IP-TRX-CTRL è distribuito secondo la **GNU Affero General Public License 3.0 o successiva** (dalla 0.3.6; fino alla 0.3.5 GPL 3.0 o successiva): chi lo modifica e fa usare la sua versione ad altri attraverso la rete deve offrire anche a loro il codice sorgente.
+
 IP-TRX-CTRL include o usa i componenti elencati qui sotto. Il programma contiene una finestra **Informazioni e licenze** con i testi completi; prima di ogni distribuzione titolari e testi vanno verificati sui pacchetti effettivamente usati.
 
 | Componente | Licenza | Sito |

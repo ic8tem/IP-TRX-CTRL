@@ -31,6 +31,8 @@ I collegamenti portano solo ai file di questa release su github.com; gli stessi 
 
 ## Novità
 
+Novità della 0.3.6: IP-TRX-CTRL passa alla licenza **GNU Affero General Public License 3.0 o successiva** (AGPL-3.0-or-later): è la GPL 3 con una clausola in più per i programmi usati in rete. Chi modifica il programma e fa usare la sua versione ad altri attraverso la rete, per esempio con la pagina «Accesso dal browser», deve offrire anche a loro il codice sorgente. La pagina web ha ora il collegamento al codice sorgente. Le versioni fino alla 0.3.5 restano sotto la GPL 3.0 o successiva. Nessun cambiamento nel funzionamento.
+
 Novità della 0.3.5: pacchetti per **Windows 7 SP1, 8 e 8.1** (`-win7-x64-`, `-win7-x86-`, con .NET 6, come YA-MS); i pacchetti Windows normali richiedono Windows 10 o 11 e l'installatore lo dice subito. In cima a questa pagina la tabella «Scarica la versione per il tuo sistema» con il collegamento a ogni pacchetto.
 
 Novità della 0.3.4 (rete): in **Impostazioni › PORTE APERTE SUL ROUTER** si scelgono due porte (controllo TCP, audio TCP e UDP) da inoltrare a mano sul router, con l'elenco delle porte da aprire; se all'UPnP risponde un apparecchio della rete che non è il router il programma non lo usa e lo dice; con doppio NAT o CGNAT prova una porta sola; una porta che risponde ma non porta al programma conta come chiusa; tipo di NAT con server STUN di due gestori diversi.
@@ -51,6 +53,8 @@ Dalla 0.3.2: **aggiornamenti automatici** e pacchetti per Windows su ARM, Fedora
 
 **Aggiornamenti automatici** (dalla 0.3.2, si spengono nelle Impostazioni): all'avvio e ogni 6 ore il programma guarda l'ultima release, scarica il pacchetto, ne controlla l'impronta SHA-256 e si riavvia nella versione nuova, **solo quando non c'è una sessione in corso e non si trasmette**. Valgono per installatore e zip di Windows, tar.gz portatili, AppImage e IP-TRX-CTRL.app sul Mac; i pacchetti di sistema (.deb, .rpm, Arch, Slackware) avvisano soltanto e si aggiornano con lo stesso comando dell'installazione.
 
-**Compatibilità**: server e client devono essere entrambi 0.3.x (protocollo 3). Tabella completa: [Versioni compatibili](https://github.com/ic8tem/IP-TRX-CTRL/blob/main/docs/Versioni-compatibili.md).
+**Compatibilità**: server e client devono essere entrambi 0.3.x (protocollo 3).
+
+**Licenza**: GNU AGPL 3.0 o successiva (file `LICENSE`). Tabella completa: [Versioni compatibili](https://github.com/ic8tem/IP-TRX-CTRL/blob/main/docs/Versioni-compatibili.md).
 
 `hamlib-…-sorgenti.tar.gz`: sorgenti di Hamlib (GPL 2 / LGPL 2.1), la stessa versione di rigctld inclusa negli installatori Windows.

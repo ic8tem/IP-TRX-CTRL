@@ -64,7 +64,7 @@ Server e client devono avere versioni dello stesso protocollo:
 |---|---|---|
 | 0.1.0 – 0.1.3 | 1 | solo le 0.1.x |
 | 0.2.0 – 0.2.8 | 2 | tutte le 0.2.x (alcune funzioni richiedono una versione minima su entrambi i PC) |
-| 0.3.0 – 0.3.5 | 3 | solo le 0.3.x (numero a 10 cifre, codice fisso del server, più client sul server, sicurezza in trasmissione, panadapter; dalla 0.3.1 accesso dal browser; dalla 0.3.2 aggiornamenti automatici) |
+| 0.3.0 – 0.3.6 | 3 | solo le 0.3.x (numero a 10 cifre, codice fisso del server, più client sul server, sicurezza in trasmissione, panadapter; dalla 0.3.1 accesso dal browser; dalla 0.3.2 aggiornamenti automatici) |
 
 Dettagli e controllo automatico: [docs/Versioni-compatibili.md](docs/Versioni-compatibili.md).
 
@@ -74,4 +74,4 @@ IP-TRX-CTRL è gratuito. Se ti è utile e vuoi sostenerne lo sviluppo: [ko-fi.co
 
 ## Licenza
 
-IP-TRX-CTRL è software libero, Copyright (C) 2026 IC8TEM, distribuito secondo la **GNU General Public License versione 3 o successiva** (file [`LICENSE`](LICENSE)), senza alcuna garanzia. Le licenze dei componenti di terze parti sono in `THIRD-PARTY-NOTICES.txt`.
+IP-TRX-CTRL è software libero, Copyright (C) 2026 Costantino Cerrotta IC8TEM, distribuito secondo la **GNU Affero General Public License versione 3 o successiva** (AGPL-3.0-or-later, file [`LICENSE`](LICENSE)), senza alcuna garanzia. È la GPL 3 con una clausola in più per i programmi usati in rete: chi modifica il programma e fa usare la sua versione ad altri attraverso la rete (per esempio la pagina «Accesso dal browser») deve offrire anche a loro il codice sorgente. Dalla 0.3.6; le versioni fino alla 0.3.5 restano sotto la GPL 3.0 o successiva. Il codice GPL 3 di altri progetti (per esempio wfview) resta utilizzabile, perché le due licenze si possono combinare. Le licenze dei componenti di terze parti sono in `THIRD-PARTY-NOTICES.txt`.

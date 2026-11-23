@@ -23,7 +23,7 @@ Name:           ip-trx-ctrl
 Version:        ${RV}
 Release:        1
 Summary:        Comando a distanza di una radio HF via internet
-License:        GPL-3.0-or-later
+License:        AGPL-3.0-or-later
 URL:            https://github.com/ic8tem/IP-TRX-CTRL
 Packager:       ic8tem <ic8tem@users.noreply.github.com>
 AutoReqProv:    no
