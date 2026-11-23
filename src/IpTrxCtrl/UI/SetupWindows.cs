@@ -647,7 +647,6 @@ namespace IpTrxCtrl.UI
             qNote.TextWrapping = TextWrapping.Wrap;
 
             // ---- 0.3.7: soluzioni adottate da remoteAudio, PiRO, rustyrig, rigcontrol e CAESAR
-            var voxOn = new CheckBox { Content = "VOX: il PTT parte da solo quando parli (client)", IsChecked = s.VoxEnabled };
             var voxDb = new TextBox { Text = s.VoxThresholdDb.ToString(CultureInfo.InvariantCulture), Width = 60 };
             var voxHold = new TextBox { Text = s.VoxHoldMs.ToString(CultureInfo.InvariantCulture), Width = 70 };
             var sqOn = new CheckBox { Content = "Squelch vocale in SSB, AM e FM: apre solo con la voce, non con portanti o scariche", IsChecked = s.VoiceSquelch };
@@ -655,7 +654,7 @@ namespace IpTrxCtrl.UI
             var recQso = new CheckBox { Content = "Registra l'audio di ogni QSO aperto nel «Registro» (dal nominativo scritto fino a «Registra»)", IsChecked = s.RecordEveryQso };
             int[] rates = { 8000, 12000, 16000, 24000, 32000 };
             var opusRate = new ComboBox { ItemsSource = rates.Select(r => $"{r / 1000} kbit/s").ToList(), SelectedIndex = Math.Max(0, Array.IndexOf(rates, s.OpusBitrate)), Width = 130 };
-            var voxNote = Ui.Sub("VOX: soglia in dBFS sul microfono (più bassa = più sensibile, di solito tra -40 e -25) e tenuta in millisecondi dopo l'ultima parola. "
+            var voxNote = Ui.Sub("VOX (si accende solo con il pulsante «VOX» accanto al PTT del client, ed è spento a ogni avvio): soglia in dBFS sul microfono (più bassa = più sensibile, di solito tra -40 e -25) e tenuta in millisecondi dopo l'ultima parola. "
                 + "Serve la cuffia: con l'altoparlante il VOX si accenderebbe con l'audio della radio (il programma prova a riconoscerlo e lo ignora). "
                 + "Opus: banda dell'audio compresso in ciascun verso; 16 kbit/s va bene quasi sempre, 8 kbit/s per il telefono in giro, 24-32 per la musica dei net.", 12);
             voxNote.TextWrapping = TextWrapping.Wrap;
@@ -747,7 +746,6 @@ namespace IpTrxCtrl.UI
                     node.Rig.PushTelemetry();
                 }
                 // 0.3.7
-                s.VoxEnabled = voxOn.IsChecked == true;
                 if (int.TryParse(voxDb.Text, out int vdb)) s.VoxThresholdDb = Math.Clamp(vdb, -60, -5);
                 if (int.TryParse(voxHold.Text, out int vh)) s.VoxHoldMs = Math.Clamp(vh, 100, 5000);
                 s.VoiceSquelch = sqOn.IsChecked == true;
@@ -831,8 +829,8 @@ namespace IpTrxCtrl.UI
                     Ui.Panel(Ui.Col(10, Ui.H2("TASTO CW USB E MIDI"), ukOn,
                         Ui.Row(10, ukType, Ui.Sub("velocità", 13), ukWpm, Ui.Sub("WPM", 13)), Ui.Row(16, ukSwap, ukTone),
                         mkOn, Ui.Row(8, Ui.Sub("Dispositivo MIDI", 13), mkDev), ukNote)),
-                    Ui.Panel(Ui.Col(10, Ui.H2("VOX, SQUELCH VOCALE E REGISTRAZIONE"), voxOn,
-                        Ui.Row(8, Ui.Sub("soglia", 13), voxDb, Ui.Sub("dBFS · tenuta", 13), voxHold, Ui.Sub("ms", 13)),
+                    Ui.Panel(Ui.Col(10, Ui.H2("VOX, SQUELCH VOCALE E REGISTRAZIONE"),
+                        Ui.Row(8, Ui.Sub("VOX: soglia", 13), voxDb, Ui.Sub("dBFS · tenuta", 13), voxHold, Ui.Sub("ms", 13)),
                         sqOn, Ui.Row(8, Ui.Sub("tenuta dello squelch", 13), sqHold, Ui.Sub("ms", 13)),
                         recQso, Ui.Row(8, Ui.Sub("Audio Opus", 13), opusRate), voxNote)),
                     Ui.Panel(Ui.Col(10, Ui.H2("WINKEYER PER I PROGRAMMI DI LOG (CLIENT)"), wkOn, Ui.Row(8, Ui.Sub("Porta", 13), wkPort), wkNote)),
@@ -1184,8 +1182,9 @@ interno verso il flusso CI-V della radio. Protocollo dalle fonti di wfview (GPL 
   https://gitlab.com/eliggett/wfview   https://github.com/nonoo/kappanhang
 
 FUNZIONI DELLA 0.3.7 (prese da remoteAudio, PiRO, rustyrig, rigcontrol e CAESAR)
-- VOX (client): scheda Audio › «VOX». Il PTT parte da solo quando parli e si rilascia dopo la tenuta. Soglia e
-  tenuta in Impostazioni › VOX, squelch vocale e registrazione. Serve la cuffia.
+- VOX (client): pulsante «VOX» accanto al PTT. Il PTT parte da solo quando parli e si rilascia dopo la tenuta.
+  Si accende solo con il pulsante ed è spento a ogni avvio. Soglia e tenuta in Impostazioni › VOX, squelch
+  vocale e registrazione. Serve la cuffia.
 - Squelch vocale (client): scheda Audio › «Squelch vocale». In SSB, AM e FM toglie il fruscio tra un intervento e
   l'altro: apre quando riconosce una voce, non con portanti, toni CW o scariche. Nessuna soglia da regolare.
 - Registrazione: scheda Audio › «● Registra» salva un WAV (8 kHz) con ricezione e trasmissione nella cartella

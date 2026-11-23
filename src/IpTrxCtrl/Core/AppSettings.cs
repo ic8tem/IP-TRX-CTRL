@@ -141,7 +141,8 @@ namespace IpTrxCtrl.Core
         public int IcomLanPort { get; set; } = 50001;
         public string IcomLanUser { get; set; } = "";
         // 0.3.7 (soluzioni adottate da remoteAudio, PiRO, rustyrig, rigcontrol, CAESAR)
-        public bool VoxEnabled { get; set; }                 // client: PTT automatico quando si parla (remoteAudio)
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool VoxEnabled { get; set; }                 // client: PTT automatico quando si parla (remoteAudio); solo dal pulsante, non si salva
         public int VoxThresholdDb { get; set; } = -32;       // dBFS sul microfono
         public int VoxHoldMs { get; set; } = 700;            // tenuta dopo l'ultima parola
         public int OpusBitrate { get; set; } = 16000;        // 8000-32000 bit/s (remoteAudio)

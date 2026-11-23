@@ -560,7 +560,7 @@ namespace IpTrxCtrl.UI
                 StartPaddle();
                 StartWinKeyer();
                 _node.ApplyAudioSettings();
-                ChkVox.IsChecked = _s.VoxEnabled; ChkSquelch.IsChecked = _s.VoiceSquelch;
+                ChkSquelch.IsChecked = _s.VoiceSquelch;
                 if ((w.PanChanged || w.RigChanged) && _s.Role == NodeRole.Server) _node.RestartPanadapter();
                 if (w.WebChanged && _s.Role == NodeRole.Server) _node.RestartWeb();
                 ApplyOptionalParts();

@@ -22,13 +22,16 @@ namespace IpTrxCtrl.UI
 
         private void InitAdopted()
         {
-            ChkVox.IsChecked = _s.VoxEnabled;
+            // VOX: solo con il pulsante accanto al PTT del client; all'avvio è sempre spento e la scelta non si salva
+            _s.VoxEnabled = false;
+            BtnVox.IsChecked = false;
             ChkSquelch.IsChecked = _s.VoiceSquelch;
-            ChkVox.IsCheckedChanged += (_, _) =>
+            BtnVox.IsCheckedChanged += (_, _) =>
             {
-                _s.VoxEnabled = ChkVox.IsChecked == true;
+                _s.VoxEnabled = BtnVox.IsChecked == true && IsClient;
                 if (!_s.VoxEnabled) _node.VoxRelease();
-                _s.Save();
+                BtnVox.Content = _s.VoxEnabled ? "VOX ●" : "VOX";
+                SessionLog.Write(_s.VoxEnabled ? "VOX attivato dal pulsante" : "VOX spento dal pulsante");
             };
             ChkSquelch.IsCheckedChanged += (_, _) =>
             {
@@ -75,7 +78,8 @@ namespace IpTrxCtrl.UI
 
         private void ApplyAdoptedRole()
         {
-            ChkVox.IsVisible = IsClient;
+            BtnVox.IsVisible = IsClient;
+            if (!IsClient && BtnVox.IsChecked == true) BtnVox.IsChecked = false;
             ChkSquelch.IsVisible = IsClient;
         }
 

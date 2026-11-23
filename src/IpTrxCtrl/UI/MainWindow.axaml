@@ -213,10 +213,15 @@
               <TextBlock x:Name="TxtGain" Grid.Row="4" Grid.Column="2" Classes="mono" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center" Text="—" />
             </Grid>
             <Rectangle Height="1" Fill="{DynamicResource B.Border}" Margin="0,2" />
-            <Border x:Name="BtnPtt" Height="58" CornerRadius="10" BorderThickness="2" Cursor="Hand"
-                    Background="{DynamicResource B.Inset}" BorderBrush="{DynamicResource B.Border}">
-              <TextBlock x:Name="TxtPtt" Text="PTT (PREMI E TIENI)" FontSize="15" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
-            </Border>
+            <Grid ColumnDefinitions="*,Auto">
+              <Border x:Name="BtnPtt" Height="58" CornerRadius="10" BorderThickness="2" Cursor="Hand"
+                      Background="{DynamicResource B.Inset}" BorderBrush="{DynamicResource B.Border}">
+                <TextBlock x:Name="TxtPtt" Text="PTT (PREMI E TIENI)" FontSize="15" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+              </Border>
+              <ToggleButton x:Name="BtnVox" Grid.Column="1" Height="58" MinWidth="64" Margin="6,0,0,0" FontSize="14" FontWeight="Bold" Content="VOX"
+                            IsVisible="False" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                            ToolTip.Tip="Attiva il VOX: il PTT parte da solo quando parli e si rilascia dopo la tenuta. Resta attivo finché non lo spegni; alla riapertura del programma è spento. Usa la cuffia. Soglia e tenuta in Impostazioni." />
+            </Grid>
             <TextBlock x:Name="TxtTxInfo" Classes="sub" FontSize="11" TextWrapping="Wrap" IsVisible="False" />
             <CheckBox x:Name="ChkSpace" Content="Anche con la barra spaziatrice" FontSize="12" />
             <WrapPanel x:Name="PanelPttInfo">
@@ -460,7 +465,6 @@
                 </Border>
               </Grid>
               <WrapPanel x:Name="RowAudioExtra">
-                <CheckBox x:Name="ChkVox" Content="VOX (parli e trasmette)" Margin="0,0,14,0" ToolTip.Tip="Il PTT parte da solo quando parli e si rilascia dopo il tempo di tenuta. Usa la cuffia: l'altoparlante farebbe scattare il VOX. Soglia e tenuta in Impostazioni." />
                 <CheckBox x:Name="ChkSquelch" Content="Squelch vocale" Margin="0,0,14,0" ToolTip.Tip="In SSB, AM e FM toglie il fruscio tra un intervento e l'altro: apre solo quando sente una voce, non con portanti o scariche." />
                 <Button x:Name="BtnRec" Classes="small" Content="● Registra" Margin="0,0,8,0" />
                 <Button x:Name="BtnRecFolder" Classes="small" Content="Cartella" Margin="0,0,8,0" />
