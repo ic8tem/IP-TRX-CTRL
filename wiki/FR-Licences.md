@@ -13,6 +13,7 @@ IP-TRX-CTRL inclut ou utilise les composants listés ci-dessous. Le programme a 
 | MQTTnet | MIT | https://github.com/dotnet/MQTTnet |
 | Open.NAT | MIT | https://github.com/lontivero/Open.NAT |
 | Concentus (codec Opus, depuis la 0.3.6) | BSD-3-Clause | https://github.com/lostromb/concentus |
+| HamNoise (réduction de bruit neuronale, depuis la 0.3.7) | MIT | https://github.com/e04/HamNoise |
 | wfview (protocole Icom en réseau, réécrit en C#, depuis la 0.3.6) | GNU GPL 3.0 | https://gitlab.com/eliggett/wfview |
 | .NET Runtime, System.IO.Ports | MIT | https://github.com/dotnet/runtime |
 

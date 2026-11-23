@@ -6,7 +6,7 @@ Server e client devono avere versioni dello stesso **protocollo**. Il protocollo
 |---|---|---|
 | 0.1.0 – 0.1.3 | 1 | solo le 0.1.x |
 | 0.2.0 – 0.2.8 | 2 | tutte le 0.2.x |
-| 0.3.0 – 0.3.6 | 3 | solo le 0.3.x (numero a 10 cifre, codice fisso del server, più client sul server, sicurezza in trasmissione, panadapter; dalla 0.3.1 accesso dal browser; dalla 0.3.2 aggiornamenti automatici) |
+| 0.3.0 – 0.3.7 | 3 | solo le 0.3.x (numero a 10 cifre, codice fisso del server, più client sul server, sicurezza in trasmissione, panadapter; dalla 0.3.1 accesso dal browser; dalla 0.3.2 aggiornamenti automatici) |
 
 Una 0.1.x e una 0.2.x **non** vanno usate insieme, e nemmeno una 0.2.x e una 0.3.x: aggiorna tutti e due i PC. La 0.3.0 cambia anche il formato della telemetria e aggiunge messaggi nuovi, per questo non parla con le versioni precedenti. La 0.3.0 cambia l'abbinamento (numero a 10 cifre al posto del codice lungo); le chiavi già scambiate restano valide e passano da sole nell'elenco dei server del client e nell'elenco dei client del server.
 

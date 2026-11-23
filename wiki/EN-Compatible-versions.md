@@ -6,7 +6,7 @@ Server and client must have versions of the same **protocol**. The protocol chan
 |---|---|---|
 | 0.1.0 – 0.1.3 | 1 | only 0.1.x |
 | 0.2.0 – 0.2.8 | 2 | all 0.2.x |
-| 0.3.0 – 0.3.6 | 3 | only 0.3.x (10-digit number, the server's fixed code, several clients on the server, transmit safety, panadapter; since 0.3.1 browser access; since 0.3.2 automatic updates) |
+| 0.3.0 – 0.3.7 | 3 | only 0.3.x (10-digit number, the server's fixed code, several clients on the server, transmit safety, panadapter; since 0.3.1 browser access; since 0.3.2 automatic updates) |
 
 A 0.1.x and a 0.2.x must **not** be used together, nor a 0.2.x and a 0.3.x: update both PCs. 0.3.0 also changes the telemetry format and adds new messages, which is why it does not talk to earlier versions. 0.3.0 changes pairing (10-digit number instead of the long code); keys already exchanged stay valid and move by themselves into the client's list of servers and the server's list of clients.
 
