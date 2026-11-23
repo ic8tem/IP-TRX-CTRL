@@ -7,11 +7,11 @@ Mit IP-TRX-CTRL bedient man ein KW-Funkgerät aus der Ferne über das Internet, 
 
 Die Rollen werden beim ersten Start gewählt und lassen sich jederzeit tauschen.
 
-> **Aktuelle Version: 0.3.5.** Die Bilder sind echte Aufnahmen des Programms (ein Client verbunden mit einem Server, Funkgerät von Hamlib simuliert). Die Oberfläche des Programms ist italienisch: diese Seiten nennen die Bedeutung jeder Beschriftung.
+> **Aktuelle Version: 0.3.6.** Die Bilder sind echte Aufnahmen des Programms (ein Client verbunden mit einem Server, Funkgerät von Hamlib simuliert). Die Oberfläche des Programms ist italienisch: diese Seiten nennen die Bedeutung jeder Beschriftung.
 
 ## Kurz gesagt
 
-- Audio in beide Richtungen immer mit **8 kHz, 16 Bit mono**, verschlüsselt mit AES-256.
+- Audio in beide Richtungen mit 8 kHz, verschlüsselt mit AES-256: **Opus** zwischen Programmen ab 0.3.6, 16-Bit-Mono-PCM mit älteren Versionen und dem Browser.
 - Ports, Schlüssel und Wiederverbindungen automatisch; der Server wird auch nach einem IP-Wechsel über einen öffentlichen MQTT-Broker wiedergefunden.
 - CAT-Steuerung des Geräts: Frequenz, Betriebsart, VFO A/B mit Split, Sendeleistung, Anzeige von S-Meter, Leistung und SWR, SWR-Schutz mit Sendesperre.
 - **Keyer** im Client (abgeleitet vom Programm WavPTT): in SSB acht WAV-Meldungen auf F1…F8, in CW acht Textmakros, die das Gerät sendet.
@@ -22,6 +22,7 @@ Die Rollen werden beim ersten Start gewählt und lassen sich jederzeit tauschen.
 - Seit 0.3.0: Sicherheit beim Senden (Maximalzeit, keine Frequenzwechsel beim Senden, Vorrang für den Operator am Gerät, Clients nur mit Empfang), Gerätebedienung (NR, NB, Notch, ATT, Vorverstärker, AGC, Kompressor, Squelch, ALC), Bänder, Schritt und Speicher, der [Panadapter des Funkgeräts](DE-Panadapter), Problembericht und Hinweis auf neue Versionen. Siehe [Funkgerät, Split und Leistung](DE-Funkgerät-Split-und-Leistung) und [Hauptfenster](DE-Hauptfenster).
 - Seit 0.3.1: [Zugriff über den Browser](DE-Zugriff-über-den-Browser) von Telefon, Tablet und PC, mit der Seite «Trova il server» (Server finden).
 - Seit 0.3.2: automatische Updates (nicht für die Pakete .deb, .rpm, Arch und Slackware) und Pakete für Windows ARM, Fedora/openSUSE, Arch, Slackware, AppImage und Alpine: siehe [Protokolle und Fehlersuche](DE-Protokolle-und-Fehlersuche).
+- Seit 0.3.6: Opus-Audio, mehrere Zuhörer am selben Server, CW-Taste über USB und MIDI, QSO-Logbuch mit UDP-Versand an Logprogramme und ADIF-Export, Icom-Funkgeräte im Netzwerk ohne PC daneben: siehe [Neu in 0.3.6](DE-Neu-in-0.3.6). Lizenz GNU AGPL 3.0 oder später, mit Link zum Quellcode auf der Webseite.
 - Seit 0.3.5: Pakete für Windows 7 SP1, 8 und 8.1 (`-win7-x64-`, `-win7-x86-`, mit .NET 6); oben in jeder Release die Tabelle mit dem Link zu jedem Paket.
 - Seit 0.3.4: selbst gewählte Ports in den Einstellungen (mit der Liste der beiden zu öffnenden Ports); doppeltes NAT und UPnP von einem Gerät, das nicht der Router ist, werden erkannt.
 - Seit 0.3.3: unter Linux, Raspberry Pi und Mac hängen Ersteinrichtung, Einstellungen und Lizenzen nicht mehr; Beschriftungen SWR und Gain sichtbar.
@@ -35,6 +36,7 @@ Vor dem Aktualisieren eines der beiden PCs die [kompatiblen Versionen](DE-Kompat
 ## Seiten
 
 - [Videokurs](DE-Videokurs)
+- [Neu in 0.3.6](DE-Neu-in-0.3.6)
 - [Hauptfenster](DE-Hauptfenster)
 - [Kopplung und MQTT](DE-Kopplung-und-MQTT)
 - [Ports und Verbindung](DE-Ports-und-Verbindung)

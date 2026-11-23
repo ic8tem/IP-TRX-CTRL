@@ -1,5 +1,7 @@
 # Licences des composants tiers
 
+IP-TRX-CTRL est distribué sous la **GNU Affero General Public License 3.0 ou ultérieure** (depuis la 0.3.6 ; jusqu'à la 0.3.5, GPL 3.0 ou ultérieure) : qui le modifie et fait utiliser sa version à d'autres par le réseau doit leur proposer aussi le code source.
+
 IP-TRX-CTRL inclut ou utilise les composants listés ci-dessous. Le programme a une fenêtre **Informazioni e licenze** (informations et licences) avec les textes complets ; avant chaque distribution, titulaires et textes doivent être vérifiés sur les paquets réellement utilisés.
 
 | Composant | Licence | Site |
@@ -10,6 +12,8 @@ IP-TRX-CTRL inclut ou utilise les composants listés ci-dessous. Le programme a 
 | Inter (police) | SIL Open Font License 1.1 | https://github.com/rsms/inter |
 | MQTTnet | MIT | https://github.com/dotnet/MQTTnet |
 | Open.NAT | MIT | https://github.com/lontivero/Open.NAT |
+| Concentus (codec Opus, depuis la 0.3.6) | BSD-3-Clause | https://github.com/lostromb/concentus |
+| wfview (protocole Icom en réseau, réécrit en C#, depuis la 0.3.6) | GNU GPL 3.0 | https://gitlab.com/eliggett/wfview |
 | .NET Runtime, System.IO.Ports | MIT | https://github.com/dotnet/runtime |
 
 Remarques :
