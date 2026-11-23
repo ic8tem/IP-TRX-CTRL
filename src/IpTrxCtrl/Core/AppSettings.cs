@@ -148,6 +148,8 @@ namespace IpTrxCtrl.Core
         public int OpusBitrate { get; set; } = 16000;        // 8000-32000 bit/s (remoteAudio)
         public bool EchoTxToListeners { get; set; } = true;  // server: gli ascoltatori sentono anche l'operatore (PiRO)
         public bool VoiceSquelch { get; set; }               // squelch vocale in SSB, AM, FM (PiRO)
+        public bool NeuralNr { get; set; }                   // riduzione del rumore neurale HamNoise (PiRO, HamNoise di e04)
+        public int NeuralNrPercent { get; set; } = 100;      // quanto filtrare: 25, 50, 75, 100
         public int VoiceSquelchHoldMs { get; set; } = 1200;
         public bool RecordEveryQso { get; set; }             // registrazione automatica durante il QSO aperto nel registro (rustyrig)
         public bool Ipv6Direct { get; set; } = true;         // collegamento diretto IPv6 quando entrambi i PC lo hanno (rigcontrol)

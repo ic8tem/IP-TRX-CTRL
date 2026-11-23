@@ -26,6 +26,18 @@ namespace IpTrxCtrl.UI
             _s.VoxEnabled = false;
             BtnVox.IsChecked = false;
             ChkSquelch.IsChecked = _s.VoiceSquelch;
+            // riduzione del rumore neurale (HamNoise)
+            int[] nrLevels = { 25, 50, 75, 100 };
+            CmbNr.ItemsSource = nrLevels.Select(v => v + " %").ToList();
+            int nrIx = Array.IndexOf(nrLevels, _s.NeuralNrPercent);
+            CmbNr.SelectedIndex = nrIx >= 0 ? nrIx : 3;
+            ChkNr.IsChecked = _s.NeuralNr;
+            ChkNr.IsCheckedChanged += (_, _) => { _s.NeuralNr = ChkNr.IsChecked == true; _node.ApplyAudioSettings(); _s.Save(); };
+            CmbNr.SelectionChanged += (_, _) =>
+            {
+                if (CmbNr.SelectedIndex < 0) return;
+                _s.NeuralNrPercent = nrLevels[CmbNr.SelectedIndex]; _node.ApplyAudioSettings(); _s.Save();
+            };
             BtnVox.IsCheckedChanged += (_, _) =>
             {
                 _s.VoxEnabled = BtnVox.IsChecked == true && IsClient;
@@ -81,6 +93,7 @@ namespace IpTrxCtrl.UI
             BtnVox.IsVisible = IsClient;
             if (!IsClient && BtnVox.IsChecked == true) BtnVox.IsChecked = false;
             ChkSquelch.IsVisible = IsClient;
+            ChkNr.IsVisible = IsClient; CmbNr.IsVisible = IsClient;
         }
 
         private void AppendNote(Node.NoteItem n)
@@ -104,6 +117,11 @@ namespace IpTrxCtrl.UI
         private void TickAdopted()
         {
             if (_node.Recorder.Active) RefreshRec();
+            if (_node.Denoiser.LastError.Length > 0 && ChkNr.IsChecked == true)
+            {
+                TxtNotice.Text = "NR neurale spento: " + _node.Denoiser.LastError; TxtNotice.IsVisible = true;
+                ChkNr.IsChecked = false;
+            }
         }
 
         // ---- emulazione WinKeyer (client)

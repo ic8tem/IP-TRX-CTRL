@@ -1185,6 +1185,9 @@ FUNZIONI DELLA 0.3.7 (prese da remoteAudio, PiRO, rustyrig, rigcontrol e CAESAR)
 - VOX (client): pulsante «VOX» accanto al PTT. Il PTT parte da solo quando parli e si rilascia dopo la tenuta.
   Si accende solo con il pulsante ed è spento a ogni avvio. Soglia e tenuta in Impostazioni › VOX, squelch
   vocale e registrazione. Serve la cuffia.
+- NR neurale (client): scheda Audio › «NR neurale». Rete neurale HamNoise (di e04, la stessa di PiRO) addestrata
+  su segnali HF, con un modello per la fonia (SSB, AM, FM) e uno per il CW; nei modi dati non agisce. Il valore
+  25-100 % dice quanto filtrare: con segnali deboli un valore più basso lascia passare più segnale. ~60 ms di ritardo.
 - Squelch vocale (client): scheda Audio › «Squelch vocale». In SSB, AM e FM toglie il fruscio tra un intervento e
   l'altro: apre quando riconosce una voce, non con portanti, toni CW o scariche. Nessuna soglia da regolare.
 - Registrazione: scheda Audio › «● Registra» salva un WAV (8 kHz) con ricezione e trasmissione nella cartella

@@ -465,6 +465,8 @@
                 </Border>
               </Grid>
               <WrapPanel x:Name="RowAudioExtra">
+                <CheckBox x:Name="ChkNr" Content="NR neurale" Margin="0,0,4,0" ToolTip.Tip="Riduzione del rumore con la rete neurale HamNoise, addestrata su segnali HF: modello per la fonia in SSB/AM/FM e per il CW. Non agisce nei modi dati. Aggiunge circa 60 ms di ritardo." />
+                <ComboBox x:Name="CmbNr" MinHeight="28" FontSize="12" Width="80" Margin="0,0,14,0" ToolTip.Tip="Quanto filtrare: con i segnali deboli un valore più basso lascia passare più segnale" />
                 <CheckBox x:Name="ChkSquelch" Content="Squelch vocale" Margin="0,0,14,0" ToolTip.Tip="In SSB, AM e FM toglie il fruscio tra un intervento e l'altro: apre solo quando sente una voce, non con portanti o scariche." />
                 <Button x:Name="BtnRec" Classes="small" Content="● Registra" Margin="0,0,8,0" />
                 <Button x:Name="BtnRecFolder" Classes="small" Content="Cartella" Margin="0,0,8,0" />

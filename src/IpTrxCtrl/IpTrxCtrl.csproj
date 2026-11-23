@@ -54,6 +54,9 @@
     <AvaloniaResource Include="Assets\**" />
     <EmbeddedResource Include="..\..\THIRD-PARTY-NOTICES.txt" LogicalName="notices/THIRD-PARTY-NOTICES.txt" />
     <EmbeddedResource Include="..\..\LICENSE" LogicalName="notices/LICENSE" />
+    <!-- 0.3.7: modelli di HamNoise (MIT) per la riduzione del rumore neurale -->
+    <EmbeddedResource Include="models\hamnoise-voice.bin" LogicalName="hamnoise/voice" />
+    <EmbeddedResource Include="models\hamnoise-cw.bin" LogicalName="hamnoise/cw" />
     <!-- pagina web (accesso dal browser): servita dal server; «trova-server.html» si salva anche su file -->
     <EmbeddedResource Include="web\**\*" LogicalName="web/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>

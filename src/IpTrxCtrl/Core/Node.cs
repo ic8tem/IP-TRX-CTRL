@@ -261,6 +261,8 @@ namespace IpTrxCtrl.Core
             Audio.Playback.PrefillSamples = Math.Clamp(_s.PrefillMs, 20, 1000) * AudioEngine.SampleRate / 1000;
             _opusTx.SetBitrate(_s.OpusBitrate);
             Squelch.Enabled = !IsServer && _s.VoiceSquelch;
+            Denoiser.Enabled = !IsServer && _s.NeuralNr;
+            Denoiser.Strength = Math.Clamp(_s.NeuralNrPercent, 10, 100) / 100f;
             Squelch.HoldMs = Math.Clamp(_s.VoiceSquelchHoldMs, 200, 5000);
         }
 
@@ -2365,7 +2367,11 @@ namespace IpTrxCtrl.Core
             else
             {
                 NoteRxLevel(pcm);
-                if (Squelch.Enabled && IsVoiceMode(LastTelemetry.Mode)) Squelch.Process(pcm, pcm.Length);
+                string mode = LastTelemetry.Mode ?? "";
+                bool cwMode = mode.StartsWith("CW", StringComparison.OrdinalIgnoreCase);
+                // 0.3.7: riduzione del rumore neurale (HamNoise) solo in fonia e CW, mai nei modi dati
+                if (Denoiser.Enabled && (cwMode || IsVoiceMode(mode))) Denoiser.Process(pcm, pcm.Length, cwMode);
+                if (Squelch.Enabled && IsVoiceMode(mode)) Squelch.Process(pcm, pcm.Length);
             }
             Recorder.Write(pcm, pcm.Length);
             Audio.Playback.Write(pcm, 0, pcm.Length);
@@ -2380,6 +2386,7 @@ namespace IpTrxCtrl.Core
 
         // ---- 0.3.7: squelch vocale (PiRO) e registrazione (rustyrig)
         public VoiceSquelch Squelch { get; } = new();
+        public NeuralDenoiser Denoiser { get; } = new();
         public Recorder Recorder { get; } = new();
 
         // ---- 0.3.7: VOX del client (remoteAudio): il PTT parte da solo quando si parla
@@ -2430,6 +2437,7 @@ namespace IpTrxCtrl.Core
             Audio.Playback.Reset();
             _opusRx.Reset();
             Squelch.Reset();
+            Denoiser.Reset();
         }
 
         private void OnCaptured(byte[] pcm, int len)
