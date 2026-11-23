@@ -689,7 +689,7 @@ namespace IpTrxCtrl.Core
             try { _ctlListener?.Stop(); } catch { }
             try { _audListener?.Stop(); } catch { }
             _ctlListener = null; _audListener = null;
-            await StopV6Async();
+            await StopV6LockedAsync();
             if (closeChannels) CloseChannels();
             if (_ports != null) await _ports.CloseAllAsync();
             _ports = null;
@@ -715,7 +715,23 @@ namespace IpTrxCtrl.Core
         /// Server: con un IPv6 pubblico ascolta anche su IPv6 (stesse porte interne, nessuna traduzione) e chiede al
         /// router con PCP di lasciar passare le connessioni in arrivo. Restituisce l'indirizzo da pubblicare.
         /// </summary>
+        private readonly SemaphoreSlim _v6Lock = new(1, 1);
+
         private async Task<Rendezvous.V6Address?> EnsureV6Async(CancellationToken ct)
+        {
+            await _v6Lock.WaitAsync(ct);
+            try { return await EnsureV6InnerAsync(ct); }
+            finally { _v6Lock.Release(); }
+        }
+
+        private async Task StopV6LockedAsync()
+        {
+            await _v6Lock.WaitAsync();
+            try { await StopV6Async(); }
+            finally { _v6Lock.Release(); }
+        }
+
+        private async Task<Rendezvous.V6Address?> EnsureV6InnerAsync(CancellationToken ct)
         {
             int c = (_ctlListener?.LocalEndpoint as IPEndPoint)?.Port ?? 0;
             int a = (_audListener?.LocalEndpoint as IPEndPoint)?.Port ?? 0;
