@@ -6,7 +6,7 @@ Le serveur et le client doivent avoir des versions du même **protocole**. Le pr
 |---|---|---|
 | 0.1.0 – 0.1.3 | 1 | seulement les 0.1.x |
 | 0.2.0 – 0.2.8 | 2 | toutes les 0.2.x |
-| 0.3.0 – 0.3.7 | 3 | seulement les 0.3.x (numéro à 10 chiffres, code fixe du serveur, plusieurs clients sur le serveur, sécurité en émission, panadapter ; depuis la 0.3.1 accès depuis le navigateur ; depuis la 0.3.2 mises à jour automatiques) |
+| 0.3.0 – 0.3.8 | 3 | seulement les 0.3.x (numéro à 10 chiffres, code fixe du serveur, plusieurs clients sur le serveur, sécurité en émission, panadapter ; depuis la 0.3.1 accès depuis le navigateur ; depuis la 0.3.2 mises à jour automatiques) |
 
 Une 0.1.x et une 0.2.x ne doivent **pas** être utilisées ensemble, ni une 0.2.x et une 0.3.x : mettez à jour les deux PC. La 0.3.0 change aussi le format de la télémétrie et ajoute de nouveaux messages, c'est pourquoi elle ne dialogue pas avec les versions précédentes. La 0.3.0 change l'appairage (numéro à 10 chiffres au lieu du long code) ; les clés déjà échangées restent valables et passent d'elles-mêmes dans la liste des serveurs du client et dans la liste des clients du serveur.
 

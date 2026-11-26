@@ -6,7 +6,7 @@ Servidor y cliente deben tener versiones del mismo **protocolo**. El protocolo c
 |---|---|---|
 | 0.1.0 – 0.1.3 | 1 | solo las 0.1.x |
 | 0.2.0 – 0.2.8 | 2 | todas las 0.2.x |
-| 0.3.0 – 0.3.7 | 3 | solo las 0.3.x (número de 10 cifras, código fijo del servidor, varios clientes en el servidor, seguridad en transmisión, panadaptador; desde la 0.3.1 acceso desde el navegador; desde la 0.3.2 actualizaciones automáticas) |
+| 0.3.0 – 0.3.8 | 3 | solo las 0.3.x (número de 10 cifras, código fijo del servidor, varios clientes en el servidor, seguridad en transmisión, panadaptador; desde la 0.3.1 acceso desde el navegador; desde la 0.3.2 actualizaciones automáticas) |
 
 Una 0.1.x y una 0.2.x **no** deben usarse juntas, ni una 0.2.x y una 0.3.x: actualiza los dos PC. La 0.3.0 cambia también el formato de la telemetría y añade mensajes nuevos, por eso no se entiende con las versiones anteriores. La 0.3.0 cambia el emparejamiento (número de 10 cifras en lugar del código largo); las claves ya intercambiadas siguen siendo válidas y pasan solas a la lista de servidores del cliente y a la lista de clientes del servidor.
 

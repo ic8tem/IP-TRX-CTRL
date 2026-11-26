@@ -7,7 +7,7 @@ IP-TRX-CTRL serve a usare una radio HF a distanza, via internet, come se fosse s
 
 I ruoli si scelgono al primo avvio e si possono invertire in qualsiasi momento.
 
-> **Versione attuale: 0.3.7.** Le immagini sono schermate vere del programma (client collegato a un server con una radio simulata da Hamlib).
+> **Versione attuale: 0.3.8.** Le immagini sono schermate vere del programma (client collegato a un server con una radio simulata da Hamlib).
 
 ## In breve
 
@@ -22,6 +22,7 @@ I ruoli si scelgono al primo avvio e si possono invertire in qualsiasi momento.
 - Dalla 0.3.0: sicurezza in trasmissione (tempo massimo, niente cambi di frequenza in trasmissione, precedenza a chi è alla radio, client in solo ascolto), comandi della radio (NR, NB, Notch, ATT, preamplificatore, AGC, compressore, squelch, ALC), bande, passo e memorie, [panadapter della radio](IT-Panadapter), rapporto per segnalare un problema e avviso di versione nuova. Vedi [Radio, split e potenza](IT-Radio-split-e-potenza) e [Finestra principale](IT-Finestra-principale).
 - Dalla 0.3.1: [accesso dal browser](IT-Accesso-dal-browser) di telefono, tablet e PC, con la pagina «Trova il server».
 - Dalla 0.3.2: aggiornamenti automatici (non per i pacchetti .deb, .rpm, Arch e Slackware) e pacchetti per Windows ARM, Fedora/openSUSE, Arch, Slackware, AppImage e Alpine: vedi [Registri e risoluzione dei problemi](IT-Registri-e-risoluzione-dei-problemi).
+- Dalla 0.3.8: collegamento cifrato (TLS) ai broker MQTT con ritorno automatico alla porta 1883, chiavi effimere per ogni sessione (segretezza futura) e limite su tutti i tentativi di codice.
 - Dalla 0.3.7: riduzione del rumore neurale HamNoise, VOX con il pulsante accanto al PTT, squelch vocale, note tra operatore e ascoltatori, registrazione dei QSO, IPv6 diretto con PCP, server senza finestra ed emulazione WinKeyer: vedi [Funzioni nuove della 0.3.7](IT-Funzioni-nuove-della-0.3.7).
 - Dalla 0.3.6: audio Opus, più ascoltatori sullo stesso server, tasto CW USB e MIDI, registro dei QSO con invio UDP ai programmi di log ed esportazione ADIF, radio Icom in rete senza PC accanto: vedi [Funzioni nuove della 0.3.6](IT-Funzioni-nuove-della-0.3.6). Licenza GNU AGPL 3.0 o successiva, con il collegamento al codice sorgente nella pagina web.
 - Dalla 0.3.5: pacchetti per Windows 7 SP1, 8 e 8.1 (`-win7-x64-`, `-win7-x86-`, con .NET 6); in cima a ogni release la tabella con il collegamento a ogni pacchetto.
