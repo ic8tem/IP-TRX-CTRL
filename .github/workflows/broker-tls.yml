@@ -3,6 +3,8 @@
 name: Prova TLS dei broker
 on:
   workflow_dispatch:
+  push:
+    paths: ['.github/workflows/broker-tls.yml']
 jobs:
   tls:
     strategy:
