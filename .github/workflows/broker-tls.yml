@@ -16,7 +16,7 @@ jobs:
       - name: Collegamento cifrato ai broker
         shell: pwsh
         run: |
-          $brokers = @('broker.hivemq.com:8883','test.mosquitto.org:8886','broker.emqx.io:8883','mqtt.eclipseprojects.io:8883','test.mosquitto.org:8883')
+          $brokers = @('broker.hivemq.com:8883','test.mosquitto.org:8886','broker.emqx.io:8883','test.mosquitto.org:8883')
           $bad = 0
           foreach ($b in $brokers) {
             $h, $p = $b.Split(':')
@@ -34,7 +34,7 @@ jobs:
               if ($b -ne 'test.mosquitto.org:8883') { $bad++ }   # 8883 di mosquitto: CA propria, atteso il rifiuto
             }
           }
-          foreach ($h in @('broker.hivemq.com','test.mosquitto.org','broker.emqx.io','mqtt.eclipseprojects.io')) {
+          foreach ($h in @('broker.hivemq.com','test.mosquitto.org','broker.emqx.io')) {
             $tcp = [System.Net.Sockets.TcpClient]::new()
             $ok = $tcp.ConnectAsync($h, 1883).Wait(8000) -and $tcp.Connected
             "1883 $h  $(if ($ok) { 'raggiungibile' } else { 'non raggiungibile' })"

@@ -1075,8 +1075,8 @@ nei codici di riserva; i nomi dei canali MQTT sono impronte che non rivelano nul
 
 SICUREZZA DELLA 0.3.8
 - Broker cifrati: il collegamento ai broker usa TLS (broker.hivemq.com:8883, test.mosquitto.org:8886,
-  broker.emqx.io:8883 e il nuovo mqtt.eclipseprojects.io:8883) con il certificato verificato; se una rete o un PC
-  vecchio non ci riescono si torna da soli alla 1883. I programmi in chiaro e quelli cifrati si trovano lo stesso.
+  broker.emqx.io:8883) con il certificato verificato dalle autorità del sistema; se una rete o un PC vecchio non ci
+  riescono si torna da soli alla 1883. I programmi in chiaro e quelli cifrati si trovano lo stesso.
 - Segretezza futura: tra due programmi 0.3.8 ogni sessione ha chiavi effimere (ECDH P-256) oltre alla chiave
   dell'abbinamento; chi la rubasse un giorno non potrebbe decifrare il traffico registrato prima. Con le versioni
   precedenti resta l'handshake di prima.
@@ -1290,7 +1290,7 @@ Server e client devono avere versioni dello stesso «protocollo». La versione d
   Versioni          Protocollo   Compatibili con
   0.1.0 – 0.1.3     1            solo 0.1.x
   0.2.0 – 0.2.8     2            tutte le 0.2.x
-  0.3.0 - 0.3.7     3            solo 0.3.x (numero a 10 cifre, codice fisso, più client, sicurezza TX, panadapter; 0.3.1 browser;
+  0.3.0 - 0.3.8     3            solo 0.3.x (numero a 10 cifre, codice fisso, più client, sicurezza TX, panadapter; 0.3.1 browser;
                                  0.3.2 aggiornamenti automatici)
 Dentro la serie 0.2 alcune funzioni servono su tutti e due i PC:
   scelta delle schede audio del server dal client ......... 0.2.1 o successiva

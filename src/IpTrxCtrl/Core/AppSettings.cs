@@ -251,8 +251,9 @@ namespace IpTrxCtrl.Core
         public int ManualAudioPort { get; set; }
         // 0.3.0: la chiave unica delle 0.2.x è già passata negli elenchi
         public bool KeysMigratedV3 { get; set; }   // IP di rete locale del server (stessa rete del client)
-        // 0.3.8: porte cifrate (TLS) e un quarto broker; se la porta cifrata non riesce il programma usa la 1883 da solo
-        public static readonly string[] DefaultBrokers = { "broker.hivemq.com:8883", "test.mosquitto.org:8886", "broker.emqx.io:8883", "mqtt.eclipseprojects.io:8883" };
+        // 0.3.8: porte cifrate (TLS); se la porta cifrata non riesce il programma usa la 1883 da solo.
+        // (mqtt.eclipseprojects.io, provato come quarto broker, non risponde né su 8883 né su 1883)
+        public static readonly string[] DefaultBrokers = { "broker.hivemq.com:8883", "test.mosquitto.org:8886", "broker.emqx.io:8883" };
         private static readonly string[] OldDefaultBrokers = { "broker.hivemq.com:1883", "test.mosquitto.org:1883", "broker.emqx.io:1883" };
         public List<string> MqttBrokers { get; set; } = new(DefaultBrokers);
 
