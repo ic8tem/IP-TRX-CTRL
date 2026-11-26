@@ -251,7 +251,19 @@ namespace IpTrxCtrl.Core
         public int ManualAudioPort { get; set; }
         // 0.3.0: la chiave unica delle 0.2.x è già passata negli elenchi
         public bool KeysMigratedV3 { get; set; }   // IP di rete locale del server (stessa rete del client)
-        public List<string> MqttBrokers { get; set; } = new() { "broker.hivemq.com:1883", "test.mosquitto.org:1883", "broker.emqx.io:1883" };
+        // 0.3.8: porte cifrate (TLS) e un quarto broker; se la porta cifrata non riesce il programma usa la 1883 da solo
+        public static readonly string[] DefaultBrokers = { "broker.hivemq.com:8883", "test.mosquitto.org:8886", "broker.emqx.io:8883", "mqtt.eclipseprojects.io:8883" };
+        private static readonly string[] OldDefaultBrokers = { "broker.hivemq.com:1883", "test.mosquitto.org:1883", "broker.emqx.io:1883" };
+        public List<string> MqttBrokers { get; set; } = new(DefaultBrokers);
+
+        /// <summary>Le impostazioni con l'elenco di serie delle versioni precedenti passano a quello nuovo; gli elenchi modificati a mano restano.</summary>
+        public bool MigrateBrokers()
+        {
+            var cur = MqttBrokers.Select(b => b.Trim().ToLowerInvariant()).OrderBy(x => x).ToList();
+            if (!cur.SequenceEqual(OldDefaultBrokers.OrderBy(x => x))) return false;
+            MqttBrokers = new List<string>(DefaultBrokers);
+            return true;
+        }
 
         public static List<CwMacro> DefaultMacros() => new()
         {
@@ -302,6 +314,11 @@ namespace IpTrxCtrl.Core
             var def = DefaultMacros();
             while (s.CwMacros.Count < 8) s.CwMacros.Add(def[s.CwMacros.Count]);
             s.CwPitch = Math.Clamp(s.CwPitch, 200, 1000);
+            if (File.Exists(FilePath) && s.MigrateBrokers())
+            {
+                SessionLog.Write("MQTT elenco dei broker aggiornato alle porte cifrate: " + string.Join(", ", s.MqttBrokers));
+                try { s.Save(); } catch { }
+            }
             return s;
         }
 

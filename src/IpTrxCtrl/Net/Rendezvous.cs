@@ -39,6 +39,80 @@ namespace IpTrxCtrl.Net
 
         public static string NewClientId() => "iptrx-" + Guid.NewGuid().ToString("N")[..10];
 
+        // ---- 0.3.8: collegamento cifrato (TLS) ai broker, con ritorno alla porta 1883 se non riesce
+        private static readonly int[] TlsPorts = { 8883, 8886 };
+        private static readonly Dictionary<string, DateTime> TlsFailedUntil = new();
+        private static readonly HashSet<string> Logged = new();
+
+        public static bool IsTls(string broker) => Array.IndexOf(TlsPorts, Split(broker).port) >= 0;
+
+        private static MqttClientOptions TlsOptions(string host, int port, string clientId)
+        {
+            // Windows 7 e 8: TLS 1.2 è spento di serie per i programmi e va chiesto esplicitamente;
+            // da Windows 10 (e su Linux e Mac) si lasciano scegliere al sistema le versioni sicure (anche TLS 1.3)
+            var proto = OperatingSystem.IsWindows() && !OperatingSystem.IsWindowsVersionAtLeast(10)
+                ? System.Security.Authentication.SslProtocols.Tls12
+                : System.Security.Authentication.SslProtocols.None;
+            return new MqttClientOptionsBuilder()
+                .WithTcpServer(host, port)
+                .WithClientId(clientId)
+                .WithCleanSession(true)
+                .WithTimeout(TimeSpan.FromSeconds(8))
+#pragma warning disable CS0618
+                .WithTls(new MqttClientOptionsBuilderTlsParameters
+                {
+                    UseTls = true,
+                    SslProtocol = proto,
+                    // il certificato si controlla sempre con le autorità del sistema (nessuna eccezione)
+                    AllowUntrustedCertificates = false,
+                    IgnoreCertificateChainErrors = false,
+                    IgnoreCertificateRevocationErrors = true   // la revoca online spesso non è raggiungibile: non blocca
+                })
+#pragma warning restore CS0618
+                .Build();
+        }
+
+        private static void LogOnce(string key, string line)
+        {
+            lock (Logged) { if (!Logged.Add(key)) return; }
+            SessionLog.Write(line);
+        }
+
+        /// <summary>
+        /// Collega il client al broker: prima la porta cifrata (8883 o 8886) con il certificato verificato, poi, se
+        /// non riesce (rete che la blocca, Windows 7 senza le cifrature o i certificati recenti), la 1883 in chiaro.
+        /// I messaggi restano comunque cifrati con la chiave dell'abbinamento. Dopo un errore la porta cifrata di
+        /// quel broker non si riprova per un'ora, per non perdere tempo a ogni ricerca.
+        /// </summary>
+        public static async Task<MqttClientConnectResult> ConnectAsync(IMqttClient client, string broker, string clientId, CancellationToken ct)
+        {
+            var (host, port) = Split(broker);
+            if (IsTls(broker))
+            {
+                bool skip;
+                lock (TlsFailedUntil) skip = TlsFailedUntil.TryGetValue(host, out var until) && DateTime.UtcNow < until;
+                if (!skip)
+                {
+                    try
+                    {
+                        using var t = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        t.CancelAfter(TimeSpan.FromSeconds(4));
+                        var r = await client.ConnectAsync(TlsOptions(host, port, clientId), t.Token);
+                        LogOnce("tls|" + host, $"MQTT {host}:{port} collegato con TLS (certificato verificato)");
+                        return r;
+                    }
+                    catch (Exception ex) when (!ct.IsCancellationRequested)
+                    {
+                        lock (TlsFailedUntil) TlsFailedUntil[host] = DateTime.UtcNow.AddHours(1);
+                        SessionLog.Write($"MQTT {host}:{port} TLS non riuscito ({ex.GetBaseException().Message}): uso la porta 1883, i messaggi restano cifrati con la chiave dell'abbinamento");
+                        try { if (client.IsConnected) await client.DisconnectAsync(); } catch { }
+                    }
+                }
+                port = 1883;
+            }
+            return await client.ConnectAsync(Options($"{host}:{port}", clientId), ct);
+        }
+
         public static MqttApplicationMessage Message(string topic, byte[] payload, bool retain) =>
             new MqttApplicationMessageBuilder()
                 .WithTopic(topic)
@@ -127,7 +201,7 @@ namespace IpTrxCtrl.Net
                 {
                     using var t = CancellationTokenSource.CreateLinkedTokenSource(ct);
                     t.CancelAfter(TimeSpan.FromSeconds(10));
-                    await client.ConnectAsync(Mqtt.Options(broker, Mqtt.NewClientId()), t.Token);
+                    await Mqtt.ConnectAsync(client, broker, Mqtt.NewClientId(), t.Token);
                     await client.PublishAsync(Mqtt.Message(_topic, payload, true), t.Token);
                     // IPv6: messaggio trattenuto sul canale «/6»; vuoto = cancella quello vecchio
                     byte[] p6 = v6 != null ? Crypto.Seal(_key, V6Bytes(v6)) : Array.Empty<byte>();
@@ -153,7 +227,7 @@ namespace IpTrxCtrl.Net
                 {
                     using var t = CancellationTokenSource.CreateLinkedTokenSource(ct);
                     t.CancelAfter(TimeSpan.FromSeconds(10));
-                    await client.ConnectAsync(Mqtt.Options(broker, Mqtt.NewClientId()), t.Token);
+                    await Mqtt.ConnectAsync(client, broker, Mqtt.NewClientId(), t.Token);
                     await client.PublishAsync(Mqtt.Message(_topic + "/c", payload, true), t.Token);
                     ok++;
                 }
@@ -180,7 +254,7 @@ namespace IpTrxCtrl.Net
                     };
                     using var t = CancellationTokenSource.CreateLinkedTokenSource(ct);
                     t.CancelAfter(TimeSpan.FromSeconds(8));
-                    await client.ConnectAsync(Mqtt.Options(broker, Mqtt.NewClientId()), t.Token);
+                    await Mqtt.ConnectAsync(client, broker, Mqtt.NewClientId(), t.Token);
                     await client.SubscribeAsync(Mqtt.Subscribe(_topic + "/c"), t.Token);
                     var done = await Task.WhenAny(received.Task, Task.Delay(TimeSpan.FromSeconds(3), t.Token));
                     if (done != received.Task) continue;
@@ -216,7 +290,7 @@ namespace IpTrxCtrl.Net
                     };
                     using var t = CancellationTokenSource.CreateLinkedTokenSource(ct);
                     t.CancelAfter(TimeSpan.FromSeconds(10));
-                    await client.ConnectAsync(Mqtt.Options(broker, Mqtt.NewClientId()), t.Token);
+                    await Mqtt.ConnectAsync(client, broker, Mqtt.NewClientId(), t.Token);
                     ok++;
                     await client.SubscribeAsync(Mqtt.Subscribe(_topic), t.Token);
                     try { await client.SubscribeAsync(Mqtt.Subscribe(_topic + "/6"), t.Token); } catch { }
@@ -392,7 +466,7 @@ namespace IpTrxCtrl.Net
                         log('▶', $"{broker}  CONNECT  id={id}");
                         using var t = CancellationTokenSource.CreateLinkedTokenSource(ct);
                         t.CancelAfter(TimeSpan.FromSeconds(8));
-                        var res = await c.ConnectAsync(Mqtt.Options(broker, id), t.Token);
+                        var res = await Mqtt.ConnectAsync(c, broker, id, t.Token);
                         log('◀', $"CONNACK  {(res.ResultCode == MqttClientConnectResultCode.Success ? "accettato" : res.ResultCode.ToString())}");
                         log('▶', $"SUBSCRIBE  {Mqtt.Short(tCli)}  QoS 1");
                         await c.SubscribeAsync(Mqtt.Subscribe(tCli), t.Token);
@@ -455,7 +529,7 @@ namespace IpTrxCtrl.Net
                         t.CancelAfter(TimeSpan.FromSeconds(8));
                         try
                         {
-                            var res = await c.ConnectAsync(Mqtt.Options(broker, id), t.Token);
+                            var res = await Mqtt.ConnectAsync(c, broker, id, t.Token);
                             log('◀', $"CONNACK  {(res.ResultCode == MqttClientConnectResultCode.Success ? "accettato" : res.ResultCode.ToString())}");
                         }
                         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
@@ -559,7 +633,7 @@ namespace IpTrxCtrl.Net
                     {
                         using var t = CancellationTokenSource.CreateLinkedTokenSource(ct);
                         t.CancelAfter(TimeSpan.FromSeconds(8));
-                        await c.ConnectAsync(Mqtt.Options(broker, Mqtt.NewClientId()), t.Token);
+                        await Mqtt.ConnectAsync(c, broker, Mqtt.NewClientId(), t.Token);
                         await c.SubscribeAsync(Mqtt.Subscribe(s._tRnd), t.Token);
                         s._clients.Add(c);
                     }

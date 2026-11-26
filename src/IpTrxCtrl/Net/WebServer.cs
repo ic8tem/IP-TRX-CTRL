@@ -297,7 +297,7 @@ namespace IpTrxCtrl.Net
                 ws = WebSocket.CreateFromStream(ssl, new WebSocketCreationOptions { IsServer = true, KeepAliveInterval = TimeSpan.FromSeconds(20) });
 
                 // troppi tentativi sbagliati da questo indirizzo: aspetta
-                if (_fails.TryGetValue(ip, out var f) && f.until > DateTime.UtcNow)
+                if ((_fails.TryGetValue(ip, out var f) && f.until > DateTime.UtcNow) || CodeGuard.Locked)
                 {
                     await SendTextAsync(ws, new { t = "denied", why = "Troppi tentativi sbagliati: riprova tra qualche minuto." }, ct);
                     return;
@@ -334,6 +334,7 @@ namespace IpTrxCtrl.Net
                     var cur = _fails.TryGetValue(ip, out var ff) ? ff.fails + 1 : 1;
                     _fails[ip] = (cur, cur >= 10 ? DateTime.UtcNow.AddMinutes(10) : DateTime.MinValue);
                     SessionLog.Write($"WEB accesso rifiutato da {ip}: codice sbagliato (tentativo {cur})");
+                    CodeGuard.Fail("pagina web da " + ip);
                     await Task.Delay(1500, ct);
                     await SendTextAsync(ws, new { t = "denied", why = "Codice sbagliato." }, ct);
                     return;
@@ -570,7 +571,7 @@ namespace IpTrxCtrl.Net
                 {
                     using var t = CancellationTokenSource.CreateLinkedTokenSource(ct);
                     t.CancelAfter(TimeSpan.FromSeconds(10));
-                    await client.ConnectAsync(Mqtt.Options(broker, Mqtt.NewClientId()), t.Token);
+                    await Mqtt.ConnectAsync(client, broker, Mqtt.NewClientId(), t.Token);
                     await client.PublishAsync(Mqtt.Message(topic, payload, true), t.Token);
                     ok++;
                 }

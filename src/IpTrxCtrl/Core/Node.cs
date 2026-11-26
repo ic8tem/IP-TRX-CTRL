@@ -164,6 +164,7 @@ namespace IpTrxCtrl.Core
             Rig = new RigControl(s);
             Rig.Updated += OnRigUpdated;
             Rig.Notice += OnRigNotice;
+            CodeGuard.LockedNow += m => Notice?.Invoke(m);   // 0.3.8: troppi codici sbagliati da più indirizzi
             Pan = new Panadapter(s);
             Pan.Line += OnPanLine;
             Audio.Captured += OnCaptured;

@@ -383,6 +383,8 @@ namespace IpTrxCtrl.UI
             digDevices.IsVisible = !IpTrxCtrl.Audio.VirtualCables.IsLinux;
 
             var brokers = new TextBox { Text = string.Join(Environment.NewLine, s.MqttBrokers), AcceptsReturn = true, Height = 90 };
+            var brokNote = Ui.Sub("Porte 8883 e 8886: collegamento cifrato (TLS) con il certificato verificato; se non riesce il programma usa la 1883 da solo. I messaggi sono comunque cifrati con la chiave dell'abbinamento. Di serie: " + string.Join(", ", AppSettings.DefaultBrokers) + ".", 12);
+            brokNote.TextWrapping = TextWrapping.Wrap;
 
             bool clientRole = s.Role == NodeRole.Client;
             // client: elenco dei server; server: elenco dei client (un abbinamento nuovo non toglie gli altri)
@@ -866,7 +868,8 @@ namespace IpTrxCtrl.UI
                         Ui.Row(8, Ui.Sub("Controllo (TCP)", 13), mpCtl, Ui.Sub("Audio (TCP e UDP)", 13), mpAud),
                         Ui.Row(8, mpUse, mpAuto, mpCopy), mpList, v6On, pcpOn, v6Note)),
                     Ui.Panel(Ui.Col(10, Ui.H2("RETE E AUDIO"), prefillTxt, prefill,
-                        Ui.Col(0, Ui.Lbl("Broker MQTT (uno per riga, host:porta)"), brokers),
+                        Ui.Col(0, Ui.Lbl("Broker MQTT (uno per riga, host:porta)"), brokers,
+                            brokNote),
                         fwBtn, fwNote)),
                     Ui.Panel(Ui.Col(10, Ui.H2("ABBINAMENTO E REGISTRI"),
                         Ui.Sub("Impronta dell'abbinamento" + (clientRole ? " in uso" : "") + ": " + (node.IsPaired ? node.Fingerprint : "nessun abbinamento"), 13),
@@ -1069,6 +1072,16 @@ del numero temporaneo: dallo solo a persone fidate e cambialo se è circolato tr
 l'accesso ai client già abbinati.
 INDIRIZZI CIFRATI: l'indirizzo IP del server passa solo cifrato sui broker MQTT (abbinamento e riconnessioni) e
 nei codici di riserva; i nomi dei canali MQTT sono impronte che non rivelano nulla.
+
+SICUREZZA DELLA 0.3.8
+- Broker cifrati: il collegamento ai broker usa TLS (broker.hivemq.com:8883, test.mosquitto.org:8886,
+  broker.emqx.io:8883 e il nuovo mqtt.eclipseprojects.io:8883) con il certificato verificato; se una rete o un PC
+  vecchio non ci riescono si torna da soli alla 1883. I programmi in chiaro e quelli cifrati si trovano lo stesso.
+- Segretezza futura: tra due programmi 0.3.8 ogni sessione ha chiavi effimere (ECDH P-256) oltre alla chiave
+  dell'abbinamento; chi la rubasse un giorno non potrebbe decifrare il traffico registrato prima. Con le versioni
+  precedenti resta l'handshake di prima.
+- Codici: oltre al blocco per indirizzo, dopo 30 codici sbagliati in 10 minuti da qualunque indirizzo abbinamenti
+  e accessi dal browser si sospendono per 15 minuti; i client già abbinati si collegano normalmente.
 
 FINESTRA PRINCIPALE (dalla 0.3.0)
 Più piccola: tre colonne in alto (radio · strumenti e PTT · l'altro PC), panadapter se attivo, schede in basso

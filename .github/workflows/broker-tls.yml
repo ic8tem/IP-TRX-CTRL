@@ -1,0 +1,41 @@
+# Prova dei broker MQTT con il collegamento cifrato (dalla 0.3.8): certificato verificato con le autorità del
+# sistema, versione TLS, cifratura ed emittente. Si avvia a mano (Actions › Prova TLS dei broker › Run workflow).
+name: Prova TLS dei broker
+on:
+  workflow_dispatch:
+jobs:
+  tls:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Collegamento cifrato ai broker
+        shell: pwsh
+        run: |
+          $brokers = @('broker.hivemq.com:8883','test.mosquitto.org:8886','broker.emqx.io:8883','mqtt.eclipseprojects.io:8883','test.mosquitto.org:8883')
+          $bad = 0
+          foreach ($b in $brokers) {
+            $h, $p = $b.Split(':')
+            try {
+              $tcp = [System.Net.Sockets.TcpClient]::new()
+              $tcp.ConnectAsync($h, [int]$p).Wait(8000) | Out-Null
+              if (-not $tcp.Connected) { throw "nessuna risposta" }
+              $ssl = [System.Net.Security.SslStream]::new($tcp.GetStream(), $false)
+              $ssl.AuthenticateAsClient($h)
+              $c = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($ssl.RemoteCertificate)
+              "OK   $b  $($ssl.SslProtocol)  $($ssl.NegotiatedCipherSuite)  emittente: $($c.Issuer)  scade: $($c.NotAfter.ToString('yyyy-MM-dd'))"
+              $ssl.Dispose(); $tcp.Dispose()
+            } catch {
+              "NO   $b  $($_.Exception.GetBaseException().Message)"
+              if ($b -ne 'test.mosquitto.org:8883') { $bad++ }   # 8883 di mosquitto: CA propria, atteso il rifiuto
+            }
+          }
+          foreach ($h in @('broker.hivemq.com','test.mosquitto.org','broker.emqx.io','mqtt.eclipseprojects.io')) {
+            $tcp = [System.Net.Sockets.TcpClient]::new()
+            $ok = $tcp.ConnectAsync($h, 1883).Wait(8000) -and $tcp.Connected
+            "1883 $h  $(if ($ok) { 'raggiungibile' } else { 'non raggiungibile' })"
+            $tcp.Dispose()
+          }
+          "Broker cifrati non riusciti: $bad"
