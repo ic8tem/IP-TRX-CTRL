@@ -1,4 +1,4 @@
-# Misure di CPU e memoria (11) (non fa parte della compilazione delle release). Si avvia a mano o quando cambia questo file.
+# Misure di CPU e memoria (12) (non fa parte della compilazione delle release). Si avvia a mano o quando cambia questo file.
 name: Misure CPU e memoria
 on:
   workflow_dispatch:
@@ -24,12 +24,18 @@ jobs:
           P="dotnet publish src/IpTrxCtrl/IpTrxCtrl.csproj -c Release -r ${{ matrix.rid }} -p:Version=0.0.0"
           $P -p:EnableCompressionInSingleFile=false -o d/normale > /dev/null
           ls -la d/*/IP-TRX-CTRL | awk '{printf "%-30s %6.1f MB\n", $9, $5/1048576}'
-      - name: Server senza finestra con profilo
+      - name: Server senza finestra, prove a esclusione
         run: |
           mkdir -p ~/.config/IP-TRX-CTRL
-          echo '{"FirstRunDone":true,"DeclarationAccepted":true,"CheckUpdates":false,"AutoUpdate":false,"Role":0}' > ~/.config/IP-TRX-CTRL/settings.json
-          which pactl amixer rigctld || true
-          DOTNET_PerfMapEnabled=1 TRACE=1 tools/bench/misura.sh "server 0.3.8" 30 d/normale/IP-TRX-CTRL --senza-finestra
+          S='{"FirstRunDone":true,"DeclarationAccepted":true,"CheckUpdates":false,"AutoUpdate":false,"Role":0'
+          echo "$S}" > ~/.config/IP-TRX-CTRL/settings.json
+          tools/bench/misura.sh "server (tutto)" 25 d/normale/IP-TRX-CTRL --senza-finestra
+          echo "$S,\"MqttBrokers\":[\"x.invalid:1\"]}" > ~/.config/IP-TRX-CTRL/settings.json
+          tools/bench/misura.sh "server (senza broker)" 25 d/normale/IP-TRX-CTRL --senza-finestra
+          echo "$S,\"WebEnabled\":false}" > ~/.config/IP-TRX-CTRL/settings.json
+          tools/bench/misura.sh "server (senza pagina web)" 25 d/normale/IP-TRX-CTRL --senza-finestra
+          echo "$S,\"WebEnabled\":false,\"MqttBrokers\":[\"x.invalid:1\"]}" > ~/.config/IP-TRX-CTRL/settings.json
+          tools/bench/misura.sh "server (senza broker e web)" 25 d/normale/IP-TRX-CTRL --senza-finestra
       - name: Client con la finestra (40 s, schermo virtuale)
         run: |
           echo '{"FirstRunDone":true,"DeclarationAccepted":true,"CheckUpdates":false,"AutoUpdate":false,"Role":1}' > ~/.config/IP-TRX-CTRL/settings.json
