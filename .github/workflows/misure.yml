@@ -1,4 +1,4 @@
-# Misure di CPU e memoria (non fa parte della compilazione delle release). Si avvia a mano o quando cambia questo file.
+# Misure di CPU e memoria (2) (non fa parte della compilazione delle release). Si avvia a mano o quando cambia questo file.
 name: Misure CPU e memoria
 on:
   workflow_dispatch:

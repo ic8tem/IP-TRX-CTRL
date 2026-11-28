@@ -6,7 +6,8 @@ pid=$!
 sleep 20
 if ! kill -0 $pid 2>/dev/null; then echo "$name: il programma si e' chiuso"; tail -5 "/tmp/$name.log"; exit 0; fi
 # il processo vero (xvfb-run avvia un figlio)
-real=$(pgrep -n -f "IP-TRX-CTRL" || echo $pid)
+real=$(pgrep -n -x IP-TRX-CTRL || echo $pid)
+if [ ! -d /proc/$real ]; then echo "$name: processo non trovato"; tail -5 "/tmp/$name.log"; exit 0; fi
 hz=$(getconf CLK_TCK)
 read -r u0 s0 < <(awk '{print $14, $15}' /proc/$real/stat)
 t0=$(date +%s.%N); maxrss=0; sum=0; n=0
@@ -20,4 +21,4 @@ t1=$(date +%s.%N)
 thr=$(awk '/Threads/{print $2}' /proc/$real/status)
 cpu=$(echo "scale=2; (($u1+$s1)-($u0+$s0))/$hz/($t1-$t0)*100" | bc)
 printf "%-34s RAM media %6.1f MB  massima %6.1f MB  CPU media %5s %% di un core  thread %s\n" "$name" "$(echo "$sum/$n/1024" | bc -l)" "$(echo "$maxrss/1024" | bc -l)" "$cpu" "$thr"
-kill $pid 2>/dev/null; sleep 2; pkill -f IP-TRX-CTRL 2>/dev/null; true
+kill $pid 2>/dev/null; sleep 2; pkill -x IP-TRX-CTRL 2>/dev/null; sleep 1; true
