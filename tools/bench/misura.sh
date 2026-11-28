@@ -25,8 +25,8 @@ echo "  thread più impegnati (CPU % di un core nella finestra di misura):"
 for t in /proc/$real/task/*; do id=${t##*/}; c=$(st $t/stat); nm=$(cat $t/comm 2>/dev/null); b=${T0[$id]:-0}; echo "$(( ${c:-0}-b )) $nm"; done | sort -rn | head -6 | while read d nm; do printf "    %-20s %5.1f %%\n" "$nm" "$(echo "$d/$hz/($t1-$t0)*100" | bc -l)"; done
 if [ -n "$TRACE" ]; then
   for k in 1 2 3; do
-    echo "  pile dei thread, campione $k (solo i thread con codice del programma):"
-    dotnet-stack report -p $real 2>&1 | awk 'BEGIN{RS="Thread "} /IpTrxCtrl|Concentus|MQTTnet|Avalonia/ {print "Thread " $0}' | grep -v "^\s*$" | grep -E "Thread|IpTrxCtrl|MQTTnet|Avalonia\.|Concentus" | head -40 | cut -c1-170 | sed 's/^/    /'
+    echo "  pile dei thread, campione $k (tutti i thread):"
+    dotnet-stack report -p $real 2>&1 | grep -v "^\s*$" | grep -v "Avalonia.X11\|DispatcherFrame\|Dispatcher\.\|ApplicationLifetime\|StartWithClassic" | head -70 | cut -c1-170 | sed 's/^/    /'
     sleep 1
   done
 fi

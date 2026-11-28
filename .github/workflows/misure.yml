@@ -1,4 +1,4 @@
-# Misure di CPU e memoria (5) (non fa parte della compilazione delle release). Si avvia a mano o quando cambia questo file.
+# Misure di CPU e memoria (6) (non fa parte della compilazione delle release). Si avvia a mano o quando cambia questo file.
 name: Misure CPU e memoria
 on:
   workflow_dispatch:
@@ -32,4 +32,4 @@ jobs:
       - name: Client con la finestra (40 s, schermo virtuale)
         run: |
           echo '{"FirstRunDone":true,"DeclarationAccepted":true,"CheckUpdates":false,"AutoUpdate":false,"Role":1}' > ~/.config/IP-TRX-CTRL/settings.json
-          TRACE=1 tools/bench/misura.sh "client con finestra (normale)" 40 xvfb-run -a d/normale/IP-TRX-CTRL
+          tools/bench/misura.sh "client con finestra (normale)" 40 xvfb-run -a d/normale/IP-TRX-CTRL
