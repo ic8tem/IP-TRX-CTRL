@@ -101,7 +101,7 @@ namespace IpTrxCtrl.Audio
                     if (capture)
                     {
                         nint n = snd_pcm_readi(pcm, frame, (nuint)frame.Length);
-                        if (n < 0) { snd_pcm_recover(pcm, (int)n, 1); continue; }
+                        if (n < 0) { if (snd_pcm_recover(pcm, (int)n, 1) < 0) Thread.Sleep(20); continue; }   // 0.3.9: scheda staccata, niente giri a vuoto
                         if (n < frame.Length) Array.Clear(frame, (int)n, frame.Length - (int)n);
                         try { cb(frame); } catch { }
                     }
@@ -109,7 +109,7 @@ namespace IpTrxCtrl.Audio
                     {
                         try { cb(frame); } catch { Array.Clear(frame); }
                         nint n = snd_pcm_writei(pcm, frame, (nuint)frame.Length);
-                        if (n < 0) { snd_pcm_recover(pcm, (int)n, 1); }
+                        if (n < 0 && snd_pcm_recover(pcm, (int)n, 1) < 0) Thread.Sleep(20);
                     }
                 }
             }

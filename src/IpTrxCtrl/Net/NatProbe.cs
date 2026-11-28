@@ -74,8 +74,10 @@ namespace IpTrxCtrl.Net
                             {
                                 var r = await sock.ReceiveAsync(t.Token);
                                 string txt = Encoding.ASCII.GetString(r.Buffer);
-                                if (txt.StartsWith("HTTP/1.1 200", StringComparison.OrdinalIgnoreCase)
-                                    && (txt.Contains("InternetGatewayDevice") || txt.Contains("WANIPConnection") || txt.Contains("WANPPPConnection")))
+                                bool ok200 = txt.StartsWith("HTTP/1.", StringComparison.OrdinalIgnoreCase) && txt.IndexOf(" 200", StringComparison.Ordinal) is > 0 and < 16;
+                                if (ok200 && (txt.Contains("InternetGatewayDevice", StringComparison.OrdinalIgnoreCase)
+                                              || txt.Contains("WANIPConnection", StringComparison.OrdinalIgnoreCase)
+                                              || txt.Contains("WANPPPConnection", StringComparison.OrdinalIgnoreCase)))
                                 { found.TrySetResult(true); return; }
                             }
                         }
