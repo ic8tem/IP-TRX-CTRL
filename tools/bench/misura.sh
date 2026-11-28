@@ -27,10 +27,10 @@ if [ -n "$TRACE" ]; then
   busy=$(for t in /proc/$real/task/*; do id=${t##*/}; c=$(st $t/stat); b=${T0[$id]:-0}; echo "$(( ${c:-0}-b )) $id"; done | sort -rn | head -2 | awk '{print $2}' | tr '\n' ',' | sed 's/,$//')
   for id in ${busy//,/ }; do echo "  thread $id: utime/stime = $(sed 's/.*) //' /proc/$real/task/$id/stat | awk '{print $12"/"$13}')  wchan=$(cat /proc/$real/task/$id/wchan 2>/dev/null)"; done
   echo "  perf sui thread più impegnati ($busy), 10 s:"
-  sudo perf record -q -F 999 -g -t $busy -o /tmp/perf.data -- sleep 10 > /dev/null 2>&1
-  sudo perf report -i /tmp/perf.data --stdio --no-children --sort symbol 2>/dev/null | grep -E "^ +[0-9.]+%" | head -30 | cut -c1-170 | sed 's/^/    /'
-  echo "  chiamate di sistema (strace 5 s):"
-  sudo timeout 5 strace -f -c -p $real 2>&1 | head -18 | sed 's/^/    /'
+  perf record -q -F 499 -g -t $busy -o /tmp/perf.data -- sleep 10 > /dev/null 2>&1
+  perf script -i /tmp/perf.data 2>/dev/null | awk '/^\S/ {if (st!="") c[st]++; st=""; next} /^\s+[0-9a-f]+ / {$1=""; sub(/^ /,""); sub(/\(.*$/,""); if (n[NR]==0 && length(st) < 900) st = st " <- " $0} /^$/ {if (st!="") c[st]++; st=""} END {for (k in c) print c[k] "\t" k}' | sort -rn | head -12 | cut -c1-600 | sed 's/^/    /' 
+  echo "  chiamate di sistema dei thread impegnati (strace 5 s):"
+  sudo timeout 5 strace -c $(for id in ${busy//,/ }; do echo -n "-p $id "; done) 2>&1 | grep -v "attached\|detached" | head -14 | sed 's/^/    /'
 fi
 echo "  ultime righe di sessioni.log:"; tail -n 12 ~/.config/IP-TRX-CTRL/sessioni.log 2>/dev/null | cut -c1-200 | sed 's/^/    /' 
 cpu=$(echo "($p1-$p0)/$hz/($t1-$t0)*100" | bc -l | xargs printf "%.1f")
