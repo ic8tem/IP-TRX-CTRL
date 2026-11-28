@@ -24,9 +24,11 @@ thr=$(awk '/Threads/{print $2}' /proc/$real/status)
 echo "  thread più impegnati (CPU % di un core nella finestra di misura):"
 for t in /proc/$real/task/*; do id=${t##*/}; c=$(st $t/stat); nm=$(cat $t/comm 2>/dev/null); b=${T0[$id]:-0}; echo "$(( ${c:-0}-b )) $nm"; done | sort -rn | head -6 | while read d nm; do printf "    %-20s %5.1f %%\n" "$nm" "$(echo "$d/$hz/($t1-$t0)*100" | bc -l)"; done
 if [ -n "$TRACE" ]; then
-  echo "  campionamento dei metodi (dotnet-trace, 20 s):"
-  dotnet-trace collect -p $real --profile cpu-sampling --duration 00:00:00:20 -o /tmp/$$.nettrace > /dev/null 2>&1
-  dotnet-trace report /tmp/$$.nettrace topN -n 25 2>/dev/null | cut -c1-170 | sed 's/^/    /'
+  for k in 1 2 3; do
+    echo "  pile dei thread, campione $k (solo i thread con codice del programma):"
+    dotnet-stack report -p $real 2>&1 | awk 'BEGIN{RS="Thread "} /IpTrxCtrl|Concentus|MQTTnet|Avalonia/ {print "Thread " $0}' | grep -v "^\s*$" | grep -E "Thread|IpTrxCtrl|MQTTnet|Avalonia\.|Concentus" | head -40 | cut -c1-170 | sed 's/^/    /'
+    sleep 1
+  done
 fi
 echo "  ultime righe di sessioni.log:"; tail -n 12 ~/.config/IP-TRX-CTRL/sessioni.log 2>/dev/null | cut -c1-200 | sed 's/^/    /' 
 cpu=$(echo "($p1-$p0)/$hz/($t1-$t0)*100" | bc -l | xargs printf "%.1f")

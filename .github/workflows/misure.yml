@@ -1,4 +1,4 @@
-# Misure di CPU e memoria (4) (non fa parte della compilazione delle release). Si avvia a mano o quando cambia questo file.
+# Misure di CPU e memoria (5) (non fa parte della compilazione delle release). Si avvia a mano o quando cambia questo file.
 name: Misure CPU e memoria
 on:
   workflow_dispatch:
@@ -20,7 +20,7 @@ jobs:
       - name: Compila tre varianti
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq xvfb bc > /dev/null
-          dotnet tool install -g dotnet-trace > /dev/null
+          dotnet tool install -g dotnet-stack > /dev/null
           P="dotnet publish src/IpTrxCtrl/IpTrxCtrl.csproj -c Release -r ${{ matrix.rid }} -p:Version=0.0.0"
           $P -p:EnableCompressionInSingleFile=false -o d/normale > /dev/null
           ls -la d/*/IP-TRX-CTRL | awk '{printf "%-30s %6.1f MB\n", $9, $5/1048576}'
