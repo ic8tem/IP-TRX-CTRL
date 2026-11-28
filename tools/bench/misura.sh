@@ -28,7 +28,9 @@ if [ -n "$TRACE" ]; then
   for id in ${busy//,/ }; do echo "  thread $id: utime/stime = $(sed 's/.*) //' /proc/$real/task/$id/stat | awk '{print $12"/"$13}')  wchan=$(cat /proc/$real/task/$id/wchan 2>/dev/null)"; done
   echo "  perf sui thread più impegnati ($busy), 10 s:"
   perf record -q -F 499 -g -t $busy -o /tmp/perf.data -- sleep 10 > /dev/null 2>&1
-  perf script -i /tmp/perf.data 2>/dev/null | awk '/^\S/ {if (st!="") c[st]++; st=""; next} /^\s+[0-9a-f]+ / {$1=""; sub(/^ /,""); sub(/\(.*$/,""); if (n[NR]==0 && length(st) < 900) st = st " <- " $0} /^$/ {if (st!="") c[st]++; st=""} END {for (k in c) print c[k] "\t" k}' | sort -rn | head -12 | cut -c1-600 | sed 's/^/    /' 
+  perf report -i /tmp/perf.data --stdio --no-children --sort dso,sym 2>/dev/null | grep -E "^ +[0-9.]+%" | head -25 | cut -c1-160 | sed 's/^/    /'
+  echo "  esempi di pile complete:"
+  perf script -i /tmp/perf.data 2>/dev/null | awk 'BEGIN{RS=""} NR%40==1' | head -120 | cut -c1-160 | sed 's/^/    /'
   echo "  chiamate di sistema dei thread impegnati (strace 5 s):"
   sudo timeout 5 strace -c $(for id in ${busy//,/ }; do echo -n "-p $id "; done) 2>&1 | grep -v "attached\|detached" | head -14 | sed 's/^/    /'
 fi
