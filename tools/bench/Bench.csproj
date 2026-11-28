@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Banco di prova dei motori di calcolo audio (misura CPU e memoria per blocco da 40 ms). Non fa parte del programma. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Concentus" Version="1.1.7" />
+    <Compile Include="../../src/IpTrxCtrl/Audio/OpusCodec.cs" />
+    <Compile Include="../../src/IpTrxCtrl/Audio/NeuralDenoiser.cs" />
+    <Compile Include="../../src/IpTrxCtrl/Audio/VoiceSquelch.cs" />
+    <Compile Include="../../src/IpTrxCtrl/Audio/Cw.cs" />
+    <EmbeddedResource Include="../../src/IpTrxCtrl/models/hamnoise-voice.bin" LogicalName="hamnoise/voice" />
+    <EmbeddedResource Include="../../src/IpTrxCtrl/models/hamnoise-cw.bin" LogicalName="hamnoise/cw" />
+  </ItemGroup>
+</Project>

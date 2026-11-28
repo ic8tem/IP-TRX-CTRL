@@ -1,0 +1,42 @@
+# Misure di CPU e memoria (non fa parte della compilazione delle release). Si avvia a mano o quando cambia questo file.
+name: Misure CPU e memoria
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/misure.yml']
+jobs:
+  misure:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, rid: linux-x64 }
+          - { os: ubuntu-24.04-arm, rid: linux-arm64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+      - name: Motori di calcolo audio
+        run: dotnet run -c Release --project tools/bench
+      - name: Compila tre varianti
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb bc > /dev/null
+          P="dotnet publish src/IpTrxCtrl/IpTrxCtrl.csproj -c Release -r ${{ matrix.rid }} -p:Version=0.0.0"
+          $P -o d/compresso > /dev/null
+          $P -p:EnableCompressionInSingleFile=false -o d/normale > /dev/null
+          $P -p:EnableCompressionInSingleFile=false -p:PublishReadyToRun=true -o d/r2r > /dev/null
+          ls -la d/*/IP-TRX-CTRL | awk '{printf "%-30s %6.1f MB\n", $9, $5/1048576}'
+      - name: Server senza finestra (60 s)
+        run: |
+          mkdir -p ~/.config/IP-TRX-CTRL
+          echo '{"FirstRunDone":true,"DeclarationAccepted":true,"Role":0}' > ~/.config/IP-TRX-CTRL/settings.json
+          for v in compresso normale r2r; do tools/bench/misura.sh "server senza finestra ($v)" 60 d/$v/IP-TRX-CTRL --senza-finestra; done
+      - name: Client con la finestra (60 s, schermo virtuale)
+        run: |
+          echo '{"FirstRunDone":true,"DeclarationAccepted":true,"Role":1}' > ~/.config/IP-TRX-CTRL/settings.json
+          for v in compresso normale r2r; do tools/bench/misura.sh "client con finestra ($v)" 60 xvfb-run -a d/$v/IP-TRX-CTRL; done
+          DOTNET_GCConserveMemory=7 tools/bench/misura.sh "client finestra (compresso, GC risparmio)" 60 xvfb-run -a d/compresso/IP-TRX-CTRL
+          DOTNET_gcConcurrent=0 tools/bench/misura.sh "client finestra (compresso, GC non concorrente)" 60 xvfb-run -a d/compresso/IP-TRX-CTRL
+          echo '{"FirstRunDone":true,"DeclarationAccepted":true,"Role":0}' > ~/.config/IP-TRX-CTRL/settings.json
+          tools/bench/misura.sh "server con finestra (compresso)" 60 xvfb-run -a d/compresso/IP-TRX-CTRL
