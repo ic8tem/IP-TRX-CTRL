@@ -42,9 +42,7 @@ namespace IpTrxCtrl.Net
         {
             try
             {
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(TimeSpan.FromSeconds(seconds));
-                return await new NatDiscoverer().DiscoverDeviceAsync(mapper, cts);
+                return await NatProbe.DiscoverDeviceAsync(mapper, TimeSpan.FromSeconds(seconds), ct);
             }
             catch { return null; }
         }
@@ -105,9 +103,7 @@ namespace IpTrxCtrl.Net
                     NatDevice? other = null;
                     try
                     {
-                        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                        cts.CancelAfter(TimeSpan.FromSeconds(6));
-                        var all = await new NatDiscoverer().DiscoverDevicesAsync(PortMapper.Upnp, cts);
+                        var all = await NatProbe.DiscoverDevicesAsync(PortMapper.Upnp, TimeSpan.FromSeconds(6), ct);
                         foreach (var d in all)
                         {
                             IPAddress? ip = null;

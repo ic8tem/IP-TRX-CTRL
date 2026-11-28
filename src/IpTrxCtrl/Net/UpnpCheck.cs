@@ -63,9 +63,7 @@ namespace IpTrxCtrl.Net
             {
                 try
                 {
-                    using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                    cts.CancelAfter(TimeSpan.FromSeconds(10));
-                    var dev = await new NatDiscoverer().DiscoverDeviceAsync(PortMapper.Upnp | PortMapper.Pmp, cts);
+                    var dev = await NatProbe.DiscoverDeviceAsync(PortMapper.Upnp | PortMapper.Pmp, TimeSpan.FromSeconds(10), ct);
                     var ip = await dev.GetExternalIPAsync();
                     // 0.3.4: l'IP esterno sta nella rete di casa: risponde un altro apparecchio, non il router di uscita
                     if (ip != null && PortManager.OnLocalNetwork(ip))
