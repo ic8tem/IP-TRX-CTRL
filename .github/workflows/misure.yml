@@ -1,4 +1,4 @@
-# Misure di CPU e memoria (3) (non fa parte della compilazione delle release). Si avvia a mano o quando cambia questo file.
+# Misure di CPU e memoria (4) (non fa parte della compilazione delle release). Si avvia a mano o quando cambia questo file.
 name: Misure CPU e memoria
 on:
   workflow_dispatch:
@@ -20,15 +20,16 @@ jobs:
       - name: Compila tre varianti
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq xvfb bc > /dev/null
+          dotnet tool install -g dotnet-trace > /dev/null
           P="dotnet publish src/IpTrxCtrl/IpTrxCtrl.csproj -c Release -r ${{ matrix.rid }} -p:Version=0.0.0"
           $P -p:EnableCompressionInSingleFile=false -o d/normale > /dev/null
           ls -la d/*/IP-TRX-CTRL | awk '{printf "%-30s %6.1f MB\n", $9, $5/1048576}'
       - name: Server senza finestra (60 s)
         run: |
           mkdir -p ~/.config/IP-TRX-CTRL
-          echo '{"FirstRunDone":true,"DeclarationAccepted":true,"Role":0}' > ~/.config/IP-TRX-CTRL/settings.json
-          tools/bench/misura.sh "server senza finestra (normale)" 40 d/normale/IP-TRX-CTRL --senza-finestra
+          echo '{"FirstRunDone":true,"DeclarationAccepted":true,"CheckUpdates":false,"AutoUpdate":false,"Role":0}' > ~/.config/IP-TRX-CTRL/settings.json
+          TRACE=1 tools/bench/misura.sh "server senza finestra (normale)" 40 d/normale/IP-TRX-CTRL --senza-finestra
       - name: Client con la finestra (40 s, schermo virtuale)
         run: |
-          echo '{"FirstRunDone":true,"DeclarationAccepted":true,"Role":1}' > ~/.config/IP-TRX-CTRL/settings.json
-          tools/bench/misura.sh "client con finestra (normale)" 40 xvfb-run -a d/normale/IP-TRX-CTRL
+          echo '{"FirstRunDone":true,"DeclarationAccepted":true,"CheckUpdates":false,"AutoUpdate":false,"Role":1}' > ~/.config/IP-TRX-CTRL/settings.json
+          TRACE=1 tools/bench/misura.sh "client con finestra (normale)" 40 xvfb-run -a d/normale/IP-TRX-CTRL
