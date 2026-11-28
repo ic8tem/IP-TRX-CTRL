@@ -24,7 +24,7 @@ jobs:
           P="dotnet publish src/IpTrxCtrl/IpTrxCtrl.csproj -c Release -r ${{ matrix.rid }} -p:Version=0.0.0"
           $P -p:EnableCompressionInSingleFile=false -o d/normale > /dev/null
           ls -la d/*/IP-TRX-CTRL | awk '{printf "%-30s %6.1f MB\n", $9, $5/1048576}'
-      - name: Server senza finestra (30 s): 0.3.8 con broker cifrati, 0.3.8 con 1883, 0.3.7 e 0.3.6
+      - name: "Server senza finestra, 30 s: 0.3.8 cifrato, 0.3.8 con 1883, 0.3.7, 0.3.6"
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
