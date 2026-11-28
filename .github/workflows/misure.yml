@@ -1,4 +1,4 @@
-# Misure di CPU e memoria (8) (non fa parte della compilazione delle release). Si avvia a mano o quando cambia questo file.
+# Misure di CPU e memoria (9) (non fa parte della compilazione delle release). Si avvia a mano o quando cambia questo file.
 name: Misure CPU e memoria
 on:
   workflow_dispatch:
@@ -24,11 +24,23 @@ jobs:
           P="dotnet publish src/IpTrxCtrl/IpTrxCtrl.csproj -c Release -r ${{ matrix.rid }} -p:Version=0.0.0"
           $P -p:EnableCompressionInSingleFile=false -o d/normale > /dev/null
           ls -la d/*/IP-TRX-CTRL | awk '{printf "%-30s %6.1f MB\n", $9, $5/1048576}'
-      - name: Server senza finestra (60 s)
+      - name: Server senza finestra (30 s): 0.3.8 con broker cifrati, 0.3.8 con 1883, 0.3.7 e 0.3.6
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p ~/.config/IP-TRX-CTRL
-          echo '{"FirstRunDone":true,"DeclarationAccepted":true,"CheckUpdates":false,"AutoUpdate":false,"Role":0}' > ~/.config/IP-TRX-CTRL/settings.json
-          DOTNET_PerfMapEnabled=1 TRACE=1 tools/bench/misura.sh "server senza finestra (normale)" 30 d/normale/IP-TRX-CTRL --senza-finestra
+          mkdir -p ~/.config/IP-TRX-CTRL v37 v36
+          A=$( [ "${{ matrix.rid }}" = linux-x64 ] && echo x64 || echo arm64 )
+          gh release download v0.3.7 -R ${{ github.repository }} -p "IP-TRX-CTRL-0.3.7-linux-$A-portatile.tar.gz" -O - | tar -xz -C v37
+          gh release download v0.3.6 -R ${{ github.repository }} -p "IP-TRX-CTRL-0.3.6-linux-$A-portatile.tar.gz" -O - | tar -xz -C v36
+          E37=$(find v37 -name IP-TRX-CTRL -type f | head -1); E36=$(find v36 -name IP-TRX-CTRL -type f | head -1)
+          S='{"FirstRunDone":true,"DeclarationAccepted":true,"CheckUpdates":false,"AutoUpdate":false,"Role":0'
+          echo "$S}" > ~/.config/IP-TRX-CTRL/settings.json
+          tools/bench/misura.sh "server 0.3.8 (broker cifrati)" 30 d/normale/IP-TRX-CTRL --senza-finestra
+          echo "$S,\"MqttBrokers\":[\"broker.hivemq.com:1883\",\"test.mosquitto.org:1883\",\"broker.emqx.io:1883\",\"x.invalid:1\"]}" > ~/.config/IP-TRX-CTRL/settings.json
+          tools/bench/misura.sh "server 0.3.8 (broker 1883)" 30 d/normale/IP-TRX-CTRL --senza-finestra
+          echo "$S}" > ~/.config/IP-TRX-CTRL/settings.json
+          tools/bench/misura.sh "server 0.3.7" 30 $E37 --senza-finestra
+          tools/bench/misura.sh "server 0.3.6 (con finestra)" 30 xvfb-run -a $E36
       - name: Client con la finestra (40 s, schermo virtuale)
         run: |
           echo '{"FirstRunDone":true,"DeclarationAccepted":true,"CheckUpdates":false,"AutoUpdate":false,"Role":1}' > ~/.config/IP-TRX-CTRL/settings.json
