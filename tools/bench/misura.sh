@@ -24,8 +24,13 @@ thr=$(awk '/Threads/{print $2}' /proc/$real/status)
 echo "  thread più impegnati (CPU % di un core nella finestra di misura):"
 for t in /proc/$real/task/*; do id=${t##*/}; c=$(st $t/stat); nm=$(cat $t/comm 2>/dev/null); b=${T0[$id]:-0}; echo "$(( ${c:-0}-b )) $nm"; done | sort -rn | head -6 | while read d nm; do printf "    %-20s %5.1f %%\n" "$nm" "$(echo "$d/$hz/($t1-$t0)*100" | bc -l)"; done
 if [ -n "$TRACE" ]; then
-  echo "  contatori .NET (10 s):"
-  timeout 14 dotnet-counters monitor -p $real --refresh-interval 10 --counters System.Runtime 2>/dev/null | grep -iE "work item|thread pool|timer|allocation|gc heap|lock contention|cpu" | tail -12 | sed 's/^/    /'
+  busy=$(for t in /proc/$real/task/*; do id=${t##*/}; c=$(st $t/stat); b=${T0[$id]:-0}; echo "$(( ${c:-0}-b )) $id"; done | sort -rn | head -2 | awk '{print $2}' | tr '\n' ',' | sed 's/,$//')
+  for id in ${busy//,/ }; do echo "  thread $id: utime/stime = $(sed 's/.*) //' /proc/$real/task/$id/stat | awk '{print $12"/"$13}')  wchan=$(cat /proc/$real/task/$id/wchan 2>/dev/null)"; done
+  echo "  perf sui thread più impegnati ($busy), 10 s:"
+  sudo perf record -q -F 999 -g -t $busy -o /tmp/perf.data -- sleep 10 > /dev/null 2>&1
+  sudo perf report -i /tmp/perf.data --stdio --no-children --sort symbol 2>/dev/null | grep -E "^ +[0-9.]+%" | head -30 | cut -c1-170 | sed 's/^/    /'
+  echo "  chiamate di sistema (strace 5 s):"
+  sudo timeout 5 strace -f -c -p $real 2>&1 | head -18 | sed 's/^/    /'
 fi
 echo "  ultime righe di sessioni.log:"; tail -n 12 ~/.config/IP-TRX-CTRL/sessioni.log 2>/dev/null | cut -c1-200 | sed 's/^/    /' 
 cpu=$(echo "($p1-$p0)/$hz/($t1-$t0)*100" | bc -l | xargs printf "%.1f")
