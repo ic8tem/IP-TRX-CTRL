@@ -24,11 +24,8 @@ thr=$(awk '/Threads/{print $2}' /proc/$real/status)
 echo "  thread più impegnati (CPU % di un core nella finestra di misura):"
 for t in /proc/$real/task/*; do id=${t##*/}; c=$(st $t/stat); nm=$(cat $t/comm 2>/dev/null); b=${T0[$id]:-0}; echo "$(( ${c:-0}-b )) $nm"; done | sort -rn | head -6 | while read d nm; do printf "    %-20s %5.1f %%\n" "$nm" "$(echo "$d/$hz/($t1-$t0)*100" | bc -l)"; done
 if [ -n "$TRACE" ]; then
-  for k in 1 2 3; do
-    echo "  pile dei thread, campione $k (tutti i thread):"
-    dotnet-stack report -p $real 2>&1 | grep -v "^\s*$" | grep -v "Avalonia.X11\|DispatcherFrame\|Dispatcher\.\|ApplicationLifetime\|StartWithClassic" | head -70 | cut -c1-170 | sed 's/^/    /'
-    sleep 1
-  done
+  echo "  contatori .NET (10 s):"
+  timeout 14 dotnet-counters monitor -p $real --refresh-interval 10 --counters System.Runtime 2>/dev/null | grep -iE "work item|thread pool|timer|allocation|gc heap|lock contention|cpu" | tail -12 | sed 's/^/    /'
 fi
 echo "  ultime righe di sessioni.log:"; tail -n 12 ~/.config/IP-TRX-CTRL/sessioni.log 2>/dev/null | cut -c1-200 | sed 's/^/    /' 
 cpu=$(echo "($p1-$p0)/$hz/($t1-$t0)*100" | bc -l | xargs printf "%.1f")
